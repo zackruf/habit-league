@@ -1,18 +1,41 @@
 import { Link, router } from 'expo-router';
+import { useEffect, useState } from 'react';
 import { Text, View } from 'react-native';
 
 import { AppScreen } from '@/components/AppScreen';
 import { HabitCard } from '@/components/HabitCard';
+import { LeaderboardNoticeCard } from '@/components/LeaderboardNoticeCard';
 import { LoadingScreen } from '@/components/LoadingScreen';
 import { PrimaryButton } from '@/components/PrimaryButton';
 import { SectionHeader } from '@/components/SectionHeader';
 import { SurfaceCard } from '@/components/SurfaceCard';
 import { useApp } from '@/context/AppProvider';
 import { formatFriendlyDate, getCurrentWeekLabel } from '@/lib/date';
+import { getLeaderboardNotice, pickTopLeaderboardNotice } from '@/lib/leaderboard';
 import { commonStyles } from '@/styles/commonStyles';
+import { GroupDetails } from '@/types/models';
 
 export default function HomeScreen() {
-  const { groups, habits, profile, refreshing, toggleHabitCheckIn } = useApp();
+  const { getGroupDetails, groups, habits, profile, refreshing, toggleHabitCheckIn } = useApp();
+  const [groupDetails, setGroupDetails] = useState<GroupDetails[]>([]);
+
+  useEffect(() => {
+    let active = true;
+
+    async function loadGroupDetails() {
+      const details = (await Promise.all(groups.map((group) => getGroupDetails(group.id)))).filter(Boolean) as GroupDetails[];
+
+      if (active) {
+        setGroupDetails(details);
+      }
+    }
+
+    loadGroupDetails();
+
+    return () => {
+      active = false;
+    };
+  }, [getGroupDetails, groups]);
 
   if (!profile) {
     return <LoadingScreen message="Preparing your dashboard..." />;
@@ -20,6 +43,9 @@ export default function HomeScreen() {
 
   const todayKey = formatFriendlyDate(new Date(), 'key');
   const completedToday = habits.filter((habit) => habit.checkIns.includes(todayKey)).length;
+  const leaderboardNotice = pickTopLeaderboardNotice(
+    groupDetails.map((details) => getLeaderboardNotice(details.leaderboard, profile.uid, details.group.name))
+  );
 
   return (
     <AppScreen scrollable>
@@ -30,6 +56,8 @@ export default function HomeScreen() {
           {completedToday} of {habits.length} habits checked in today. {getCurrentWeekLabel()} is live.
         </Text>
       </View>
+
+      {leaderboardNotice ? <LeaderboardNoticeCard title={leaderboardNotice.title} message={leaderboardNotice.message} /> : null}
 
       <View style={commonStyles.statsRow}>
         <SurfaceCard style={commonStyles.statCard}>

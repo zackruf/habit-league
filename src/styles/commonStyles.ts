@@ -9,6 +9,23 @@ export const commonStyles = StyleSheet.create({
     padding: spacing.lg,
     gap: spacing.sm,
   },
+  noticeCard: {
+    backgroundColor: '#FFF6E8',
+    borderColor: '#F0D2A4',
+  },
+  noticeEyebrow: {
+    color: '#8A4B08',
+    fontSize: 12,
+    fontWeight: '800',
+    letterSpacing: 0.8,
+    textTransform: 'uppercase',
+  },
+  noticeMessage: {
+    color: palette.text,
+    fontSize: 15,
+    fontWeight: '600',
+    lineHeight: 22,
+  },
   eyebrow: {
     color: palette.primary,
     fontSize: 12,
