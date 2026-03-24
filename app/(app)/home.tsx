@@ -1,0 +1,93 @@
+import { Link, router } from 'expo-router';
+import { Text, View } from 'react-native';
+
+import { AppScreen } from '@/components/AppScreen';
+import { HabitCard } from '@/components/HabitCard';
+import { LoadingScreen } from '@/components/LoadingScreen';
+import { PrimaryButton } from '@/components/PrimaryButton';
+import { SectionHeader } from '@/components/SectionHeader';
+import { SurfaceCard } from '@/components/SurfaceCard';
+import { useApp } from '@/context/AppProvider';
+import { formatFriendlyDate, getCurrentWeekLabel } from '@/lib/date';
+import { commonStyles } from '@/styles/commonStyles';
+
+export default function HomeScreen() {
+  const { groups, habits, profile, refreshing, toggleHabitCheckIn } = useApp();
+
+  if (!profile) {
+    return <LoadingScreen message="Preparing your dashboard..." />;
+  }
+
+  const todayKey = formatFriendlyDate(new Date(), 'key');
+  const completedToday = habits.filter((habit) => habit.checkIns.includes(todayKey)).length;
+
+  return (
+    <AppScreen scrollable>
+      <View style={commonStyles.heroPanel}>
+        <Text style={commonStyles.eyebrow}>This week</Text>
+        <Text style={commonStyles.heroTitle}>Welcome back, {profile.name}.</Text>
+        <Text style={commonStyles.heroSubtitle}>
+          {completedToday} of {habits.length} habits checked in today. {getCurrentWeekLabel()} is live.
+        </Text>
+      </View>
+
+      <View style={commonStyles.statsRow}>
+        <SurfaceCard style={commonStyles.statCard}>
+          <Text style={commonStyles.statValue}>{habits.length}</Text>
+          <Text style={commonStyles.statLabel}>Active habits</Text>
+        </SurfaceCard>
+        <SurfaceCard style={commonStyles.statCard}>
+          <Text style={commonStyles.statValue}>{groups.length}</Text>
+          <Text style={commonStyles.statLabel}>Groups joined</Text>
+        </SurfaceCard>
+      </View>
+
+      <SectionHeader
+        title="Quick actions"
+        action={
+          <Link href="/(app)/profile" style={commonStyles.inlineLink}>
+            Edit profile
+          </Link>
+        }
+      />
+      <View style={commonStyles.actionGrid}>
+        <PrimaryButton label="Create habit" onPress={() => router.push('/(app)/habits/new')} />
+        <PrimaryButton label="Create group" onPress={() => router.push('/(app)/groups/new')} variant="secondary" />
+        <PrimaryButton label="Join group" onPress={() => router.push('/(app)/groups/join')} variant="ghost" />
+      </View>
+
+      <SectionHeader title="Daily check-in" action={refreshing ? <Text style={commonStyles.mutedText}>Syncing...</Text> : null} />
+      {habits.length ? (
+        habits.map((habit) => <HabitCard key={habit.id} habit={habit} onToggle={() => toggleHabitCheckIn(habit.id)} />)
+      ) : (
+        <SurfaceCard>
+          <Text style={commonStyles.cardTitle}>No habits yet</Text>
+          <Text style={commonStyles.cardCopy}>Start with one small daily action and build momentum from there.</Text>
+        </SurfaceCard>
+      )}
+
+      <SectionHeader title="Your groups" />
+      {groups.length ? (
+        groups.map((group) => (
+          <SurfaceCard key={group.id}>
+            <Text style={commonStyles.cardTitle}>{group.name}</Text>
+            <Text style={commonStyles.cardCopy}>{group.description}</Text>
+            <View style={commonStyles.rowBetween}>
+              <Text style={commonStyles.smallMuted}>Join code: {group.joinCode}</Text>
+              <Link href={`/(app)/groups/${group.id}`} style={commonStyles.inlineLink}>
+                Open group
+              </Link>
+            </View>
+          </SurfaceCard>
+        ))
+      ) : (
+        <SurfaceCard>
+          <Text style={commonStyles.cardTitle}>Bring in your people</Text>
+          <Text style={commonStyles.cardCopy}>
+            Create a private group for friends, roommates, or coworkers and compare your weekly check-ins.
+          </Text>
+        </SurfaceCard>
+      )}
+    </AppScreen>
+  );
+}
