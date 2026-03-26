@@ -26,7 +26,6 @@ export default function ProfileScreen() {
       weeklyGoal: Number(goal) || 5,
       onboardingCompleted: true,
     });
-    router.back();
   }
 
   async function handleSignOut() {
@@ -36,8 +35,11 @@ export default function ProfileScreen() {
 
   return (
     <AppScreen scrollable>
-      <Text style={commonStyles.eyebrow}>Profile</Text>
-      <Text style={commonStyles.pageTitle}>Keep your team page current</Text>
+      <View style={commonStyles.heroPanelAlt}>
+        <Text style={commonStyles.eyebrow}>Profile</Text>
+        <Text style={commonStyles.pageTitle}>Keep your presence sharp</Text>
+        <Text style={commonStyles.pageCopy}>Refresh your public profile, tweak your weekly goal, and keep your streak identity current.</Text>
+      </View>
 
       <SurfaceCard>
         <TextField label="Display name" value={name} onChangeText={setName} />

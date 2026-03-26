@@ -28,7 +28,7 @@ export default function OnboardingScreen() {
     });
 
     if (result.ok) {
-      router.replace('/(app)/home');
+      router.replace('/(app)/(tabs)/dashboard');
     }
   }
 

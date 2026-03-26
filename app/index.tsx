@@ -18,5 +18,5 @@ export default function IndexScreen() {
     return <Redirect href="/(app)/onboarding" />;
   }
 
-  return <Redirect href="/(app)/home" />;
+  return <Redirect href="/(app)/(tabs)/dashboard" />;
 }

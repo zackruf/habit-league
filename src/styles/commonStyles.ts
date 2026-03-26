@@ -4,7 +4,19 @@ import { palette, radius, spacing } from '@/constants/theme';
 
 export const commonStyles = StyleSheet.create({
   heroPanel: {
-    backgroundColor: '#DDF3EC',
+    backgroundColor: '#EAF1FF',
+    borderRadius: radius.lg,
+    padding: spacing.lg,
+    gap: spacing.sm,
+  },
+  heroPanelAlt: {
+    backgroundColor: '#EAF7F3',
+    borderRadius: radius.lg,
+    padding: spacing.lg,
+    gap: spacing.sm,
+  },
+  heroPanelWarm: {
+    backgroundColor: '#FFF2DE',
     borderRadius: radius.lg,
     padding: spacing.lg,
     gap: spacing.sm,
@@ -57,6 +69,10 @@ export const commonStyles = StyleSheet.create({
     flexDirection: 'row',
     gap: spacing.md,
   },
+  inlineActionRow: {
+    flexDirection: 'row',
+    gap: spacing.md,
+  },
   statCard: {
     flex: 1,
   },
@@ -71,6 +87,13 @@ export const commonStyles = StyleSheet.create({
   },
   actionGrid: {
     gap: spacing.md,
+  },
+  groupShowcaseCard: {
+    backgroundColor: '#FBFCFF',
+  },
+  currentUserCard: {
+    backgroundColor: '#EFF4FF',
+    borderColor: '#BED1FF',
   },
   cardTitle: {
     color: palette.text,
@@ -100,6 +123,17 @@ export const commonStyles = StyleSheet.create({
   smallMuted: {
     color: palette.muted,
     fontSize: 13,
+  },
+  badgePill: {
+    borderRadius: 999,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    backgroundColor: '#EEF3FF',
+  },
+  badgeText: {
+    color: palette.primary,
+    fontSize: 12,
+    fontWeight: '700',
   },
   mutedText: {
     color: palette.muted,

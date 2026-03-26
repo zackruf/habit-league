@@ -16,7 +16,7 @@ export default function SignInScreen() {
   const [error, setError] = useState('');
 
   if (authReady && session) {
-    return <Redirect href="/(app)/home" />;
+    return <Redirect href="/(app)/(tabs)/dashboard" />;
   }
 
   async function handleSignIn() {

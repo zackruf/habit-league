@@ -73,7 +73,7 @@ export default function HomeScreen() {
       <SectionHeader
         title="Quick actions"
         action={
-          <Link href="/(app)/profile" style={commonStyles.inlineLink}>
+          <Link href="/(app)/(tabs)/profile" style={commonStyles.inlineLink}>
             Edit profile
           </Link>
         }

@@ -47,9 +47,16 @@ const styles = StyleSheet.create({
   },
   primary: {
     backgroundColor: palette.primary,
+    shadowColor: palette.primary,
+    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.22,
+    shadowRadius: 14,
+    elevation: 2,
   },
   secondary: {
-    backgroundColor: palette.surfaceAlt,
+    backgroundColor: palette.surface,
+    borderWidth: 1,
+    borderColor: palette.border,
   },
   ghost: {
     backgroundColor: 'transparent',

@@ -1,12 +1,12 @@
 export const palette = {
-  background: '#F5F7F4',
+  background: '#F4F7FB',
   surface: '#FFFFFF',
-  surfaceAlt: '#EEF4EF',
-  text: '#1F2933',
-  muted: '#6B7280',
-  primary: '#157A6E',
-  border: '#D9E2DA',
-  accent: '#F4B860',
+  surfaceAlt: '#EEF3FF',
+  text: '#102033',
+  muted: '#617186',
+  primary: '#246BFD',
+  border: '#D8E2F0',
+  accent: '#12B981',
   danger: '#B42318',
 };
 
@@ -20,5 +20,5 @@ export const spacing = {
 
 export const radius = {
   md: 14,
-  lg: 22,
+  lg: 24,
 };

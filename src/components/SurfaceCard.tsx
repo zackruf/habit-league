@@ -15,5 +15,10 @@ const styles = StyleSheet.create({
     borderColor: palette.border,
     padding: spacing.lg,
     gap: spacing.md,
+    shadowColor: '#0F172A',
+    shadowOffset: { width: 0, height: 10 },
+    shadowOpacity: 0.06,
+    shadowRadius: 18,
+    elevation: 2,
   },
 });

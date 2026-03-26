@@ -18,7 +18,7 @@ export default function CreateHabitScreen() {
   async function handleCreate() {
     const result = await createHabit({ title, emoji, category });
     if (result.ok) {
-      router.replace('/(app)/home');
+      router.replace('/(app)/(tabs)/dashboard');
     }
   }
 
