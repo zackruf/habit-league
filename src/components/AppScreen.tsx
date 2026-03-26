@@ -1,6 +1,6 @@
 import { PropsWithChildren } from 'react';
 import { ScrollView, StyleProp, StyleSheet, View, ViewStyle } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { spacing } from '@/constants/theme';
 import { useThemePreferences } from '@/context/ThemeProvider';
@@ -12,11 +12,18 @@ type AppScreenProps = PropsWithChildren<{
 
 export function AppScreen({ children, scrollable = false, contentContainerStyle }: AppScreenProps) {
   const { theme } = useThemePreferences();
+  const insets = useSafeAreaInsets();
+  const bottomPadding = spacing.xl + insets.bottom + 28;
 
   if (scrollable) {
     return (
-      <SafeAreaView style={[styles.safeArea, { backgroundColor: theme.colors.background }]}>
-        <ScrollView contentContainerStyle={[styles.content, contentContainerStyle]} showsVerticalScrollIndicator={false}>
+      <SafeAreaView edges={['top', 'left', 'right']} style={[styles.safeArea, { backgroundColor: theme.colors.background }]}>
+        <ScrollView
+          contentContainerStyle={[styles.content, { paddingBottom: bottomPadding }, contentContainerStyle]}
+          contentInsetAdjustmentBehavior="automatic"
+          scrollIndicatorInsets={{ bottom: bottomPadding }}
+          showsVerticalScrollIndicator={false}
+        >
           {children}
         </ScrollView>
       </SafeAreaView>
@@ -24,8 +31,8 @@ export function AppScreen({ children, scrollable = false, contentContainerStyle 
   }
 
   return (
-    <SafeAreaView style={[styles.safeArea, { backgroundColor: theme.colors.background }]}>
-      <View style={[styles.content, contentContainerStyle]}>{children}</View>
+    <SafeAreaView edges={['top', 'left', 'right']} style={[styles.safeArea, { backgroundColor: theme.colors.background }]}>
+      <View style={[styles.content, { paddingBottom: bottomPadding }, contentContainerStyle]}>{children}</View>
     </SafeAreaView>
   );
 }
@@ -37,7 +44,6 @@ const styles = StyleSheet.create({
   content: {
     flexGrow: 1,
     padding: spacing.lg,
-    paddingBottom: spacing.xl,
     gap: spacing.md,
   },
 });

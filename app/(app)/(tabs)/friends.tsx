@@ -4,7 +4,6 @@ import { Text, View } from 'react-native';
 
 import { AppScreen } from '@/components/AppScreen';
 import { LoadingScreen } from '@/components/LoadingScreen';
-import { MetricCard } from '@/components/MetricCard';
 import { PageHeader } from '@/components/PageHeader';
 import { PrimaryButton } from '@/components/PrimaryButton';
 import { SectionHeader } from '@/components/SectionHeader';
@@ -117,14 +116,9 @@ export default function FriendsTabScreen() {
     <AppScreen scrollable contentContainerStyle={commonStyles.pageStack}>
       <PageHeader
         eyebrow="Friends"
-        title="Your streak circle"
-        subtitle="Keep close tabs on the people you share momentum with and store invites for the next ones to bring in."
+        title="Your circle"
+        subtitle={`You currently share progress with ${connectedFriends.length} people and have ${invites.length} saved invites.`}
       />
-
-      <View style={commonStyles.statsRow}>
-        <MetricCard value={`${connectedFriends.length}`} label="Shared friends" detail="People already visible from your groups" />
-        <MetricCard value={`${invites.length}`} label="Saved invites" detail="Friends you plan to bring in later" />
-      </View>
 
       <SurfaceCard style={commonStyles.sectionCard}>
         <SectionHeader title="Add friends" />
@@ -145,7 +139,7 @@ export default function FriendsTabScreen() {
                   </Text>
                   <Text style={commonStyles.listRowSubtitle}>{entry.sharedGroups.join(', ')}</Text>
                 </View>
-                <Text style={commonStyles.metricValue}>{entry.weeklyCheckIns}</Text>
+                <Text style={commonStyles.listValue}>{entry.weeklyCheckIns}</Text>
               </View>
             </SurfaceCard>
           ))

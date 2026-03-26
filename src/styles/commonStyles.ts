@@ -5,13 +5,20 @@ import { AppColors, radius, spacing } from '@/constants/theme';
 export function createCommonStyles(colors: AppColors) {
   return StyleSheet.create({
     pageStack: {
-      gap: spacing.xl,
+      gap: spacing.lg,
+    },
+    statsRow: {
+      flexDirection: 'row',
+      gap: spacing.md,
     },
     sectionStack: {
       gap: spacing.lg,
     },
     compactSection: {
       gap: spacing.md,
+    },
+    tightSection: {
+      gap: spacing.sm,
     },
     heroPanel: {
       backgroundColor: colors.heroPrimary,
@@ -74,34 +81,6 @@ export function createCommonStyles(colors: AppColors) {
       color: colors.muted,
       fontSize: 15,
       lineHeight: 22,
-    },
-    statsRow: {
-      flexDirection: 'row',
-      gap: spacing.md,
-    },
-    metricCard: {
-      backgroundColor: colors.surfaceRaised,
-      borderColor: colors.border,
-      minHeight: 112,
-      justifyContent: 'space-between',
-    },
-    metricHeader: {
-      gap: spacing.xs,
-    },
-    metricValue: {
-      color: colors.text,
-      fontSize: 28,
-      fontWeight: '800',
-    },
-    metricLabel: {
-      color: colors.text,
-      fontSize: 14,
-      fontWeight: '700',
-    },
-    metricDetail: {
-      color: colors.muted,
-      fontSize: 13,
-      lineHeight: 18,
     },
     inlineActionRow: {
       flexDirection: 'row',
@@ -188,7 +167,7 @@ export function createCommonStyles(colors: AppColors) {
       gap: spacing.md,
     },
     sectionCard: {
-      gap: spacing.md,
+      gap: spacing.sm,
     },
     listCard: {
       gap: spacing.sm,
@@ -212,6 +191,11 @@ export function createCommonStyles(colors: AppColors) {
       color: colors.muted,
       fontSize: 13,
       lineHeight: 18,
+    },
+    listValue: {
+      color: colors.text,
+      fontSize: 18,
+      fontWeight: '700',
     },
     avatarRow: {
       flexDirection: 'row',

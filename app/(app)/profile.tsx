@@ -4,7 +4,6 @@ import { useEffect, useMemo, useState } from 'react';
 import { Pressable, Switch, Text, View } from 'react-native';
 
 import { AppScreen } from '@/components/AppScreen';
-import { MetricCard } from '@/components/MetricCard';
 import { PageHeader } from '@/components/PageHeader';
 import { PrimaryButton } from '@/components/PrimaryButton';
 import { SectionHeader } from '@/components/SectionHeader';
@@ -93,15 +92,6 @@ export default function ProfileScreen() {
         title="Profile and settings"
         subtitle="Keep your account tidy, make the app feel right on this device, and keep the essentials easy to manage."
       />
-
-      <View style={commonStyles.statsRow}>
-        <MetricCard value={String(currentProfile.weeklyGoal)} label="Weekly goal" detail="Target check-ins for each week" />
-        <MetricCard
-          value={notificationsEnabled ? 'On' : 'Off'}
-          label="Reminders"
-          detail={`${themeMode[0].toUpperCase() + themeMode.slice(1)} theme active`}
-        />
-      </View>
 
       <SurfaceCard style={commonStyles.sectionCard}>
         <SectionHeader title="Profile header" />

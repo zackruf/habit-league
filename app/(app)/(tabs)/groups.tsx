@@ -5,7 +5,6 @@ import { Text, View } from 'react-native';
 import { AppScreen } from '@/components/AppScreen';
 import { LeaderboardNoticeCard } from '@/components/LeaderboardNoticeCard';
 import { LoadingScreen } from '@/components/LoadingScreen';
-import { MetricCard } from '@/components/MetricCard';
 import { PageHeader } from '@/components/PageHeader';
 import { PrimaryButton } from '@/components/PrimaryButton';
 import { SectionHeader } from '@/components/SectionHeader';
@@ -53,13 +52,8 @@ export default function GroupsTabScreen() {
       <PageHeader
         eyebrow="Groups"
         title="Your leagues"
-        subtitle="Everything important about your groups in one place: rank pressure, invite codes, and who is leading this week."
+        subtitle={`Track ${groups.length} groups and ${totalMembers} visible members without losing sight of the weekly race.`}
       />
-
-      <View style={commonStyles.statsRow}>
-        <MetricCard value={`${groups.length}`} label="Active groups" detail="Leagues you're tracking" />
-        <MetricCard value={`${totalMembers}`} label="Visible members" detail="Combined heads across your groups" />
-      </View>
 
       {warning ? <LeaderboardNoticeCard title={warning.title} message={warning.message} /> : null}
 
@@ -68,7 +62,7 @@ export default function GroupsTabScreen() {
         <PrimaryButton label="Join group" onPress={() => router.push('/(app)/groups/join')} variant="secondary" />
       </View>
 
-      <SectionHeader title="Group overview" />
+      <SectionHeader title="Your groups" />
       <View style={commonStyles.compactSection}>
         {groupDetails.length ? (
           groupDetails.map((details) => {

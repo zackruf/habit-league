@@ -6,7 +6,6 @@ import { AppScreen } from '@/components/AppScreen';
 import { HabitCard } from '@/components/HabitCard';
 import { LeaderboardNoticeCard } from '@/components/LeaderboardNoticeCard';
 import { LoadingScreen } from '@/components/LoadingScreen';
-import { MetricCard } from '@/components/MetricCard';
 import { PageHeader } from '@/components/PageHeader';
 import { PrimaryButton } from '@/components/PrimaryButton';
 import { SectionHeader } from '@/components/SectionHeader';
@@ -59,16 +58,6 @@ export default function HomeScreen() {
         subtitle={`${completedToday} of ${habits.length} habits checked in today. ${getCurrentWeekLabel()}.`}
       />
 
-      <View style={commonStyles.statsRow}>
-        <MetricCard value={`${completedToday}`} label="Done today" detail="Daily check-ins completed" />
-        <MetricCard value={`${profile.weeklyGoal}`} label="Weekly goal" detail="Target check-ins this week" />
-      </View>
-
-      <View style={commonStyles.statsRow}>
-        <MetricCard value={`${groups.length}`} label="Active groups" detail="Leagues you are in right now" />
-        <MetricCard value={`${habits.length}`} label="Habit list" detail="Habits currently on your board" />
-      </View>
-
       {leaderboardNotice ? <LeaderboardNoticeCard title={leaderboardNotice.title} message={leaderboardNotice.message} /> : null}
 
       <View style={commonStyles.actionRowTight}>
@@ -76,10 +65,7 @@ export default function HomeScreen() {
         <PrimaryButton label="Create group" onPress={() => router.push('/(app)/groups/new')} variant="secondary" />
       </View>
 
-      <SectionHeader
-        title="Today's habits"
-        action={refreshing ? <Text style={commonStyles.mutedText}>Syncing...</Text> : <Link href="/(app)/(tabs)/profile" style={commonStyles.inlineLink}>Profile</Link>}
-      />
+      <SectionHeader title="Today's habits" action={refreshing ? <Text style={commonStyles.mutedText}>Syncing...</Text> : undefined} />
       <View style={commonStyles.compactSection}>
         {habits.length ? (
           habits.map((habit) => <HabitCard key={habit.id} habit={habit} onToggle={() => toggleHabitCheckIn(habit.id)} />)
@@ -91,7 +77,7 @@ export default function HomeScreen() {
         )}
       </View>
 
-      <SectionHeader title="Competitive snapshot" />
+      <SectionHeader title="This week" />
       <View style={commonStyles.compactSection}>
         {groupDetails.length ? (
           groupDetails.map((details) => (

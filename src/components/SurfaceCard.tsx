@@ -28,11 +28,11 @@ const styles = StyleSheet.create({
   card: {
     borderRadius: radius.lg,
     borderWidth: 1,
-    padding: spacing.lg,
-    gap: spacing.md,
-    shadowOffset: { width: 0, height: 10 },
-    shadowOpacity: 0.06,
-    shadowRadius: 18,
+    padding: spacing.md,
+    gap: spacing.sm,
+    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.05,
+    shadowRadius: 14,
     elevation: 2,
   },
 });
