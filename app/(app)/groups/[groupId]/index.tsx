@@ -8,13 +8,16 @@ import { LoadingScreen } from '@/components/LoadingScreen';
 import { SectionHeader } from '@/components/SectionHeader';
 import { SurfaceCard } from '@/components/SurfaceCard';
 import { useApp } from '@/context/AppProvider';
+import { useThemePreferences } from '@/context/ThemeProvider';
 import { getLeaderboardNotice } from '@/lib/leaderboard';
-import { commonStyles } from '@/styles/commonStyles';
+import { createCommonStyles } from '@/styles/commonStyles';
 import { GroupDetails } from '@/types/models';
 
 export default function GroupScreen() {
   const { groupId } = useLocalSearchParams<{ groupId: string }>();
   const { getGroupDetails, session } = useApp();
+  const { theme } = useThemePreferences();
+  const commonStyles = createCommonStyles(theme.colors);
   const [details, setDetails] = useState<GroupDetails | null>(null);
 
   useEffect(() => {

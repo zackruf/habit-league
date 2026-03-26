@@ -9,7 +9,8 @@ import { SectionHeader } from '@/components/SectionHeader';
 import { SurfaceCard } from '@/components/SurfaceCard';
 import { TextField } from '@/components/TextField';
 import { useApp } from '@/context/AppProvider';
-import { commonStyles } from '@/styles/commonStyles';
+import { useThemePreferences } from '@/context/ThemeProvider';
+import { createCommonStyles } from '@/styles/commonStyles';
 import { GroupDetails } from '@/types/models';
 
 type FriendInvite = {
@@ -28,6 +29,8 @@ type FriendStanding = {
 
 export default function FriendsTabScreen() {
   const { getGroupDetails, groups, profile } = useApp();
+  const { theme } = useThemePreferences();
+  const commonStyles = createCommonStyles(theme.colors);
   const [name, setName] = useState('');
   const [email, setEmail] = useState('');
   const [invites, setInvites] = useState<FriendInvite[]>([]);

@@ -9,12 +9,15 @@ import { PrimaryButton } from '@/components/PrimaryButton';
 import { SectionHeader } from '@/components/SectionHeader';
 import { SurfaceCard } from '@/components/SurfaceCard';
 import { useApp } from '@/context/AppProvider';
+import { useThemePreferences } from '@/context/ThemeProvider';
 import { getLeaderboardNotice, pickTopLeaderboardNotice } from '@/lib/leaderboard';
-import { commonStyles } from '@/styles/commonStyles';
+import { createCommonStyles } from '@/styles/commonStyles';
 import { GroupDetails } from '@/types/models';
 
 export default function GroupsTabScreen() {
   const { getGroupDetails, groups, profile } = useApp();
+  const { theme } = useThemePreferences();
+  const commonStyles = createCommonStyles(theme.colors);
   const [groupDetails, setGroupDetails] = useState<GroupDetails[]>([]);
 
   useEffect(() => {

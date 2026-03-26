@@ -1,23 +1,25 @@
 import { Tabs } from 'expo-router';
 import { Text } from 'react-native';
 
-import { palette } from '@/constants/theme';
+import { useThemePreferences } from '@/context/ThemeProvider';
 
 export default function TabsLayout() {
+  const { theme } = useThemePreferences();
+
   return (
     <Tabs
       screenOptions={({ route }) => ({
         headerShown: false,
-        tabBarActiveTintColor: palette.primary,
-        tabBarInactiveTintColor: '#8190A5',
+        tabBarActiveTintColor: theme.colors.primary,
+        tabBarInactiveTintColor: theme.colors.tabInactive,
         tabBarStyle: {
-          backgroundColor: palette.surface,
+          backgroundColor: theme.colors.surface,
           borderTopWidth: 0,
           height: 76,
           paddingTop: 10,
           paddingBottom: 12,
           elevation: 0,
-          shadowColor: '#102033',
+          shadowColor: theme.colors.shadow,
           shadowOffset: { width: 0, height: -10 },
           shadowOpacity: 0.08,
           shadowRadius: 20,
@@ -28,15 +30,15 @@ export default function TabsLayout() {
         },
         tabBarIcon: ({ color, size, focused }) => {
           const icons: Record<string, string> = {
-            dashboard: '▦',
-            friends: '♡',
-            groups: '◌',
-            profile: '◐',
+            dashboard: 'D',
+            friends: 'F',
+            groups: 'G',
+            profile: 'P',
           };
 
           return (
             <Text style={{ color, fontSize: focused ? size + 2 : size, fontWeight: '900', lineHeight: size + 2 }}>
-              {icons[route.name] ?? '●'}
+              {icons[route.name] ?? '.'}
             </Text>
           );
         },

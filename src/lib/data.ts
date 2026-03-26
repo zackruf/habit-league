@@ -129,7 +129,7 @@ export async function loadUserBundle(uid: string): Promise<AppBundle | null> {
       return null;
     }
 
-    const profile = profileSnapshot.data() as Profile;
+    const profile = normalizeProfile(profileSnapshot.data() as Profile);
     const habitsSnapshot = await getDocs(query(collection(db, 'habits'), where('userId', '==', uid)));
     const habits = habitsSnapshot.docs
       .map((entry) => entry.data() as Habit)
@@ -149,7 +149,7 @@ export async function loadUserBundle(uid: string): Promise<AppBundle | null> {
   }
 
   const store = await readDemoStore();
-  const profile = store.profiles[uid];
+  const profile = normalizeProfile(store.profiles[uid]);
   if (!profile) {
     return null;
   }
@@ -291,7 +291,7 @@ export async function getGroupDetails(groupId: string): Promise<GroupDetails | n
     const members = await Promise.all(
       group.memberIds.map(async (uid) => {
         const snapshot = await getDoc(doc(db, 'profiles', uid));
-        return snapshot.data() as Profile;
+        return normalizeProfile(snapshot.data() as Profile);
       })
     );
     const habits = (
@@ -316,7 +316,7 @@ export async function getGroupDetails(groupId: string): Promise<GroupDetails | n
     return null;
   }
 
-  const members = group.memberIds.map((uid) => store.profiles[uid]).filter(Boolean);
+  const members = group.memberIds.map((uid) => normalizeProfile(store.profiles[uid])).filter(Boolean);
   const habits = Object.values(store.habits).filter((habit) => group.memberIds.includes(habit.userId));
   return {
     group,
@@ -326,14 +326,28 @@ export async function getGroupDetails(groupId: string): Promise<GroupDetails | n
 }
 
 function buildProfile(uid: string, email: string, name = ''): Profile {
+  const displayName = name || 'New teammate';
   return {
     uid,
     email,
-    name: name || 'New teammate',
+    name: displayName,
+    username: createUsername(displayName, email),
     bio: '',
     weeklyGoal: 5,
     onboardingCompleted: Boolean(name),
     groupIds: [],
+  };
+}
+
+function normalizeProfile(profile: Profile) {
+  return {
+    ...profile,
+    name: profile?.name || 'New teammate',
+    username: profile?.username || createUsername(profile?.name || 'New teammate', profile?.email || ''),
+    bio: profile?.bio || '',
+    weeklyGoal: profile?.weeklyGoal || 5,
+    onboardingCompleted: Boolean(profile?.onboardingCompleted),
+    groupIds: profile?.groupIds || [],
   };
 }
 
@@ -390,6 +404,7 @@ function seedDemoStore(): DemoStore {
         uid: demoUid,
         email: 'demo@habitleague.app',
         name: 'Demo Captain',
+        username: 'demo-captain',
         bio: 'Trying to stay consistent one day at a time.',
         weeklyGoal: 5,
         onboardingCompleted: true,
@@ -399,6 +414,7 @@ function seedDemoStore(): DemoStore {
         uid: friendUid,
         email: 'friend@habitleague.app',
         name: 'Jamie',
+        username: 'jamie',
         bio: 'Morning runner and water tracker.',
         weeklyGoal: 6,
         onboardingCompleted: true,
@@ -445,6 +461,15 @@ function createId(prefix: string) {
 
 function createJoinCode() {
   return Math.random().toString(36).slice(2, 8).toUpperCase();
+}
+
+function createUsername(name: string, email: string) {
+  const source = name.trim() || email.split('@')[0] || 'player';
+  return source
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-|-$/g, '')
+    .slice(0, 18);
 }
 
 function getErrorMessage(error: unknown) {

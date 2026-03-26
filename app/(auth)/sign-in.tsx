@@ -7,10 +7,13 @@ import { PrimaryButton } from '@/components/PrimaryButton';
 import { SurfaceCard } from '@/components/SurfaceCard';
 import { TextField } from '@/components/TextField';
 import { useApp } from '@/context/AppProvider';
-import { authStyles } from '@/styles/authStyles';
+import { useThemePreferences } from '@/context/ThemeProvider';
+import { createAuthStyles } from '@/styles/authStyles';
 
 export default function SignInScreen() {
   const { authReady, busy, session, signIn, usingFirebase } = useApp();
+  const { theme } = useThemePreferences();
+  const authStyles = createAuthStyles(theme.colors);
   const [email, setEmail] = useState('demo@habitleague.app');
   const [password, setPassword] = useState('password123');
   const [error, setError] = useState('');

@@ -7,6 +7,7 @@ export type Profile = {
   uid: string;
   email: string;
   name: string;
+  username: string;
   bio: string;
   weeklyGoal: number;
   onboardingCompleted: boolean;

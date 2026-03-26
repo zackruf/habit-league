@@ -1,12 +1,15 @@
 import { ReactNode } from 'react';
 import { StyleSheet, Text, View } from 'react-native';
 
-import { palette, spacing } from '@/constants/theme';
+import { spacing } from '@/constants/theme';
+import { useThemePreferences } from '@/context/ThemeProvider';
 
 export function SectionHeader({ title, action }: { title: string; action?: ReactNode }) {
+  const { theme } = useThemePreferences();
+
   return (
     <View style={styles.row}>
-      <Text style={styles.title}>{title}</Text>
+      <Text style={[styles.title, { color: theme.colors.text }]}>{title}</Text>
       {action}
     </View>
   );
@@ -20,7 +23,6 @@ const styles = StyleSheet.create({
     gap: spacing.md,
   },
   title: {
-    color: palette.text,
     fontSize: 20,
     fontWeight: '700',
   },

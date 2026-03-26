@@ -1,18 +1,30 @@
 import { StyleSheet, Text, TextInput, TextInputProps, View } from 'react-native';
 
-import { palette, radius, spacing } from '@/constants/theme';
+import { radius, spacing } from '@/constants/theme';
+import { useThemePreferences } from '@/context/ThemeProvider';
 
 type TextFieldProps = TextInputProps & {
   label: string;
 };
 
 export function TextField({ label, multiline, style, ...props }: TextFieldProps) {
+  const { theme } = useThemePreferences();
+
   return (
     <View style={styles.wrapper}>
-      <Text style={styles.label}>{label}</Text>
+      <Text style={[styles.label, { color: theme.colors.text }]}>{label}</Text>
       <TextInput
-        placeholderTextColor={palette.muted}
-        style={[styles.input, multiline ? styles.multiline : null, style]}
+        placeholderTextColor={theme.colors.muted}
+        style={[
+          styles.input,
+          {
+            borderColor: theme.colors.border,
+            backgroundColor: theme.colors.surfaceAlt,
+            color: theme.colors.text,
+          },
+          multiline ? styles.multiline : null,
+          style,
+        ]}
         multiline={multiline}
         {...props}
       />
@@ -25,7 +37,6 @@ const styles = StyleSheet.create({
     gap: spacing.sm,
   },
   label: {
-    color: palette.text,
     fontSize: 14,
     fontWeight: '600',
   },
@@ -33,9 +44,6 @@ const styles = StyleSheet.create({
     minHeight: 52,
     borderRadius: radius.md,
     borderWidth: 1,
-    borderColor: palette.border,
-    backgroundColor: palette.surfaceAlt,
-    color: palette.text,
     paddingHorizontal: spacing.md,
     paddingVertical: spacing.md,
     fontSize: 15,

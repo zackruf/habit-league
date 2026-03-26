@@ -7,10 +7,13 @@ import { PrimaryButton } from '@/components/PrimaryButton';
 import { SurfaceCard } from '@/components/SurfaceCard';
 import { TextField } from '@/components/TextField';
 import { useApp } from '@/context/AppProvider';
-import { commonStyles } from '@/styles/commonStyles';
+import { useThemePreferences } from '@/context/ThemeProvider';
+import { createCommonStyles } from '@/styles/commonStyles';
 
 export default function CreateHabitScreen() {
   const { busy, createHabit } = useApp();
+  const { theme } = useThemePreferences();
+  const commonStyles = createCommonStyles(theme.colors);
   const [title, setTitle] = useState('');
   const [emoji, setEmoji] = useState('🔥');
   const [category, setCategory] = useState('Health');

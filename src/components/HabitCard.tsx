@@ -1,7 +1,8 @@
 import { Text, View } from 'react-native';
 
+import { useThemePreferences } from '@/context/ThemeProvider';
 import { formatFriendlyDate } from '@/lib/date';
-import { commonStyles } from '@/styles/commonStyles';
+import { createCommonStyles } from '@/styles/commonStyles';
 import { Habit } from '@/types/models';
 import { PrimaryButton } from './PrimaryButton';
 import { SurfaceCard } from './SurfaceCard';
@@ -12,6 +13,8 @@ type HabitCardProps = {
 };
 
 export function HabitCard({ habit, onToggle }: HabitCardProps) {
+  const { theme } = useThemePreferences();
+  const commonStyles = createCommonStyles(theme.colors);
   const checkedToday = habit.checkIns.includes(formatFriendlyDate(new Date(), 'key'));
 
   return (

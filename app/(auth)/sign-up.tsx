@@ -7,10 +7,13 @@ import { PrimaryButton } from '@/components/PrimaryButton';
 import { SurfaceCard } from '@/components/SurfaceCard';
 import { TextField } from '@/components/TextField';
 import { useApp } from '@/context/AppProvider';
-import { authStyles } from '@/styles/authStyles';
+import { useThemePreferences } from '@/context/ThemeProvider';
+import { createAuthStyles } from '@/styles/authStyles';
 
 export default function SignUpScreen() {
   const { authReady, busy, session, signUp } = useApp();
+  const { theme } = useThemePreferences();
+  const authStyles = createAuthStyles(theme.colors);
   const [name, setName] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
