@@ -5,9 +5,11 @@ export type AppColors = {
   background: string;
   surface: string;
   surfaceAlt: string;
+  surfaceRaised: string;
   text: string;
   muted: string;
   primary: string;
+  primaryPressed: string;
   primaryText: string;
   border: string;
   accent: string;
@@ -32,15 +34,17 @@ export type AppTheme = {
 };
 
 const lightColors: AppColors = {
-  background: '#F4F7FB',
+  background: '#F3F6FB',
   surface: '#FFFFFF',
-  surfaceAlt: '#EEF3FF',
+  surfaceAlt: '#F7F9FE',
+  surfaceRaised: '#EEF4FF',
   text: '#102033',
-  muted: '#617186',
-  primary: '#246BFD',
+  muted: '#64748B',
+  primary: '#2E6BFF',
+  primaryPressed: '#1E4FD6',
   primaryText: '#FFFFFF',
-  border: '#D8E2F0',
-  accent: '#12B981',
+  border: '#D7E0EE',
+  accent: '#11B981',
   danger: '#B42318',
   heroPrimary: '#EAF1FF',
   heroAlt: '#EAF7F3',
@@ -57,14 +61,16 @@ const lightColors: AppColors = {
 };
 
 const darkColors: AppColors = {
-  background: '#0D1522',
-  surface: '#132033',
-  surfaceAlt: '#1A2940',
-  text: '#F3F7FD',
-  muted: '#A2B0C2',
-  primary: '#7BA2FF',
+  background: '#0D1420',
+  surface: '#131D2D',
+  surfaceAlt: '#182334',
+  surfaceRaised: '#1B2940',
+  text: '#F4F7FC',
+  muted: '#A4B1C3',
+  primary: '#82A8FF',
+  primaryPressed: '#5B86F3',
   primaryText: '#08111F',
-  border: '#22324A',
+  border: '#243247',
   accent: '#37D6A3',
   danger: '#FF7A7A',
   heroPrimary: '#13284A',
@@ -82,17 +88,17 @@ const darkColors: AppColors = {
 };
 
 export const spacing = {
-  xs: 6,
-  sm: 10,
+  xs: 4,
+  sm: 8,
   md: 16,
-  lg: 20,
-  xl: 28,
+  lg: 24,
+  xl: 32,
 };
 
 export const radius = {
-  md: 14,
-  lg: 24,
-  xl: 32,
+  md: 16,
+  lg: 20,
+  xl: 28,
 };
 
 export function getAppTheme(mode: ResolvedThemeMode): AppTheme {

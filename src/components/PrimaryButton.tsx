@@ -20,12 +20,31 @@ export function PrimaryButton({ label, onPress, disabled, variant = 'primary' }:
       style={({ pressed }) => [
         styles.base,
         variant === 'primary'
-          ? [styles.primary, { backgroundColor: theme.colors.primary, shadowColor: theme.colors.primary }]
+          ? [
+              styles.primary,
+              {
+                backgroundColor: pressed && !disabled ? theme.colors.primaryPressed : theme.colors.primary,
+                shadowColor: theme.colors.primary,
+              },
+            ]
           : null,
         variant === 'secondary'
-          ? [styles.secondary, { backgroundColor: theme.colors.surface, borderColor: theme.colors.border }]
+          ? [
+              styles.secondary,
+              {
+                backgroundColor: pressed && !disabled ? theme.colors.surfaceRaised : theme.colors.surface,
+                borderColor: theme.colors.border,
+              },
+            ]
           : null,
-        variant === 'ghost' ? [styles.ghost, { borderColor: theme.colors.border }] : null,
+        variant === 'ghost'
+          ? [
+              styles.ghost,
+              {
+                borderColor: pressed && !disabled ? theme.colors.primary : theme.colors.border,
+              },
+            ]
+          : null,
         pressed && !disabled ? styles.pressed : null,
         disabled ? styles.disabled : null,
       ]}
@@ -66,7 +85,7 @@ const styles = StyleSheet.create({
     borderWidth: 1,
   },
   pressed: {
-    opacity: 0.9,
+    opacity: 0.92,
     transform: [{ scale: 0.99 }],
   },
   disabled: {
@@ -76,10 +95,7 @@ const styles = StyleSheet.create({
     fontSize: 15,
     fontWeight: '700',
   },
-  primaryLabel: {
-  },
-  secondaryLabel: {
-  },
-  ghostLabel: {
-  },
+  primaryLabel: {},
+  secondaryLabel: {},
+  ghostLabel: {},
 });

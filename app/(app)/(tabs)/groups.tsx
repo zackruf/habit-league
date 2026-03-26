@@ -5,6 +5,8 @@ import { Text, View } from 'react-native';
 import { AppScreen } from '@/components/AppScreen';
 import { LeaderboardNoticeCard } from '@/components/LeaderboardNoticeCard';
 import { LoadingScreen } from '@/components/LoadingScreen';
+import { MetricCard } from '@/components/MetricCard';
+import { PageHeader } from '@/components/PageHeader';
 import { PrimaryButton } from '@/components/PrimaryButton';
 import { SectionHeader } from '@/components/SectionHeader';
 import { SurfaceCard } from '@/components/SurfaceCard';
@@ -41,59 +43,70 @@ export default function GroupsTabScreen() {
     return <LoadingScreen message="Loading your groups..." />;
   }
 
+  const totalMembers = groupDetails.reduce((sum, details) => sum + details.members.length, 0);
   const warning = pickTopLeaderboardNotice(
     groupDetails.map((details) => getLeaderboardNotice(details.leaderboard, profile.uid, details.group.name))
   );
 
   return (
-    <AppScreen scrollable>
-      <View style={commonStyles.heroPanelAlt}>
-        <Text style={commonStyles.eyebrow}>Groups</Text>
-        <Text style={commonStyles.pageTitle}>Run the league with your people</Text>
-        <Text style={commonStyles.pageCopy}>
-          Keep invite codes handy, jump into group pages, and track which league needs attention this week.
-        </Text>
+    <AppScreen scrollable contentContainerStyle={commonStyles.pageStack}>
+      <PageHeader
+        eyebrow="Groups"
+        title="Your leagues"
+        subtitle="Everything important about your groups in one place: rank pressure, invite codes, and who is leading this week."
+      />
+
+      <View style={commonStyles.statsRow}>
+        <MetricCard value={`${groups.length}`} label="Active groups" detail="Leagues you're tracking" />
+        <MetricCard value={`${totalMembers}`} label="Visible members" detail="Combined heads across your groups" />
       </View>
 
       {warning ? <LeaderboardNoticeCard title={warning.title} message={warning.message} /> : null}
 
-      <View style={commonStyles.inlineActionRow}>
+      <View style={commonStyles.actionRowTight}>
         <PrimaryButton label="Create group" onPress={() => router.push('/(app)/groups/new')} />
         <PrimaryButton label="Join group" onPress={() => router.push('/(app)/groups/join')} variant="secondary" />
       </View>
 
-      <SectionHeader title="Your leagues" />
-      {groupDetails.length ? (
-        groupDetails.map((details) => (
-          <SurfaceCard key={details.group.id} style={commonStyles.groupShowcaseCard}>
-            <View style={commonStyles.rowBetween}>
-              <View style={commonStyles.cardCopyBlock}>
-                <Text style={commonStyles.cardTitle}>{details.group.name}</Text>
+      <SectionHeader title="Group overview" />
+      <View style={commonStyles.compactSection}>
+        {groupDetails.length ? (
+          groupDetails.map((details) => {
+            const foundIndex = details.leaderboard.findIndex((entry) => entry.userId === profile.uid);
+            const rank = foundIndex === -1 ? details.members.length : foundIndex + 1;
+
+            return (
+              <SurfaceCard key={details.group.id} style={commonStyles.listCard}>
+                <View style={commonStyles.listRow}>
+                  <View style={commonStyles.listRowMeta}>
+                    <Text style={commonStyles.listRowTitle}>{details.group.name}</Text>
+                    <Text style={commonStyles.listRowSubtitle}>
+                      #{rank} of {details.members.length} this week
+                    </Text>
+                  </View>
+                  <View style={commonStyles.badgePill}>
+                    <Text style={commonStyles.badgeText}>{details.group.joinCode}</Text>
+                  </View>
+                </View>
                 <Text style={commonStyles.cardCopy}>{details.group.description}</Text>
-              </View>
-              <View style={commonStyles.badgePill}>
-                <Text style={commonStyles.badgeText}>{details.members.length} members</Text>
-              </View>
-            </View>
-
-            <View style={commonStyles.rowBetween}>
-              <Text style={commonStyles.smallMuted}>Join code: {details.group.joinCode}</Text>
-              <Text style={commonStyles.smallMuted}>
-                Leader: {details.leaderboard[0]?.name ?? 'Nobody yet'} ({details.leaderboard[0]?.weeklyCheckIns ?? 0})
-              </Text>
-            </View>
-
-            <Link href={`/(app)/groups/${details.group.id}`} style={commonStyles.inlineLink}>
-              Open group page
-            </Link>
+                <View style={commonStyles.listRow}>
+                  <Text style={commonStyles.listRowSubtitle}>
+                    Leader: {details.leaderboard[0]?.name ?? 'Nobody yet'} with {details.leaderboard[0]?.weeklyCheckIns ?? 0}
+                  </Text>
+                  <Link href={`/(app)/groups/${details.group.id}`} style={commonStyles.inlineLink}>
+                    Open
+                  </Link>
+                </View>
+              </SurfaceCard>
+            );
+          })
+        ) : (
+          <SurfaceCard>
+            <Text style={commonStyles.cardTitle}>No groups yet</Text>
+            <Text style={commonStyles.cardCopy}>Create a group or join one with a code to start comparing progress.</Text>
           </SurfaceCard>
-        ))
-      ) : (
-        <SurfaceCard>
-          <Text style={commonStyles.cardTitle}>No groups yet</Text>
-          <Text style={commonStyles.cardCopy}>Create a group or join one with a code to start comparing weekly progress.</Text>
-        </SurfaceCard>
-      )}
+        )}
+      </View>
     </AppScreen>
   );
 }

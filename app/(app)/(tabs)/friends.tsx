@@ -4,6 +4,8 @@ import { Text, View } from 'react-native';
 
 import { AppScreen } from '@/components/AppScreen';
 import { LoadingScreen } from '@/components/LoadingScreen';
+import { MetricCard } from '@/components/MetricCard';
+import { PageHeader } from '@/components/PageHeader';
 import { PrimaryButton } from '@/components/PrimaryButton';
 import { SectionHeader } from '@/components/SectionHeader';
 import { SurfaceCard } from '@/components/SurfaceCard';
@@ -97,94 +99,80 @@ export default function FriendsTabScreen() {
   }
 
   const profileId = profile.uid;
+  const connectedFriends = standings.filter((entry) => entry.userId !== profileId);
 
   async function handleAddFriend() {
     if (!name.trim() || !email.trim()) {
       return;
     }
 
-    const nextInvites = [
-      {
-        id: `invite-${Date.now()}`,
-        name: name.trim(),
-        email: email.trim(),
-      },
-      ...invites,
-    ];
-
+    const nextInvites = [{ id: `invite-${Date.now()}`, name: name.trim(), email: email.trim() }, ...invites];
     setInvites(nextInvites);
     await AsyncStorage.setItem(getInviteStorageKey(profileId), JSON.stringify(nextInvites));
     setName('');
     setEmail('');
   }
 
-  const friendStandings = standings.filter((entry) => entry.userId !== profile.uid);
-
   return (
-    <AppScreen scrollable>
-      <View style={commonStyles.heroPanelWarm}>
-        <Text style={commonStyles.eyebrow}>Friends</Text>
-        <Text style={commonStyles.pageTitle}>Build your social streak circle</Text>
-        <Text style={commonStyles.pageCopy}>
-          Add a few people you want to keep up with and track how your weekly pace compares.
-        </Text>
+    <AppScreen scrollable contentContainerStyle={commonStyles.pageStack}>
+      <PageHeader
+        eyebrow="Friends"
+        title="Your streak circle"
+        subtitle="Keep close tabs on the people you share momentum with and store invites for the next ones to bring in."
+      />
+
+      <View style={commonStyles.statsRow}>
+        <MetricCard value={`${connectedFriends.length}`} label="Shared friends" detail="People already visible from your groups" />
+        <MetricCard value={`${invites.length}`} label="Saved invites" detail="Friends you plan to bring in later" />
       </View>
 
-      <SurfaceCard>
+      <SurfaceCard style={commonStyles.sectionCard}>
         <SectionHeader title="Add friends" />
         <TextField label="Friend name" value={name} onChangeText={setName} placeholder="Jamie" />
         <TextField label="Friend email" value={email} onChangeText={setEmail} autoCapitalize="none" keyboardType="email-address" />
         <PrimaryButton label="Save invite" onPress={handleAddFriend} />
       </SurfaceCard>
 
-      <SectionHeader title="Friends leaderboard" />
-      {standings.length ? (
-        standings.map((entry, index) => (
-          <SurfaceCard key={entry.userId} style={entry.userId === profile.uid ? commonStyles.currentUserCard : undefined}>
-            <View style={commonStyles.rowBetween}>
-              <Text style={commonStyles.cardTitle}>
-                {index + 1}. {entry.name}
-              </Text>
-              <Text style={commonStyles.statValue}>{entry.weeklyCheckIns}</Text>
-            </View>
-            <Text style={commonStyles.cardCopy}>
-              {entry.completedHabits} habits tracked across {entry.sharedGroups.join(', ')}
-            </Text>
+      <SectionHeader title="Leaderboard with friends" />
+      <View style={commonStyles.compactSection}>
+        {standings.length ? (
+          standings.map((entry, index) => (
+            <SurfaceCard key={entry.userId} style={[commonStyles.listCard, entry.userId === profileId ? commonStyles.currentUserCard : undefined]}>
+              <View style={commonStyles.listRow}>
+                <View style={commonStyles.listRowMeta}>
+                  <Text style={commonStyles.listRowTitle}>
+                    {index + 1}. {entry.name}
+                  </Text>
+                  <Text style={commonStyles.listRowSubtitle}>{entry.sharedGroups.join(', ')}</Text>
+                </View>
+                <Text style={commonStyles.metricValue}>{entry.weeklyCheckIns}</Text>
+              </View>
+            </SurfaceCard>
+          ))
+        ) : (
+          <SurfaceCard>
+            <Text style={commonStyles.cardTitle}>No leaderboard yet</Text>
+            <Text style={commonStyles.cardCopy}>Join a group and your shared people will appear here automatically.</Text>
           </SurfaceCard>
-        ))
-      ) : (
-        <SurfaceCard>
-          <Text style={commonStyles.cardTitle}>No leaderboard yet</Text>
-          <Text style={commonStyles.cardCopy}>Join a group and your shared friends will appear here automatically.</Text>
-        </SurfaceCard>
-      )}
+        )}
+      </View>
 
       <SectionHeader title="Saved invites" />
-      {invites.length ? (
-        invites.map((invite) => (
-          <SurfaceCard key={invite.id}>
-            <Text style={commonStyles.cardTitle}>{invite.name}</Text>
-            <Text style={commonStyles.cardCopy}>{invite.email}</Text>
-          </SurfaceCard>
-        ))
-      ) : (
-        <SurfaceCard>
-          <Text style={commonStyles.cardTitle}>No invites saved</Text>
-          <Text style={commonStyles.cardCopy}>Save a few invites here while you decide who to bring into the app.</Text>
-        </SurfaceCard>
-      )}
-
-      {friendStandings.length ? (
-        <>
-          <SectionHeader title="People you already share groups with" />
-          {friendStandings.map((friend) => (
-            <SurfaceCard key={`friend-${friend.userId}`}>
-              <Text style={commonStyles.cardTitle}>{friend.name}</Text>
-              <Text style={commonStyles.cardCopy}>Shared groups: {friend.sharedGroups.join(', ')}</Text>
+      <View style={commonStyles.compactSection}>
+        {invites.length ? (
+          invites.map((invite) => (
+            <SurfaceCard key={invite.id} style={commonStyles.listCard}>
+              <Text style={commonStyles.listRowTitle}>{invite.name}</Text>
+              <Text style={commonStyles.listRowSubtitle}>{invite.email}</Text>
             </SurfaceCard>
-          ))}
-        </>
-      ) : null}
+          ))
+        ) : (
+          <SurfaceCard>
+            <Text style={commonStyles.cardTitle}>No invites saved</Text>
+            <Text style={commonStyles.cardCopy}>Store a few names here when you think of people to invite later.</Text>
+          </SurfaceCard>
+        )}
+      </View>
     </AppScreen>
   );
 }

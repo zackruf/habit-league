@@ -4,7 +4,10 @@ import { useEffect, useMemo, useState } from 'react';
 import { Pressable, Switch, Text, View } from 'react-native';
 
 import { AppScreen } from '@/components/AppScreen';
+import { MetricCard } from '@/components/MetricCard';
+import { PageHeader } from '@/components/PageHeader';
 import { PrimaryButton } from '@/components/PrimaryButton';
+import { SectionHeader } from '@/components/SectionHeader';
 import { SurfaceCard } from '@/components/SurfaceCard';
 import { TextField } from '@/components/TextField';
 import { ThemeMode } from '@/constants/theme';
@@ -84,17 +87,24 @@ export default function ProfileScreen() {
   }
 
   return (
-    <AppScreen scrollable>
-      <View style={commonStyles.heroPanelAlt}>
-        <Text style={commonStyles.eyebrow}>Profile & settings</Text>
-        <Text style={commonStyles.pageTitle}>Manage your account</Text>
-        <Text style={commonStyles.pageCopy}>
-          Keep your public profile clean, control your theme, and adjust the little preferences that shape the app.
-        </Text>
+    <AppScreen scrollable contentContainerStyle={commonStyles.pageStack}>
+      <PageHeader
+        eyebrow="Profile"
+        title="Profile and settings"
+        subtitle="Keep your account tidy, make the app feel right on this device, and keep the essentials easy to manage."
+      />
+
+      <View style={commonStyles.statsRow}>
+        <MetricCard value={String(currentProfile.weeklyGoal)} label="Weekly goal" detail="Target check-ins for each week" />
+        <MetricCard
+          value={notificationsEnabled ? 'On' : 'Off'}
+          label="Reminders"
+          detail={`${themeMode[0].toUpperCase() + themeMode.slice(1)} theme active`}
+        />
       </View>
 
       <SurfaceCard style={commonStyles.sectionCard}>
-        <Text style={commonStyles.settingsSectionTitle}>Profile header</Text>
+        <SectionHeader title="Profile header" />
         <View style={commonStyles.avatarRow}>
           <View style={commonStyles.avatarCircle}>
             <Text style={commonStyles.avatarText}>{initials}</Text>
@@ -110,22 +120,23 @@ export default function ProfileScreen() {
         <TextField label="Username" value={username} onChangeText={setUsername} autoCapitalize="none" />
         <TextField label="Short bio" value={bio} onChangeText={setBio} multiline />
         <TextField label="Weekly goal" value={goal} onChangeText={setGoal} keyboardType="number-pad" />
+        <PrimaryButton label={busy ? 'Saving...' : 'Save profile'} onPress={handleSave} disabled={busy} />
       </SurfaceCard>
 
       <SurfaceCard style={commonStyles.sectionCard}>
-        <Text style={commonStyles.settingsSectionTitle}>Account</Text>
+        <SectionHeader title="Account" />
         <View style={commonStyles.settingRow}>
           <View style={commonStyles.settingLabelWrap}>
             <Text style={commonStyles.settingTitle}>Email</Text>
             <Text style={commonStyles.settingSubtitle}>{currentProfile.email}</Text>
           </View>
         </View>
-        <PrimaryButton label={busy ? 'Saving...' : 'Save profile'} onPress={handleSave} disabled={busy} />
+        <View style={commonStyles.divider} />
         <PrimaryButton label="Log out" onPress={handleSignOut} variant="ghost" />
       </SurfaceCard>
 
       <SurfaceCard style={commonStyles.sectionCard}>
-        <Text style={commonStyles.settingsSectionTitle}>Preferences</Text>
+        <SectionHeader title="Preferences" />
         <View style={commonStyles.settingLabelWrap}>
           <Text style={commonStyles.settingTitle}>Theme</Text>
           <Text style={commonStyles.settingSubtitle}>Choose how Habit League should look on this device.</Text>
@@ -147,6 +158,7 @@ export default function ProfileScreen() {
           })}
         </View>
 
+        <View style={commonStyles.divider} />
         <View style={commonStyles.settingRow}>
           <View style={commonStyles.settingLabelWrap}>
             <Text style={commonStyles.settingTitle}>Notifications</Text>
@@ -160,6 +172,7 @@ export default function ProfileScreen() {
           />
         </View>
 
+        <View style={commonStyles.divider} />
         <Pressable onPress={handleReminderCycle} style={commonStyles.settingRow}>
           <View style={commonStyles.settingLabelWrap}>
             <Text style={commonStyles.settingTitle}>Daily reminder time</Text>
@@ -170,19 +183,21 @@ export default function ProfileScreen() {
       </SurfaceCard>
 
       <SurfaceCard style={commonStyles.sectionCard}>
-        <Text style={commonStyles.settingsSectionTitle}>About & support</Text>
+        <SectionHeader title="About and support" />
         <View style={commonStyles.settingRow}>
           <View style={commonStyles.settingLabelWrap}>
             <Text style={commonStyles.settingTitle}>App version</Text>
             <Text style={commonStyles.settingSubtitle}>{version}</Text>
           </View>
         </View>
+        <View style={commonStyles.divider} />
         <View style={commonStyles.settingRow}>
           <View style={commonStyles.settingLabelWrap}>
             <Text style={commonStyles.settingTitle}>Report a bug</Text>
             <Text style={commonStyles.settingSubtitle}>Placeholder row for support flow.</Text>
           </View>
         </View>
+        <View style={commonStyles.divider} />
         <View style={commonStyles.settingRow}>
           <View style={commonStyles.settingLabelWrap}>
             <Text style={commonStyles.settingTitle}>Privacy</Text>

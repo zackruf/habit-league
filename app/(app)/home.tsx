@@ -6,6 +6,8 @@ import { AppScreen } from '@/components/AppScreen';
 import { HabitCard } from '@/components/HabitCard';
 import { LeaderboardNoticeCard } from '@/components/LeaderboardNoticeCard';
 import { LoadingScreen } from '@/components/LoadingScreen';
+import { MetricCard } from '@/components/MetricCard';
+import { PageHeader } from '@/components/PageHeader';
 import { PrimaryButton } from '@/components/PrimaryButton';
 import { SectionHeader } from '@/components/SectionHeader';
 import { SurfaceCard } from '@/components/SurfaceCard';
@@ -27,7 +29,6 @@ export default function HomeScreen() {
 
     async function loadGroupDetails() {
       const details = (await Promise.all(groups.map((group) => getGroupDetails(group.id)))).filter(Boolean) as GroupDetails[];
-
       if (active) {
         setGroupDetails(details);
       }
@@ -51,74 +52,70 @@ export default function HomeScreen() {
   );
 
   return (
-    <AppScreen scrollable>
-      <View style={commonStyles.heroPanel}>
-        <Text style={commonStyles.eyebrow}>This week</Text>
-        <Text style={commonStyles.heroTitle}>Welcome back, {profile.name}.</Text>
-        <Text style={commonStyles.heroSubtitle}>
-          {completedToday} of {habits.length} habits checked in today. {getCurrentWeekLabel()} is live.
-        </Text>
+    <AppScreen scrollable contentContainerStyle={commonStyles.pageStack}>
+      <PageHeader
+        eyebrow="Dashboard"
+        title={`Hi, ${profile.name.split(' ')[0]}.`}
+        subtitle={`${completedToday} of ${habits.length} habits checked in today. ${getCurrentWeekLabel()}.`}
+      />
+
+      <View style={commonStyles.statsRow}>
+        <MetricCard value={`${completedToday}`} label="Done today" detail="Daily check-ins completed" />
+        <MetricCard value={`${profile.weeklyGoal}`} label="Weekly goal" detail="Target check-ins this week" />
+      </View>
+
+      <View style={commonStyles.statsRow}>
+        <MetricCard value={`${groups.length}`} label="Active groups" detail="Leagues you are in right now" />
+        <MetricCard value={`${habits.length}`} label="Habit list" detail="Habits currently on your board" />
       </View>
 
       {leaderboardNotice ? <LeaderboardNoticeCard title={leaderboardNotice.title} message={leaderboardNotice.message} /> : null}
 
-      <View style={commonStyles.statsRow}>
-        <SurfaceCard style={commonStyles.statCard}>
-          <Text style={commonStyles.statValue}>{habits.length}</Text>
-          <Text style={commonStyles.statLabel}>Active habits</Text>
-        </SurfaceCard>
-        <SurfaceCard style={commonStyles.statCard}>
-          <Text style={commonStyles.statValue}>{groups.length}</Text>
-          <Text style={commonStyles.statLabel}>Groups joined</Text>
-        </SurfaceCard>
+      <View style={commonStyles.actionRowTight}>
+        <PrimaryButton label="Create habit" onPress={() => router.push('/(app)/habits/new')} />
+        <PrimaryButton label="Create group" onPress={() => router.push('/(app)/groups/new')} variant="secondary" />
       </View>
 
       <SectionHeader
-        title="Quick actions"
-        action={
-          <Link href="/(app)/(tabs)/profile" style={commonStyles.inlineLink}>
-            Edit profile
-          </Link>
-        }
+        title="Today's habits"
+        action={refreshing ? <Text style={commonStyles.mutedText}>Syncing...</Text> : <Link href="/(app)/(tabs)/profile" style={commonStyles.inlineLink}>Profile</Link>}
       />
-      <View style={commonStyles.actionGrid}>
-        <PrimaryButton label="Create habit" onPress={() => router.push('/(app)/habits/new')} />
-        <PrimaryButton label="Create group" onPress={() => router.push('/(app)/groups/new')} variant="secondary" />
-        <PrimaryButton label="Join group" onPress={() => router.push('/(app)/groups/join')} variant="ghost" />
+      <View style={commonStyles.compactSection}>
+        {habits.length ? (
+          habits.map((habit) => <HabitCard key={habit.id} habit={habit} onToggle={() => toggleHabitCheckIn(habit.id)} />)
+        ) : (
+          <SurfaceCard>
+            <Text style={commonStyles.cardTitle}>No habits yet</Text>
+            <Text style={commonStyles.cardCopy}>Add one habit and the dashboard will start feeling useful right away.</Text>
+          </SurfaceCard>
+        )}
       </View>
 
-      <SectionHeader title="Daily check-in" action={refreshing ? <Text style={commonStyles.mutedText}>Syncing...</Text> : null} />
-      {habits.length ? (
-        habits.map((habit) => <HabitCard key={habit.id} habit={habit} onToggle={() => toggleHabitCheckIn(habit.id)} />)
-      ) : (
-        <SurfaceCard>
-          <Text style={commonStyles.cardTitle}>No habits yet</Text>
-          <Text style={commonStyles.cardCopy}>Start with one small daily action and build momentum from there.</Text>
-        </SurfaceCard>
-      )}
-
-      <SectionHeader title="Your groups" />
-      {groups.length ? (
-        groups.map((group) => (
-          <SurfaceCard key={group.id}>
-            <Text style={commonStyles.cardTitle}>{group.name}</Text>
-            <Text style={commonStyles.cardCopy}>{group.description}</Text>
-            <View style={commonStyles.rowBetween}>
-              <Text style={commonStyles.smallMuted}>Join code: {group.joinCode}</Text>
-              <Link href={`/(app)/groups/${group.id}`} style={commonStyles.inlineLink}>
-                Open group
-              </Link>
-            </View>
+      <SectionHeader title="Competitive snapshot" />
+      <View style={commonStyles.compactSection}>
+        {groupDetails.length ? (
+          groupDetails.map((details) => (
+            <SurfaceCard key={details.group.id} style={commonStyles.listCard}>
+              <View style={commonStyles.listRow}>
+                <View style={commonStyles.listRowMeta}>
+                  <Text style={commonStyles.listRowTitle}>{details.group.name}</Text>
+                  <Text style={commonStyles.listRowSubtitle}>
+                    Leader: {details.leaderboard[0]?.name ?? 'Nobody yet'} with {details.leaderboard[0]?.weeklyCheckIns ?? 0} check-ins
+                  </Text>
+                </View>
+                <Link href={`/(app)/groups/${details.group.id}`} style={commonStyles.inlineLink}>
+                  Open
+                </Link>
+              </View>
+            </SurfaceCard>
+          ))
+        ) : (
+          <SurfaceCard>
+            <Text style={commonStyles.cardTitle}>No competitive activity yet</Text>
+            <Text style={commonStyles.cardCopy}>Create or join a group to see weekly movement here.</Text>
           </SurfaceCard>
-        ))
-      ) : (
-        <SurfaceCard>
-          <Text style={commonStyles.cardTitle}>Bring in your people</Text>
-          <Text style={commonStyles.cardCopy}>
-            Create a private group for friends, roommates, or coworkers and compare your weekly check-ins.
-          </Text>
-        </SurfaceCard>
-      )}
+        )}
+      </View>
     </AppScreen>
   );
 }

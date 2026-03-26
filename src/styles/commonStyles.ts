@@ -4,6 +4,15 @@ import { AppColors, radius, spacing } from '@/constants/theme';
 
 export function createCommonStyles(colors: AppColors) {
   return StyleSheet.create({
+    pageStack: {
+      gap: spacing.xl,
+    },
+    sectionStack: {
+      gap: spacing.lg,
+    },
+    compactSection: {
+      gap: spacing.md,
+    },
     heroPanel: {
       backgroundColor: colors.heroPrimary,
       borderRadius: radius.lg,
@@ -70,9 +79,37 @@ export function createCommonStyles(colors: AppColors) {
       flexDirection: 'row',
       gap: spacing.md,
     },
+    metricCard: {
+      backgroundColor: colors.surfaceRaised,
+      borderColor: colors.border,
+      minHeight: 112,
+      justifyContent: 'space-between',
+    },
+    metricHeader: {
+      gap: spacing.xs,
+    },
+    metricValue: {
+      color: colors.text,
+      fontSize: 28,
+      fontWeight: '800',
+    },
+    metricLabel: {
+      color: colors.text,
+      fontSize: 14,
+      fontWeight: '700',
+    },
+    metricDetail: {
+      color: colors.muted,
+      fontSize: 13,
+      lineHeight: 18,
+    },
     inlineActionRow: {
       flexDirection: 'row',
       gap: spacing.md,
+    },
+    actionRowTight: {
+      flexDirection: 'row',
+      gap: spacing.sm,
     },
     statCard: {
       flex: 1,
@@ -153,6 +190,29 @@ export function createCommonStyles(colors: AppColors) {
     sectionCard: {
       gap: spacing.md,
     },
+    listCard: {
+      gap: spacing.sm,
+    },
+    listRow: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'space-between',
+      gap: spacing.md,
+    },
+    listRowMeta: {
+      flex: 1,
+      gap: spacing.xs,
+    },
+    listRowTitle: {
+      color: colors.text,
+      fontSize: 16,
+      fontWeight: '700',
+    },
+    listRowSubtitle: {
+      color: colors.muted,
+      fontSize: 13,
+      lineHeight: 18,
+    },
     avatarRow: {
       flexDirection: 'row',
       alignItems: 'center',
@@ -206,6 +266,10 @@ export function createCommonStyles(colors: AppColors) {
       color: colors.muted,
       fontSize: 13,
       lineHeight: 18,
+    },
+    divider: {
+      height: 1,
+      backgroundColor: colors.border,
     },
     segmentedRow: {
       flexDirection: 'row',
