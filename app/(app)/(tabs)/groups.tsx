@@ -8,6 +8,7 @@ import { LoadingScreen } from '@/components/LoadingScreen';
 import { PageHeader } from '@/components/PageHeader';
 import { PressableCard } from '@/components/PressableCard';
 import { PrimaryButton } from '@/components/PrimaryButton';
+import { JoinCodeChip } from '@/components/JoinCodeChip';
 import { SectionHeader } from '@/components/SectionHeader';
 import { SurfaceCard } from '@/components/SurfaceCard';
 import { useApp } from '@/context/AppProvider';
@@ -85,9 +86,7 @@ export default function GroupsTabScreen() {
                       #{rank} of {details.members.length} this week
                     </Text>
                   </View>
-                  <View style={commonStyles.badgePill}>
-                    <Text style={commonStyles.badgeText}>{details.group.joinCode}</Text>
-                  </View>
+                  <JoinCodeChip code={details.group.joinCode} />
                 </View>
                 <Text style={commonStyles.cardCopy}>{details.group.description}</Text>
                 <Text style={commonStyles.listRowSubtitle}>

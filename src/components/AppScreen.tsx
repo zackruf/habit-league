@@ -8,12 +8,13 @@ import { useThemePreferences } from '@/context/ThemeProvider';
 type AppScreenProps = PropsWithChildren<{
   scrollable?: boolean;
   contentContainerStyle?: StyleProp<ViewStyle>;
+  disableBottomPadding?: boolean;
 }>;
 
-export function AppScreen({ children, scrollable = false, contentContainerStyle }: AppScreenProps) {
+export function AppScreen({ children, scrollable = false, contentContainerStyle, disableBottomPadding = false }: AppScreenProps) {
   const { theme } = useThemePreferences();
   const insets = useSafeAreaInsets();
-  const bottomPadding = spacing.xl + insets.bottom + 28;
+  const bottomPadding = disableBottomPadding ? 0 : spacing.xl + insets.bottom + 28;
 
   if (scrollable) {
     return (

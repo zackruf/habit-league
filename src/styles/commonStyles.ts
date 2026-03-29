@@ -133,6 +133,15 @@ export function createCommonStyles(colors: AppColors) {
       justifyContent: 'space-between',
       gap: spacing.md,
     },
+    summaryMetaBlock: {
+      flex: 1,
+      gap: spacing.xs,
+    },
+    summaryActionRow: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: spacing.sm,
+    },
     inlineLink: {
       color: colors.primary,
       fontWeight: '700',
