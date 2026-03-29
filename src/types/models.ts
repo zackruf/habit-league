@@ -31,6 +31,12 @@ export type Group = {
   ownerId: string;
   memberIds: string[];
   joinCode: string;
+  visibility: 'public' | 'private';
+  inviteOnly: boolean;
+  discoverable: boolean;
+  stakesEnabled: boolean;
+  stakesText: string;
+  memberLimit: number | null;
   createdAt: string;
 };
 

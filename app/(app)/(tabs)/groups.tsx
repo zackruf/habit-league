@@ -85,7 +85,7 @@ export default function GroupsTabScreen() {
                 <Text style={commonStyles.cardCopy}>{details.group.description}</Text>
                 <View style={commonStyles.listRow}>
                   <Text style={commonStyles.listRowSubtitle}>
-                    Leader: {details.leaderboard[0]?.name ?? 'Nobody yet'} with {details.leaderboard[0]?.weeklyCheckIns ?? 0}
+                    {details.group.visibility === 'public' ? 'Public' : 'Private'} · {details.group.stakesEnabled ? 'Stakes on' : 'Stakes off'}
                   </Text>
                   <Link href={`/(app)/groups/${details.group.id}`} style={commonStyles.inlineLink}>
                     Open

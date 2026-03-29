@@ -137,7 +137,7 @@ export async function loadUserBundle(uid: string): Promise<AppBundle | null> {
     const groups = await Promise.all(
       (profile.groupIds ?? []).map(async (groupId) => {
         const snapshot = await getDoc(doc(db, 'groups', groupId));
-        return snapshot.exists() ? (snapshot.data() as Group) : null;
+        return snapshot.exists() ? normalizeGroup(snapshot.data() as Group) : null;
       })
     );
 
@@ -157,7 +157,9 @@ export async function loadUserBundle(uid: string): Promise<AppBundle | null> {
   const habits = Object.values(store.habits)
     .filter((habit) => habit.userId === uid)
     .sort((left, right) => right.createdAt.localeCompare(left.createdAt));
-  const groups = (profile.groupIds ?? []).map((groupId) => store.groups[groupId]).filter(Boolean);
+  const groups = (profile.groupIds ?? [])
+    .map((groupId) => normalizeGroup(store.groups[groupId]))
+    .filter((group): group is Group => Boolean(group));
 
   return {
     profile,
@@ -229,14 +231,31 @@ export async function toggleHabitCheckIn(uid: string, habitId: string) {
   await writeDemoStore(store);
 }
 
-export async function createGroup(uid: string, name: string, description: string) {
+export async function createGroup(
+  uid: string,
+  input: {
+    name: string;
+    description: string;
+    visibility: 'public' | 'private';
+    stakesEnabled: boolean;
+    stakesText: string;
+    memberLimit?: number | null;
+  }
+) {
+  const visibility = input.visibility;
   const group: Group = {
     id: createId('group'),
-    name,
-    description,
+    name: input.name,
+    description: input.description,
     ownerId: uid,
     memberIds: [uid],
     joinCode: createJoinCode(),
+    visibility,
+    inviteOnly: visibility === 'private',
+    discoverable: visibility === 'public',
+    stakesEnabled: input.stakesEnabled,
+    stakesText: input.stakesEnabled ? input.stakesText.trim() : '',
+    memberLimit: input.memberLimit ?? null,
     createdAt: new Date().toISOString(),
   };
 
@@ -260,16 +279,28 @@ export async function joinGroup(uid: string, joinCode: string) {
       return { ok: false, message: 'That join code was not found.' };
     }
 
-    const group = match.docs[0].data() as Group;
+    const group = normalizeGroup(match.docs[0].data() as Group);
+    if (!group) {
+      return { ok: false, message: 'That join code was not found.' };
+    }
+    if (group.memberLimit && group.memberIds.length >= group.memberLimit && !group.memberIds.includes(uid)) {
+      return { ok: false, message: 'This group is full right now.' };
+    }
     await updateDoc(doc(firestore, 'groups', group.id), { memberIds: arrayUnion(uid) });
     await updateDoc(doc(firestore, 'profiles', uid), { groupIds: arrayUnion(group.id) });
     return { ok: true, message: 'Joined group.', groupId: group.id };
   }
 
   const store = await readDemoStore();
-  const group = Object.values(store.groups).find((entry) => entry.joinCode === joinCode);
+  const group = Object.values(store.groups)
+    .map((entry) => normalizeGroup(entry))
+    .filter((entry): entry is Group => Boolean(entry))
+    .find((entry) => entry.joinCode === joinCode);
   if (!group) {
     return { ok: false, message: 'That join code was not found.' };
+  }
+  if (group.memberLimit && group.memberIds.length >= group.memberLimit && !group.memberIds.includes(uid)) {
+    return { ok: false, message: 'This group is full right now.' };
   }
 
   store.groups[group.id] = { ...group, memberIds: [...new Set([...group.memberIds, uid])] };
@@ -287,7 +318,10 @@ export async function getGroupDetails(groupId: string): Promise<GroupDetails | n
       return null;
     }
 
-    const group = groupSnapshot.data() as Group;
+    const group = normalizeGroup(groupSnapshot.data() as Group);
+    if (!group) {
+      return null;
+    }
     const members = await Promise.all(
       group.memberIds.map(async (uid) => {
         const snapshot = await getDoc(doc(db, 'profiles', uid));
@@ -311,7 +345,7 @@ export async function getGroupDetails(groupId: string): Promise<GroupDetails | n
   }
 
   const store = await readDemoStore();
-  const group = store.groups[groupId];
+  const group = normalizeGroup(store.groups[groupId]);
   if (!group) {
     return null;
   }
@@ -348,6 +382,25 @@ function normalizeProfile(profile: Profile) {
     weeklyGoal: profile?.weeklyGoal || 5,
     onboardingCompleted: Boolean(profile?.onboardingCompleted),
     groupIds: profile?.groupIds || [],
+  };
+}
+
+function normalizeGroup(group?: Group | null): Group | null {
+  if (!group) {
+    return null;
+  }
+
+  const visibility: Group['visibility'] = group.visibility === 'public' ? 'public' : 'private';
+
+  return {
+    ...group,
+    description: group.description || '',
+    visibility,
+    inviteOnly: group.inviteOnly ?? visibility === 'private',
+    discoverable: group.discoverable ?? visibility === 'public',
+    stakesEnabled: Boolean(group.stakesEnabled),
+    stakesText: group.stakesText || '',
+    memberLimit: typeof group.memberLimit === 'number' && group.memberLimit > 0 ? group.memberLimit : null,
   };
 }
 
@@ -449,6 +502,12 @@ function seedDemoStore(): DemoStore {
         ownerId: demoUid,
         memberIds: [demoUid, friendUid],
         joinCode: 'START1',
+        visibility: 'private',
+        inviteOnly: true,
+        discoverable: false,
+        stakesEnabled: true,
+        stakesText: 'Last place buys coffee on Monday.',
+        memberLimit: 8,
         createdAt: new Date().toISOString(),
       },
     },

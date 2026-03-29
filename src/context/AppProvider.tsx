@@ -42,7 +42,14 @@ type AppContextValue = {
   saveProfile: (patch: Partial<Profile>) => Promise<ActionResult>;
   createHabit: (input: { title: string; emoji: string; category: string }) => Promise<ActionResult>;
   toggleHabitCheckIn: (habitId: string) => Promise<void>;
-  createGroup: (name: string, description: string) => Promise<GroupActionResult>;
+  createGroup: (input: {
+    name: string;
+    description: string;
+    visibility: 'public' | 'private';
+    stakesEnabled: boolean;
+    stakesText: string;
+    memberLimit?: number | null;
+  }) => Promise<GroupActionResult>;
   joinGroup: (joinCode: string) => Promise<GroupActionResult>;
   getGroupDetails: (groupId: string) => Promise<GroupDetails | null>;
 };
@@ -184,17 +191,35 @@ export function AppProvider({ children, fallback }: PropsWithChildren<{ fallback
   );
 
   const createGroup = useCallback(
-    async (name: string, description: string) => {
+    async (input: {
+      name: string;
+      description: string;
+      visibility: 'public' | 'private';
+      stakesEnabled: boolean;
+      stakesText: string;
+      memberLimit?: number | null;
+    }) => {
       if (!session) {
         return { ok: false, message: 'No active session.' };
       }
 
-      if (!name.trim()) {
+      if (!input.name.trim()) {
         return { ok: false, message: 'Please enter a group name.' };
+      }
+      if (input.stakesEnabled && !input.stakesText.trim()) {
+        return { ok: false, message: 'Add a stakes message or turn Stakes Mode off.' };
+      }
+      if (input.memberLimit && input.memberLimit < 2) {
+        return { ok: false, message: 'Member limit should be at least 2.' };
       }
 
       setBusy(true);
-      const groupId = await createGroupRequest(session.uid, name.trim(), description.trim());
+      const groupId = await createGroupRequest(session.uid, {
+        ...input,
+        name: input.name.trim(),
+        description: input.description.trim(),
+        stakesText: input.stakesText.trim(),
+      });
       await refreshUserData(session);
       setBusy(false);
       return { ok: true, message: 'Group created.', groupId };

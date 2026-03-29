@@ -5,6 +5,7 @@ import { Text, View } from 'react-native';
 import { AppScreen } from '@/components/AppScreen';
 import { LeaderboardNoticeCard } from '@/components/LeaderboardNoticeCard';
 import { LoadingScreen } from '@/components/LoadingScreen';
+import { PageHeader } from '@/components/PageHeader';
 import { SectionHeader } from '@/components/SectionHeader';
 import { SurfaceCard } from '@/components/SurfaceCard';
 import { useApp } from '@/context/AppProvider';
@@ -35,23 +36,56 @@ export default function GroupScreen() {
   const leaderboardNotice = session ? getLeaderboardNotice(details.leaderboard, session.uid) : null;
 
   return (
-    <AppScreen scrollable>
-      <Text style={commonStyles.eyebrow}>Group page</Text>
-      <Text style={commonStyles.pageTitle}>{details.group.name}</Text>
-      <Text style={commonStyles.pageCopy}>{details.group.description}</Text>
+    <AppScreen scrollable contentContainerStyle={commonStyles.pageStack}>
+      <PageHeader
+        eyebrow="Group"
+        title={details.group.name}
+        subtitle={details.group.description || 'A focused accountability group built around showing up each week.'}
+      />
 
       {leaderboardNotice ? <LeaderboardNoticeCard title={leaderboardNotice.title} message={leaderboardNotice.message} /> : null}
 
-      <View style={commonStyles.statsRow}>
-        <SurfaceCard style={commonStyles.statCard}>
-          <Text style={commonStyles.statValue}>{details.members.length}</Text>
-          <Text style={commonStyles.statLabel}>Members</Text>
-        </SurfaceCard>
-        <SurfaceCard style={commonStyles.statCard}>
-          <Text style={commonStyles.statValue}>{details.group.joinCode}</Text>
-          <Text style={commonStyles.statLabel}>Join code</Text>
-        </SurfaceCard>
-      </View>
+      <SurfaceCard style={commonStyles.sectionCard}>
+        <SectionHeader title="Group settings" />
+        <View style={commonStyles.settingRow}>
+          <View style={commonStyles.settingLabelWrap}>
+            <Text style={commonStyles.settingTitle}>Visibility</Text>
+            <Text style={commonStyles.settingSubtitle}>
+              {details.group.visibility === 'public' ? 'Public and marked discoverable' : 'Private and invite-only by code'}
+            </Text>
+          </View>
+          <Text style={commonStyles.usernameText}>
+            {details.group.visibility === 'public' ? 'Public' : 'Private'}
+          </Text>
+        </View>
+        <View style={commonStyles.divider} />
+        <View style={commonStyles.settingRow}>
+          <View style={commonStyles.settingLabelWrap}>
+            <Text style={commonStyles.settingTitle}>Join code</Text>
+            <Text style={commonStyles.settingSubtitle}>Share this code with people you want in the group.</Text>
+          </View>
+          <Text style={commonStyles.usernameText}>{details.group.joinCode}</Text>
+        </View>
+        <View style={commonStyles.divider} />
+        <View style={commonStyles.settingRow}>
+          <View style={commonStyles.settingLabelWrap}>
+            <Text style={commonStyles.settingTitle}>Member limit</Text>
+            <Text style={commonStyles.settingSubtitle}>
+              {details.group.memberLimit ? `${details.members.length} of ${details.group.memberLimit} spots used` : 'No limit set'}
+            </Text>
+          </View>
+        </View>
+        <View style={commonStyles.divider} />
+        <View style={commonStyles.settingRow}>
+          <View style={commonStyles.settingLabelWrap}>
+            <Text style={commonStyles.settingTitle}>Stakes Mode</Text>
+            <Text style={commonStyles.settingSubtitle}>
+              {details.group.stakesEnabled ? details.group.stakesText : 'No challenge consequence set for this group.'}
+            </Text>
+          </View>
+          <Text style={commonStyles.usernameText}>{details.group.stakesEnabled ? 'On' : 'Off'}</Text>
+        </View>
+      </SurfaceCard>
 
       <SectionHeader
         title="Weekly leaderboard"
@@ -74,12 +108,14 @@ export default function GroupScreen() {
       ))}
 
       <SectionHeader title="Members" />
-      {details.members.map((member) => (
-        <SurfaceCard key={member.uid}>
-          <Text style={commonStyles.cardTitle}>{member.name}</Text>
-          <Text style={commonStyles.cardCopy}>{member.bio || member.email}</Text>
-        </SurfaceCard>
-      ))}
+      <View style={commonStyles.compactSection}>
+        {details.members.map((member) => (
+          <SurfaceCard key={member.uid}>
+            <Text style={commonStyles.cardTitle}>{member.name}</Text>
+            <Text style={commonStyles.cardCopy}>{member.bio || member.email}</Text>
+          </SurfaceCard>
+        ))}
+      </View>
     </AppScreen>
   );
 }
