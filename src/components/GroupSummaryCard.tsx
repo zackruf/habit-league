@@ -15,10 +15,11 @@ type GroupSummaryCardProps = {
 export function GroupSummaryCard({ group, memberCount, onEdit }: GroupSummaryCardProps) {
   const { theme } = useThemePreferences();
   const commonStyles = createCommonStyles(theme.colors);
-  const memberLabel = group.memberLimit ? `${memberCount}/${group.memberLimit} members` : `${memberCount} members`;
+  const memberNoun = memberCount === 1 ? 'member' : 'members';
+  const memberLabel = group.memberLimit ? `${memberCount}/${group.memberLimit} ${memberNoun}` : `${memberCount} ${memberNoun}`;
   const gearLabel = '\u2699';
-  const visibilityLabel = group.visibility === 'public' ? 'Public group' : 'Private group';
-  const stakesLine = group.stakesEnabled && group.stakesText ? `Consequence: ${group.stakesText}` : null;
+  const visibilityLabel = group.visibility === 'public' ? 'Public' : 'Private';
+  const stakesLine = group.stakesEnabled && group.stakesText ? `Stake: ${group.stakesText}` : null;
 
   return (
     <SurfaceCard style={commonStyles.sectionCard}>

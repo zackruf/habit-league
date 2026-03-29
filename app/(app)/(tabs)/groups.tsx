@@ -70,6 +70,10 @@ export default function GroupsTabScreen() {
           groupDetails.map((details) => {
             const foundIndex = details.leaderboard.findIndex((entry) => entry.userId === profile.uid);
             const rank = foundIndex === -1 ? details.members.length : foundIndex + 1;
+            const memberLabel = details.members.length === 1 ? '1 member' : `${details.members.length} members`;
+            const visibilityLabel = details.group.visibility === 'public' ? 'Public' : 'Private';
+            const statusLine = `#${rank} this week / ${memberLabel}`;
+            const secondaryLine = details.group.stakesEnabled && details.group.stakesText ? `${visibilityLabel} / Stake active` : visibilityLabel;
 
             return (
               <PressableCard
@@ -82,16 +86,12 @@ export default function GroupsTabScreen() {
                 <View style={commonStyles.listRow}>
                   <View style={commonStyles.listRowMeta}>
                     <Text style={commonStyles.listRowTitle}>{details.group.name}</Text>
-                    <Text style={commonStyles.listRowSubtitle}>
-                      #{rank} of {details.members.length} this week
-                    </Text>
+                    <Text style={commonStyles.listRowSubtitle}>{statusLine}</Text>
                   </View>
                   <JoinCodeChip code={details.group.joinCode} />
                 </View>
-                <Text style={commonStyles.cardCopy}>{details.group.description}</Text>
-                <Text style={commonStyles.listRowSubtitle}>
-                  {details.group.visibility === 'public' ? 'Public' : 'Private'} / {details.group.stakesEnabled ? 'Stakes on' : 'Stakes off'}
-                </Text>
+                {details.group.description ? <Text style={commonStyles.cardCopy}>{details.group.description}</Text> : null}
+                <Text style={commonStyles.listRowSubtitle}>{secondaryLine}</Text>
               </PressableCard>
             );
           })

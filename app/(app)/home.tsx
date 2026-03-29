@@ -81,22 +81,32 @@ export default function HomeScreen() {
       <SectionHeader title="This week" />
       <View style={commonStyles.compactSection}>
         {groupDetails.length ? (
-          groupDetails.map((details) => (
-            <PressableCard
-              key={details.group.id}
-              accessibilityHint="Opens the selected group"
-              accessibilityLabel={`Open ${details.group.name}`}
-              onPress={() => router.push(`/(app)/groups/${details.group.id}`)}
-              style={commonStyles.listCard}
-            >
-              <View style={commonStyles.listRowMeta}>
-                <Text style={commonStyles.listRowTitle}>{details.group.name}</Text>
-                <Text style={commonStyles.listRowSubtitle}>
-                  Leader: {details.leaderboard[0]?.name ?? 'Nobody yet'} with {details.leaderboard[0]?.weeklyCheckIns ?? 0} check-ins
-                </Text>
-              </View>
-            </PressableCard>
-          ))
+          groupDetails.map((details) => {
+            const foundIndex = details.leaderboard.findIndex((entry) => entry.userId === profile.uid);
+            const rank = foundIndex === -1 ? null : foundIndex + 1;
+            const visibilityLabel = details.group.visibility === 'public' ? 'Public' : 'Private';
+            const metadata = rank ? `#${rank} this week / ${visibilityLabel}` : `Leader: ${details.leaderboard[0]?.name ?? 'Nobody yet'} / ${visibilityLabel}`;
+
+            return (
+              <PressableCard
+                key={details.group.id}
+                accessibilityHint="Opens the selected group"
+                accessibilityLabel={`Open ${details.group.name}`}
+                onPress={() => router.push(`/(app)/groups/${details.group.id}`)}
+                style={commonStyles.weeklyPreviewCard}
+              >
+                <View style={commonStyles.listRow}>
+                  <View style={commonStyles.listRowMeta}>
+                    <Text style={commonStyles.listRowTitle}>{details.group.name}</Text>
+                    <Text style={commonStyles.listRowSubtitle}>{metadata}</Text>
+                  </View>
+                  <View style={commonStyles.rankPreviewBadge}>
+                    <Text style={commonStyles.rankPreviewValue}>{rank ? `#${rank}` : '--'}</Text>
+                  </View>
+                </View>
+              </PressableCard>
+            );
+          })
         ) : (
           <SurfaceCard>
             <Text style={commonStyles.cardTitle}>No competitive activity yet</Text>

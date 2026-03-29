@@ -214,6 +214,11 @@ export function createCommonStyles(colors: AppColors) {
     listCard: {
       gap: spacing.sm,
     },
+    weeklyPreviewCard: {
+      gap: spacing.xs,
+      backgroundColor: colors.surfaceRaised,
+      borderColor: colors.currentUserBorder,
+    },
     listRow: {
       flexDirection: 'row',
       alignItems: 'center',
@@ -238,6 +243,21 @@ export function createCommonStyles(colors: AppColors) {
       color: colors.text,
       fontSize: 18,
       fontWeight: '700',
+    },
+    rankPreviewBadge: {
+      minWidth: 72,
+      minHeight: 72,
+      borderRadius: radius.md,
+      alignItems: 'center',
+      justifyContent: 'center',
+      backgroundColor: colors.surface,
+      borderWidth: 1,
+      borderColor: colors.border,
+    },
+    rankPreviewValue: {
+      color: colors.primary,
+      fontSize: 24,
+      fontWeight: '800',
     },
     avatarRow: {
       flexDirection: 'row',

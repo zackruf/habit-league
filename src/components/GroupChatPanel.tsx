@@ -104,7 +104,7 @@ export function GroupChatPanel({ groupId }: { groupId: string }) {
           },
         ]}
       >
-        <View style={styles.composerRow}>
+        <View style={[styles.composerShell, { backgroundColor: theme.colors.surface, borderColor: theme.colors.border, shadowColor: theme.colors.shadow }]}>
           <TextInput
             value={draft}
             onChangeText={setDraft}
@@ -114,7 +114,6 @@ export function GroupChatPanel({ groupId }: { groupId: string }) {
               styles.input,
               {
                 backgroundColor: theme.colors.surfaceAlt,
-                borderColor: theme.colors.border,
                 color: theme.colors.text,
               },
             ]}
@@ -155,22 +154,29 @@ const styles = StyleSheet.create({
     borderTopWidth: 1,
     paddingTop: spacing.sm,
   },
-  composerRow: {
+  composerShell: {
     flexDirection: 'row',
     gap: spacing.sm,
     alignItems: 'center',
+    borderWidth: 1,
+    borderRadius: 20,
+    padding: spacing.sm,
+    shadowOffset: { width: 0, height: 10 },
+    shadowOpacity: 0.06,
+    shadowRadius: 18,
+    elevation: 2,
   },
   input: {
     flex: 1,
-    minHeight: 48,
-    borderRadius: 16,
-    borderWidth: 1,
+    minHeight: 52,
+    borderRadius: 18,
     paddingHorizontal: spacing.md,
     fontSize: 15,
   },
   sendButton: {
-    minWidth: 84,
-    borderRadius: 16,
+    minWidth: 92,
+    minHeight: 52,
+    borderRadius: 18,
     alignItems: 'center',
     justifyContent: 'center',
     paddingHorizontal: spacing.md,
