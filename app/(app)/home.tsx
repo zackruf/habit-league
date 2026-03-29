@@ -89,16 +89,11 @@ export default function HomeScreen() {
               onPress={() => router.push(`/(app)/groups/${details.group.id}`)}
               style={commonStyles.listCard}
             >
-              <View style={commonStyles.listRow}>
-                <View style={commonStyles.listRowMeta}>
-                  <Text style={commonStyles.listRowTitle}>{details.group.name}</Text>
-                  <Text style={commonStyles.listRowSubtitle}>
-                    Leader: {details.leaderboard[0]?.name ?? 'Nobody yet'} with {details.leaderboard[0]?.weeklyCheckIns ?? 0} check-ins
-                  </Text>
-                </View>
-                <View style={commonStyles.badgePill}>
-                  <Text style={commonStyles.badgeText}>Tap to view</Text>
-                </View>
+              <View style={commonStyles.listRowMeta}>
+                <Text style={commonStyles.listRowTitle}>{details.group.name}</Text>
+                <Text style={commonStyles.listRowSubtitle}>
+                  Leader: {details.leaderboard[0]?.name ?? 'Nobody yet'} with {details.leaderboard[0]?.weeklyCheckIns ?? 0} check-ins
+                </Text>
               </View>
             </PressableCard>
           ))

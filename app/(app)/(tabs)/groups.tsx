@@ -90,12 +90,9 @@ export default function GroupsTabScreen() {
                   </View>
                 </View>
                 <Text style={commonStyles.cardCopy}>{details.group.description}</Text>
-                <View style={commonStyles.listRow}>
-                  <Text style={commonStyles.listRowSubtitle}>
-                    {details.group.visibility === 'public' ? 'Public' : 'Private'} / {details.group.stakesEnabled ? 'Stakes on' : 'Stakes off'}
-                  </Text>
-                  <Text style={commonStyles.inlineLink}>Tap to view</Text>
-                </View>
+                <Text style={commonStyles.listRowSubtitle}>
+                  {details.group.visibility === 'public' ? 'Public' : 'Private'} / {details.group.stakesEnabled ? 'Stakes on' : 'Stakes off'}
+                </Text>
               </PressableCard>
             );
           })
