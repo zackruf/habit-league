@@ -34,6 +34,7 @@ export default function GroupScreen() {
   }
 
   const leaderboardNotice = session ? getLeaderboardNotice(details.leaderboard, session.uid) : null;
+  const isOwner = session?.uid === details.group.ownerId;
 
   return (
     <AppScreen scrollable contentContainerStyle={commonStyles.pageStack}>
@@ -46,7 +47,21 @@ export default function GroupScreen() {
       {leaderboardNotice ? <LeaderboardNoticeCard title={leaderboardNotice.title} message={leaderboardNotice.message} /> : null}
 
       <SurfaceCard style={commonStyles.sectionCard}>
-        <SectionHeader title="Group settings" />
+        <SectionHeader
+          title="Summary"
+          action={
+            <View style={commonStyles.actionRowTight}>
+              <Link href={`/(app)/groups/${details.group.id}/chat`} style={commonStyles.inlineLink}>
+                Chat
+              </Link>
+              {isOwner ? (
+                <Link href={`/(app)/groups/${details.group.id}/edit`} style={commonStyles.inlineLink}>
+                  Edit
+                </Link>
+              ) : null}
+            </View>
+          }
+        />
         <View style={commonStyles.settingRow}>
           <View style={commonStyles.settingLabelWrap}>
             <Text style={commonStyles.settingTitle}>Visibility</Text>

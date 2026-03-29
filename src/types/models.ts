@@ -40,6 +40,24 @@ export type Group = {
   createdAt: string;
 };
 
+export type GroupSettingsInput = {
+  name: string;
+  description: string;
+  visibility: 'public' | 'private';
+  stakesEnabled: boolean;
+  stakesText: string;
+  memberLimit?: number | null;
+};
+
+export type GroupMessage = {
+  id: string;
+  groupId: string;
+  senderId: string;
+  senderName: string;
+  text: string;
+  createdAt: string;
+};
+
 export type AppBundle = {
   profile: Profile;
   habits: Habit[];
@@ -65,4 +83,5 @@ export type DemoStore = {
   profiles: Record<string, Profile>;
   habits: Record<string, Habit>;
   groups: Record<string, Group>;
+  groupMessages: Record<string, GroupMessage[]>;
 };

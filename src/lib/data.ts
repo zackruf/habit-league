@@ -1,6 +1,7 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { createUserWithEmailAndPassword, signInWithEmailAndPassword, signOut as firebaseSignOut } from 'firebase/auth';
 import {
+  addDoc,
   arrayRemove,
   arrayUnion,
   collection,
@@ -8,6 +9,7 @@ import {
   getDoc,
   getDocs,
   limit,
+  orderBy,
   query,
   setDoc,
   updateDoc,
@@ -16,7 +18,7 @@ import {
 
 import { firebaseAuth, firebaseConfigured, firestore } from '@/lib/firebase';
 import { getCurrentWeekKeys } from '@/lib/date';
-import { AppBundle, DemoStore, Group, GroupDetails, Habit, LeaderboardEntry, Profile, SessionUser } from '@/types/models';
+import { AppBundle, DemoStore, Group, GroupDetails, GroupMessage, GroupSettingsInput, Habit, LeaderboardEntry, Profile, SessionUser } from '@/types/models';
 
 const STORAGE_KEY = 'habitleague:demo-store';
 
@@ -28,6 +30,7 @@ const blankStore: DemoStore = {
   profiles: {},
   habits: {},
   groups: {},
+  groupMessages: {},
 };
 
 export async function restoreSession(): Promise<SessionUser | null> {
@@ -231,33 +234,8 @@ export async function toggleHabitCheckIn(uid: string, habitId: string) {
   await writeDemoStore(store);
 }
 
-export async function createGroup(
-  uid: string,
-  input: {
-    name: string;
-    description: string;
-    visibility: 'public' | 'private';
-    stakesEnabled: boolean;
-    stakesText: string;
-    memberLimit?: number | null;
-  }
-) {
-  const visibility = input.visibility;
-  const group: Group = {
-    id: createId('group'),
-    name: input.name,
-    description: input.description,
-    ownerId: uid,
-    memberIds: [uid],
-    joinCode: createJoinCode(),
-    visibility,
-    inviteOnly: visibility === 'private',
-    discoverable: visibility === 'public',
-    stakesEnabled: input.stakesEnabled,
-    stakesText: input.stakesEnabled ? input.stakesText.trim() : '',
-    memberLimit: input.memberLimit ?? null,
-    createdAt: new Date().toISOString(),
-  };
+export async function createGroup(uid: string, input: GroupSettingsInput) {
+  const group: Group = buildGroup(uid, input);
 
   if (usingFirebaseBackend && firestore) {
     await setDoc(doc(firestore, 'groups', group.id), group);
@@ -267,9 +245,113 @@ export async function createGroup(
 
   const store = await readDemoStore();
   store.groups[group.id] = group;
+  store.groupMessages[group.id] = seedWelcomeMessages(group, store.profiles[uid]?.name || 'New teammate', uid);
   store.profiles[uid].groupIds = [...new Set([...(store.profiles[uid].groupIds ?? []), group.id])];
   await writeDemoStore(store);
   return group.id;
+}
+
+export async function updateGroup(uid: string, groupId: string, input: GroupSettingsInput) {
+  if (usingFirebaseBackend && firestore) {
+    const groupRef = doc(firestore, 'groups', groupId);
+    const snapshot = await getDoc(groupRef);
+    if (!snapshot.exists()) {
+      return { ok: false, message: 'That group could not be found.' };
+    }
+
+    const existing = normalizeGroup(snapshot.data() as Group);
+    if (!existing) {
+      return { ok: false, message: 'That group could not be found.' };
+    }
+    if (existing.ownerId !== uid) {
+      return { ok: false, message: 'Only the group owner can edit settings.' };
+    }
+    if (input.memberLimit && input.memberLimit < existing.memberIds.length) {
+      return { ok: false, message: 'Member limit cannot be smaller than the current member count.' };
+    }
+
+    await updateDoc(groupRef, buildGroupPatch(input));
+    return { ok: true, message: 'Group updated.' };
+  }
+
+  const store = await readDemoStore();
+  const existing = normalizeGroup(store.groups[groupId]);
+  if (!existing) {
+    return { ok: false, message: 'That group could not be found.' };
+  }
+  if (existing.ownerId !== uid) {
+    return { ok: false, message: 'Only the group owner can edit settings.' };
+  }
+  if (input.memberLimit && input.memberLimit < existing.memberIds.length) {
+    return { ok: false, message: 'Member limit cannot be smaller than the current member count.' };
+  }
+
+  store.groups[groupId] = { ...existing, ...buildGroupPatch(input) };
+  await writeDemoStore(store);
+  return { ok: true, message: 'Group updated.' };
+}
+
+export async function loadGroupMessages(groupId: string): Promise<GroupMessage[]> {
+  if (usingFirebaseBackend && firestore) {
+    const snapshot = await getDocs(query(collection(firestore, 'groups', groupId, 'messages'), orderBy('createdAt', 'asc')));
+    return snapshot.docs
+      .map((entry) => normalizeMessage({ id: entry.id, ...(entry.data() as Omit<GroupMessage, 'id'>) }))
+      .filter((message): message is GroupMessage => Boolean(message));
+  }
+
+  const store = await readDemoStore();
+  return (store.groupMessages[groupId] ?? [])
+    .map((message) => normalizeMessage(message))
+    .filter((message): message is GroupMessage => Boolean(message));
+}
+
+export async function sendGroupMessage(groupId: string, sender: Profile, text: string) {
+  const message = buildMessage(groupId, sender, text);
+
+  if (usingFirebaseBackend && firestore) {
+    await addDoc(collection(firestore, 'groups', groupId, 'messages'), message);
+    return;
+  }
+
+  const store = await readDemoStore();
+  const currentMessages = store.groupMessages[groupId] ?? [];
+  store.groupMessages[groupId] = [...currentMessages, message];
+  await writeDemoStore(store);
+}
+
+function buildGroup(ownerId: string, input: GroupSettingsInput): Group {
+  const visibility = input.visibility;
+
+  return {
+    id: createId('group'),
+    name: input.name,
+    description: input.description,
+    ownerId,
+    memberIds: [ownerId],
+    joinCode: createJoinCode(),
+    visibility,
+    inviteOnly: visibility === 'private',
+    discoverable: visibility === 'public',
+    stakesEnabled: input.stakesEnabled,
+    stakesText: input.stakesEnabled ? input.stakesText.trim() : '',
+    memberLimit: input.memberLimit ?? null,
+    createdAt: new Date().toISOString(),
+  };
+}
+
+function buildGroupPatch(input: GroupSettingsInput) {
+  const visibility = input.visibility;
+
+  return {
+    name: input.name.trim(),
+    description: input.description.trim(),
+    visibility,
+    inviteOnly: visibility === 'private',
+    discoverable: visibility === 'public',
+    stakesEnabled: input.stakesEnabled,
+    stakesText: input.stakesEnabled ? input.stakesText.trim() : '',
+    memberLimit: typeof input.memberLimit === 'number' && input.memberLimit > 0 ? input.memberLimit : null,
+  };
 }
 
 export async function joinGroup(uid: string, joinCode: string) {
@@ -404,6 +486,30 @@ function normalizeGroup(group?: Group | null): Group | null {
   };
 }
 
+function normalizeMessage(message?: GroupMessage | null): GroupMessage | null {
+  if (!message) {
+    return null;
+  }
+
+  return {
+    ...message,
+    text: message.text || '',
+    senderName: message.senderName || 'Teammate',
+    createdAt: message.createdAt || new Date().toISOString(),
+  };
+}
+
+function buildMessage(groupId: string, sender: Profile, text: string): GroupMessage {
+  return {
+    id: createId('message'),
+    groupId,
+    senderId: sender.uid,
+    senderName: sender.name,
+    text: text.trim(),
+    createdAt: new Date().toISOString(),
+  };
+}
+
 function buildLeaderboard(members: Profile[], habits: Habit[]): LeaderboardEntry[] {
   const weekKeys = new Set(getCurrentWeekKeys());
 
@@ -426,7 +532,12 @@ function buildLeaderboard(members: Profile[], habits: Habit[]): LeaderboardEntry
 async function readDemoStore(): Promise<DemoStore> {
   const raw = await AsyncStorage.getItem(STORAGE_KEY);
   if (raw) {
-    return JSON.parse(raw) as DemoStore;
+    const parsed = JSON.parse(raw) as DemoStore;
+    return {
+      ...blankStore,
+      ...parsed,
+      groupMessages: parsed.groupMessages || {},
+    };
   }
 
   const seeded = seedDemoStore();
@@ -511,7 +622,40 @@ function seedDemoStore(): DemoStore {
         createdAt: new Date().toISOString(),
       },
     },
+    groupMessages: {
+      [groupId]: [
+        {
+          id: 'message-demo-1',
+          groupId,
+          senderId: friendUid,
+          senderName: 'Jamie',
+          text: 'Morning walk is done. I am not buying coffee this week.',
+          createdAt: new Date(Date.now() - 1000 * 60 * 90).toISOString(),
+        },
+        {
+          id: 'message-demo-2',
+          groupId,
+          senderId: demoUid,
+          senderName: 'Demo Captain',
+          text: 'I am catching up tonight. Keep the pressure on.',
+          createdAt: new Date(Date.now() - 1000 * 60 * 30).toISOString(),
+        },
+      ],
+    },
   };
+}
+
+function seedWelcomeMessages(group: Group, senderName: string, senderId: string): GroupMessage[] {
+  return [
+    {
+      id: createId('message'),
+      groupId: group.id,
+      senderId,
+      senderName,
+      text: `Welcome to ${group.name}. Use the chat to keep the challenge active each week.`,
+      createdAt: new Date().toISOString(),
+    },
+  ];
 }
 
 function createId(prefix: string) {

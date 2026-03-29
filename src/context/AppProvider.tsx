@@ -7,16 +7,19 @@ import {
   getGroupDetails,
   initializeUserProfile,
   joinGroup as joinGroupRequest,
+  loadGroupMessages as loadGroupMessagesRequest,
   loadUserBundle,
   restoreSession,
   saveProfile as saveProfileRequest,
+  sendGroupMessage as sendGroupMessageRequest,
   signIn as signInRequest,
   signOut as signOutRequest,
   signUp as signUpRequest,
   toggleHabitCheckIn as toggleHabitCheckInRequest,
+  updateGroup as updateGroupRequest,
   usingFirebaseBackend,
 } from '@/lib/data';
-import { AppBundle, GroupDetails, Habit, Profile, SessionUser } from '@/types/models';
+import { AppBundle, GroupDetails, GroupMessage, GroupSettingsInput, Habit, Profile, SessionUser } from '@/types/models';
 
 type ActionResult = {
   ok: boolean;
@@ -42,16 +45,12 @@ type AppContextValue = {
   saveProfile: (patch: Partial<Profile>) => Promise<ActionResult>;
   createHabit: (input: { title: string; emoji: string; category: string }) => Promise<ActionResult>;
   toggleHabitCheckIn: (habitId: string) => Promise<void>;
-  createGroup: (input: {
-    name: string;
-    description: string;
-    visibility: 'public' | 'private';
-    stakesEnabled: boolean;
-    stakesText: string;
-    memberLimit?: number | null;
-  }) => Promise<GroupActionResult>;
+  createGroup: (input: GroupSettingsInput) => Promise<GroupActionResult>;
+  updateGroup: (groupId: string, input: GroupSettingsInput) => Promise<ActionResult>;
   joinGroup: (joinCode: string) => Promise<GroupActionResult>;
   getGroupDetails: (groupId: string) => Promise<GroupDetails | null>;
+  getGroupMessages: (groupId: string) => Promise<GroupMessage[]>;
+  sendGroupMessage: (groupId: string, text: string) => Promise<ActionResult>;
 };
 
 const AppContext = createContext<AppContextValue | undefined>(undefined);
@@ -191,14 +190,7 @@ export function AppProvider({ children, fallback }: PropsWithChildren<{ fallback
   );
 
   const createGroup = useCallback(
-    async (input: {
-      name: string;
-      description: string;
-      visibility: 'public' | 'private';
-      stakesEnabled: boolean;
-      stakesText: string;
-      memberLimit?: number | null;
-    }) => {
+    async (input: GroupSettingsInput) => {
       if (!session) {
         return { ok: false, message: 'No active session.' };
       }
@@ -227,6 +219,38 @@ export function AppProvider({ children, fallback }: PropsWithChildren<{ fallback
     [refreshUserData, session]
   );
 
+  const updateGroup = useCallback(
+    async (groupId: string, input: GroupSettingsInput) => {
+      if (!session) {
+        return { ok: false, message: 'No active session.' };
+      }
+
+      if (!input.name.trim()) {
+        return { ok: false, message: 'Please enter a group name.' };
+      }
+      if (input.stakesEnabled && !input.stakesText.trim()) {
+        return { ok: false, message: 'Add a stakes message or turn Stakes Mode off.' };
+      }
+      if (input.memberLimit && input.memberLimit < 2) {
+        return { ok: false, message: 'Member limit should be at least 2.' };
+      }
+
+      setBusy(true);
+      const result = await updateGroupRequest(session.uid, groupId, {
+        ...input,
+        name: input.name.trim(),
+        description: input.description.trim(),
+        stakesText: input.stakesText.trim(),
+      });
+      if (result.ok) {
+        await refreshUserData(session);
+      }
+      setBusy(false);
+      return result;
+    },
+    [refreshUserData, session]
+  );
+
   const joinGroup = useCallback(
     async (joinCode: string) => {
       if (!session) {
@@ -242,6 +266,23 @@ export function AppProvider({ children, fallback }: PropsWithChildren<{ fallback
       return result;
     },
     [refreshUserData, session]
+  );
+
+  const getGroupMessages = useCallback(async (groupId: string) => loadGroupMessagesRequest(groupId), []);
+
+  const sendGroupMessage = useCallback(
+    async (groupId: string, text: string) => {
+      if (!profile) {
+        return { ok: false, message: 'No active profile.' };
+      }
+      if (!text.trim()) {
+        return { ok: false, message: 'Write a message first.' };
+      }
+
+      await sendGroupMessageRequest(groupId, profile, text);
+      return { ok: true, message: 'Message sent.' };
+    },
+    [profile]
   );
 
   const value = useMemo<AppContextValue>(
@@ -261,10 +302,32 @@ export function AppProvider({ children, fallback }: PropsWithChildren<{ fallback
       createHabit,
       toggleHabitCheckIn,
       createGroup,
+      updateGroup,
       joinGroup,
       getGroupDetails,
+      getGroupMessages,
+      sendGroupMessage,
     }),
-    [authReady, busy, refreshing, session, profile, habits, groups, signIn, signUp, signOut, saveProfile, createHabit, toggleHabitCheckIn, createGroup, joinGroup]
+    [
+      authReady,
+      busy,
+      refreshing,
+      session,
+      profile,
+      habits,
+      groups,
+      signIn,
+      signUp,
+      signOut,
+      saveProfile,
+      createHabit,
+      toggleHabitCheckIn,
+      createGroup,
+      updateGroup,
+      joinGroup,
+      getGroupMessages,
+      sendGroupMessage,
+    ]
   );
 
   if (!authReady && fallback) {
