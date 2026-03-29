@@ -1,4 +1,4 @@
-import { Link, router } from 'expo-router';
+import { router } from 'expo-router';
 import { useEffect, useState } from 'react';
 import { Text, View } from 'react-native';
 
@@ -6,6 +6,7 @@ import { AppScreen } from '@/components/AppScreen';
 import { LeaderboardNoticeCard } from '@/components/LeaderboardNoticeCard';
 import { LoadingScreen } from '@/components/LoadingScreen';
 import { PageHeader } from '@/components/PageHeader';
+import { PressableCard } from '@/components/PressableCard';
 import { PrimaryButton } from '@/components/PrimaryButton';
 import { SectionHeader } from '@/components/SectionHeader';
 import { SurfaceCard } from '@/components/SurfaceCard';
@@ -70,7 +71,13 @@ export default function GroupsTabScreen() {
             const rank = foundIndex === -1 ? details.members.length : foundIndex + 1;
 
             return (
-              <SurfaceCard key={details.group.id} style={commonStyles.listCard}>
+              <PressableCard
+                key={details.group.id}
+                accessibilityHint="Opens the selected group"
+                accessibilityLabel={`Open ${details.group.name}`}
+                onPress={() => router.push(`/(app)/groups/${details.group.id}`)}
+                style={commonStyles.listCard}
+              >
                 <View style={commonStyles.listRow}>
                   <View style={commonStyles.listRowMeta}>
                     <Text style={commonStyles.listRowTitle}>{details.group.name}</Text>
@@ -85,13 +92,11 @@ export default function GroupsTabScreen() {
                 <Text style={commonStyles.cardCopy}>{details.group.description}</Text>
                 <View style={commonStyles.listRow}>
                   <Text style={commonStyles.listRowSubtitle}>
-                    {details.group.visibility === 'public' ? 'Public' : 'Private'} · {details.group.stakesEnabled ? 'Stakes on' : 'Stakes off'}
+                    {details.group.visibility === 'public' ? 'Public' : 'Private'} / {details.group.stakesEnabled ? 'Stakes on' : 'Stakes off'}
                   </Text>
-                  <Link href={`/(app)/groups/${details.group.id}`} style={commonStyles.inlineLink}>
-                    Open
-                  </Link>
+                  <Text style={commonStyles.inlineLink}>Tap to view</Text>
                 </View>
-              </SurfaceCard>
+              </PressableCard>
             );
           })
         ) : (

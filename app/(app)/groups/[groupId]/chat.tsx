@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { KeyboardAvoidingView, Platform, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useLocalSearchParams } from 'expo-router';
 
 import { LoadingScreen } from '@/components/LoadingScreen';
@@ -16,6 +16,7 @@ export default function GroupChatScreen() {
   const { groupId } = useLocalSearchParams<{ groupId: string }>();
   const { getGroupDetails, getGroupMessages, sendGroupMessage, profile } = useApp();
   const { theme } = useThemePreferences();
+  const insets = useSafeAreaInsets();
   const commonStyles = createCommonStyles(theme.colors);
   const [details, setDetails] = useState<GroupDetails | null>(null);
   const [messages, setMessages] = useState<GroupMessage[]>([]);
@@ -100,7 +101,16 @@ export default function GroupChatScreen() {
           </ScrollView>
         </View>
 
-        <View style={[styles.composer, { backgroundColor: theme.colors.background, borderTopColor: theme.colors.border }]}>
+        <View
+          style={[
+            styles.composer,
+            {
+              backgroundColor: theme.colors.background,
+              borderTopColor: theme.colors.border,
+              paddingBottom: Math.max(insets.bottom, spacing.sm),
+            },
+          ]}
+        >
           <TextInput
             value={draft}
             onChangeText={setDraft}
@@ -163,19 +173,18 @@ const styles = StyleSheet.create({
     gap: spacing.sm,
     paddingHorizontal: spacing.lg,
     paddingTop: spacing.sm,
-    paddingBottom: spacing.lg,
     borderTopWidth: 1,
   },
   input: {
     flex: 1,
-    minHeight: 48,
+    minHeight: 50,
     borderRadius: 16,
     borderWidth: 1,
     paddingHorizontal: spacing.md,
     fontSize: 15,
   },
   sendButton: {
-    minWidth: 72,
+    minWidth: 84,
     borderRadius: 16,
     alignItems: 'center',
     justifyContent: 'center',

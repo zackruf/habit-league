@@ -1,4 +1,4 @@
-import { Link, useLocalSearchParams } from 'expo-router';
+import { Link, router, useLocalSearchParams } from 'expo-router';
 import { useEffect, useState } from 'react';
 import { Text, View } from 'react-native';
 
@@ -6,6 +6,7 @@ import { AppScreen } from '@/components/AppScreen';
 import { LeaderboardNoticeCard } from '@/components/LeaderboardNoticeCard';
 import { LoadingScreen } from '@/components/LoadingScreen';
 import { PageHeader } from '@/components/PageHeader';
+import { PrimaryButton } from '@/components/PrimaryButton';
 import { SectionHeader } from '@/components/SectionHeader';
 import { SurfaceCard } from '@/components/SurfaceCard';
 import { useApp } from '@/context/AppProvider';
@@ -42,26 +43,19 @@ export default function GroupScreen() {
         eyebrow="Group"
         title={details.group.name}
         subtitle={details.group.description || 'A focused accountability group built around showing up each week.'}
+        trailing={
+          isOwner ? (
+            <Link href={`/(app)/groups/${details.group.id}/edit`} style={commonStyles.inlineLink}>
+              Edit
+            </Link>
+          ) : undefined
+        }
       />
 
       {leaderboardNotice ? <LeaderboardNoticeCard title={leaderboardNotice.title} message={leaderboardNotice.message} /> : null}
 
       <SurfaceCard style={commonStyles.sectionCard}>
-        <SectionHeader
-          title="Summary"
-          action={
-            <View style={commonStyles.actionRowTight}>
-              <Link href={`/(app)/groups/${details.group.id}/chat`} style={commonStyles.inlineLink}>
-                Chat
-              </Link>
-              {isOwner ? (
-                <Link href={`/(app)/groups/${details.group.id}/edit`} style={commonStyles.inlineLink}>
-                  Edit
-                </Link>
-              ) : null}
-            </View>
-          }
-        />
+        <SectionHeader title="Summary" />
         <View style={commonStyles.settingRow}>
           <View style={commonStyles.settingLabelWrap}>
             <Text style={commonStyles.settingTitle}>Visibility</Text>
@@ -101,6 +95,13 @@ export default function GroupScreen() {
           <Text style={commonStyles.usernameText}>{details.group.stakesEnabled ? 'On' : 'Off'}</Text>
         </View>
       </SurfaceCard>
+
+      <View style={commonStyles.actionRowTight}>
+        <PrimaryButton label="Open chat" onPress={() => router.push(`/(app)/groups/${details.group.id}/chat`)} />
+        {isOwner ? (
+          <PrimaryButton label="Edit group" onPress={() => router.push(`/(app)/groups/${details.group.id}/edit`)} variant="secondary" />
+        ) : null}
+      </View>
 
       <SectionHeader
         title="Weekly leaderboard"

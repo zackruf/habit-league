@@ -1,4 +1,4 @@
-import { Link, router } from 'expo-router';
+import { router } from 'expo-router';
 import { useEffect, useState } from 'react';
 import { Text, View } from 'react-native';
 
@@ -7,6 +7,7 @@ import { HabitCard } from '@/components/HabitCard';
 import { LeaderboardNoticeCard } from '@/components/LeaderboardNoticeCard';
 import { LoadingScreen } from '@/components/LoadingScreen';
 import { PageHeader } from '@/components/PageHeader';
+import { PressableCard } from '@/components/PressableCard';
 import { PrimaryButton } from '@/components/PrimaryButton';
 import { SectionHeader } from '@/components/SectionHeader';
 import { SurfaceCard } from '@/components/SurfaceCard';
@@ -81,7 +82,13 @@ export default function HomeScreen() {
       <View style={commonStyles.compactSection}>
         {groupDetails.length ? (
           groupDetails.map((details) => (
-            <SurfaceCard key={details.group.id} style={commonStyles.listCard}>
+            <PressableCard
+              key={details.group.id}
+              accessibilityHint="Opens the selected group"
+              accessibilityLabel={`Open ${details.group.name}`}
+              onPress={() => router.push(`/(app)/groups/${details.group.id}`)}
+              style={commonStyles.listCard}
+            >
               <View style={commonStyles.listRow}>
                 <View style={commonStyles.listRowMeta}>
                   <Text style={commonStyles.listRowTitle}>{details.group.name}</Text>
@@ -89,11 +96,11 @@ export default function HomeScreen() {
                     Leader: {details.leaderboard[0]?.name ?? 'Nobody yet'} with {details.leaderboard[0]?.weeklyCheckIns ?? 0} check-ins
                   </Text>
                 </View>
-                <Link href={`/(app)/groups/${details.group.id}`} style={commonStyles.inlineLink}>
-                  Open
-                </Link>
+                <View style={commonStyles.badgePill}>
+                  <Text style={commonStyles.badgeText}>Tap to view</Text>
+                </View>
               </View>
-            </SurfaceCard>
+            </PressableCard>
           ))
         ) : (
           <SurfaceCard>
