@@ -20,6 +20,7 @@ import {
   updateGroup as updateGroupRequest,
   usingFirebaseBackend,
 } from '@/lib/data';
+import { consumeRestoreStreak } from '@/lib/shop';
 import { AppBundle, GroupDetails, GroupMessage, GroupSettingsInput, Habit, Profile, SessionUser } from '@/types/models';
 
 type ActionResult = {
@@ -38,6 +39,7 @@ type AppContextValue = {
   usingFirebase: boolean;
   session: SessionUser | null;
   profile: Profile | null;
+  shopInventory: Profile['shopInventory'] | null;
   habits: Habit[];
   groups: AppBundle['groups'];
   signIn: (email: string, password: string) => Promise<ActionResult>;
@@ -193,19 +195,24 @@ export function AppProvider({ children, fallback }: PropsWithChildren<{ fallback
 
   const restoreHabitStreak = useCallback(
     async (habitId: string) => {
-      if (!session) {
+      if (!session || !profile) {
         return { ok: false, message: 'No active session.' };
+      }
+      if (profile.shopInventory.streakRestoreCredits < 1) {
+        return { ok: false, message: 'Add a restore from the Shop before using it.' };
       }
 
       setBusy(true);
       const result = await restoreHabitStreakRequest(session.uid, habitId);
       if (result.ok) {
+        const nextInventory = consumeRestoreStreak(profile.shopInventory);
+        await saveProfileRequest(session.uid, { shopInventory: nextInventory });
         await refreshUserData(session);
       }
       setBusy(false);
       return result;
     },
-    [refreshUserData, session]
+    [profile, refreshUserData, session]
   );
 
   const createGroup = useCallback(
@@ -312,6 +319,7 @@ export function AppProvider({ children, fallback }: PropsWithChildren<{ fallback
       usingFirebase: usingFirebaseBackend,
       session,
       profile,
+      shopInventory: profile?.shopInventory ?? null,
       habits,
       groups,
       signIn,
@@ -334,6 +342,7 @@ export function AppProvider({ children, fallback }: PropsWithChildren<{ fallback
       refreshing,
       session,
       profile,
+      profile?.shopInventory,
       habits,
       groups,
       signIn,

@@ -12,6 +12,17 @@ export type Profile = {
   weeklyGoal: number;
   onboardingCompleted: boolean;
   groupIds: string[];
+  shopInventory: ShopInventory;
+};
+
+export type ShopProductId = 'restore_streak' | 'streak_freeze' | 'premium_placeholder';
+
+export type ShopInventory = {
+  streakRestoreCredits: number;
+  streakRestoreCooldownUntil: string | null;
+  streakFreezeCredits: number;
+  streakFreezeCooldownUntil: string | null;
+  premiumPlaceholderOwned: boolean;
 };
 
 export type Habit = {

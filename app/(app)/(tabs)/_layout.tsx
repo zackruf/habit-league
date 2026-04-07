@@ -48,6 +48,7 @@ export default function TabsLayout() {
       <Tabs.Screen name="dashboard" options={{ title: 'Dashboard' }} />
       <Tabs.Screen name="groups" options={{ title: 'Groups' }} />
       <Tabs.Screen name="friends" options={{ title: 'Friends' }} />
+      <Tabs.Screen name="shop" options={{ title: 'Shop' }} />
       <Tabs.Screen name="profile" options={{ title: 'Profile' }} />
     </Tabs>
   );

@@ -4,6 +4,7 @@ import { SafeAreaProvider } from 'react-native-safe-area-context';
 
 import { LoadingScreen } from '@/components/LoadingScreen';
 import { AppProvider } from '@/context/AppProvider';
+import { PurchaseProvider } from '@/context/PurchaseProvider';
 import { ThemeProvider, useThemePreferences } from '@/context/ThemeProvider';
 
 export default function RootLayout() {
@@ -11,7 +12,9 @@ export default function RootLayout() {
     <ThemeProvider>
       <SafeAreaProvider>
         <AppProvider fallback={<LoadingScreen message="Loading HabitLeague..." />}>
-          <RootNavigator />
+          <PurchaseProvider>
+            <RootNavigator />
+          </PurchaseProvider>
         </AppProvider>
       </SafeAreaProvider>
     </ThemeProvider>

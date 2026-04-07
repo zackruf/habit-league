@@ -21,7 +21,7 @@ import { createCommonStyles } from '@/styles/commonStyles';
 import { GroupDetails } from '@/types/models';
 
 export default function HomeScreen() {
-  const { getGroupDetails, groups, habits, profile, refreshing, restoreHabitStreak, toggleHabitCheckIn } = useApp();
+  const { getGroupDetails, groups, habits, profile, refreshing, restoreHabitStreak, shopInventory, toggleHabitCheckIn } = useApp();
   const { theme } = useThemePreferences();
   const commonStyles = createCommonStyles(theme.colors);
   const [groupDetails, setGroupDetails] = useState<GroupDetails[]>([]);
@@ -73,11 +73,19 @@ export default function HomeScreen() {
 
       {topRestoreOpportunity ? (
         <StreakRestoreCard
-          actionLabel="Restore streak"
+          actionLabel={shopInventory && shopInventory.streakRestoreCredits > 0 ? 'Restore streak' : 'Open Shop'}
           busy={restoreBusyId === topRestoreOpportunity.habit.id}
-          helper="Premium restore placeholder. This second chance is free in the MVP."
+          helper={
+            shopInventory && shopInventory.streakRestoreCredits > 0
+              ? 'One restore credit is ready. Premium billing can gate this later without changing the streak flow.'
+              : 'Pick up a restore in the Shop to save this streak while the 24-hour window is still open.'
+          }
           message={`You lost your ${topRestoreOpportunity.streakStatus.restoreEligibility.lostStreak}-day streak. Save it within 24 hours.`}
-          onRestore={() => handleRestoreStreak(topRestoreOpportunity.habit.id)}
+          onRestore={() =>
+            shopInventory && shopInventory.streakRestoreCredits > 0
+              ? handleRestoreStreak(topRestoreOpportunity.habit.id)
+              : router.push('/(app)/(tabs)/shop')
+          }
           title="Second chance available"
         />
       ) : null}

@@ -18,6 +18,7 @@ import {
 
 import { firebaseAuth, firebaseConfigured, firestore } from '@/lib/firebase';
 import { getCurrentWeekKeys } from '@/lib/date';
+import { getDefaultShopInventory, normalizeShopInventory } from '@/lib/shop';
 import { getHabitStreakStatus } from '@/lib/streaks';
 import { AppBundle, DemoStore, Group, GroupDetails, GroupMessage, GroupSettingsInput, Habit, LeaderboardEntry, Profile, SessionUser } from '@/types/models';
 
@@ -515,6 +516,7 @@ function buildProfile(uid: string, email: string, name = ''): Profile {
     weeklyGoal: 5,
     onboardingCompleted: Boolean(name),
     groupIds: [],
+    shopInventory: getDefaultShopInventory(),
   };
 }
 
@@ -527,6 +529,7 @@ function normalizeProfile(profile: Profile) {
     weeklyGoal: profile?.weeklyGoal || 5,
     onboardingCompleted: Boolean(profile?.onboardingCompleted),
     groupIds: profile?.groupIds || [],
+    shopInventory: normalizeShopInventory(profile?.shopInventory),
   };
 }
 
@@ -651,6 +654,10 @@ function seedDemoStore(): DemoStore {
         weeklyGoal: 5,
         onboardingCompleted: true,
         groupIds: [groupId],
+        shopInventory: {
+          ...getDefaultShopInventory(),
+          streakRestoreCredits: 1,
+        },
       },
       [friendUid]: {
         uid: friendUid,
@@ -661,6 +668,7 @@ function seedDemoStore(): DemoStore {
         weeklyGoal: 6,
         onboardingCompleted: true,
         groupIds: [groupId],
+        shopInventory: getDefaultShopInventory(),
       },
     },
     habits: {
