@@ -18,6 +18,7 @@ import {
 
 import { firebaseAuth, firebaseConfigured, firestore } from '@/lib/firebase';
 import { getCurrentWeekKeys } from '@/lib/date';
+import { getHabitStreakStatus } from '@/lib/streaks';
 import { AppBundle, DemoStore, Group, GroupDetails, GroupMessage, GroupSettingsInput, Habit, LeaderboardEntry, Profile, SessionUser } from '@/types/models';
 
 const STORAGE_KEY = 'habitleague:demo-store';
@@ -135,7 +136,8 @@ export async function loadUserBundle(uid: string): Promise<AppBundle | null> {
     const profile = normalizeProfile(profileSnapshot.data() as Profile);
     const habitsSnapshot = await getDocs(query(collection(db, 'habits'), where('userId', '==', uid)));
     const habits = habitsSnapshot.docs
-      .map((entry) => entry.data() as Habit)
+      .map((entry) => normalizeHabit(entry.data() as Habit))
+      .filter((habit): habit is Habit => Boolean(habit))
       .sort((left, right) => right.createdAt.localeCompare(left.createdAt));
     const groups = await Promise.all(
       (profile.groupIds ?? []).map(async (groupId) => {
@@ -158,7 +160,8 @@ export async function loadUserBundle(uid: string): Promise<AppBundle | null> {
   }
 
   const habits = Object.values(store.habits)
-    .filter((habit) => habit.userId === uid)
+    .map((habit) => normalizeHabit(habit))
+    .filter((habit): habit is Habit => habit !== null && habit.userId === uid)
     .sort((left, right) => right.createdAt.localeCompare(left.createdAt));
   const groups = (profile.groupIds ?? [])
     .map((groupId) => normalizeGroup(store.groups[groupId]))
@@ -191,6 +194,8 @@ export async function createHabit(uid: string, input: { title: string; emoji: st
     category: input.category.trim() || 'General',
     createdAt: new Date().toISOString(),
     checkIns: [],
+    restoreUsedForDate: null,
+    restoreUsedAt: null,
   };
 
   if (usingFirebaseBackend && firestore) {
@@ -213,7 +218,10 @@ export async function toggleHabitCheckIn(uid: string, habitId: string) {
       return;
     }
 
-    const habit = snapshot.data() as Habit;
+    const habit = normalizeHabit(snapshot.data() as Habit);
+    if (!habit) {
+      return;
+    }
     await updateDoc(habitRef, {
       checkIns: habit.checkIns.includes(todayKey) ? arrayRemove(todayKey) : arrayUnion(todayKey),
     });
@@ -222,16 +230,69 @@ export async function toggleHabitCheckIn(uid: string, habitId: string) {
 
   const store = await readDemoStore();
   const habit = store.habits[habitId];
-  if (!habit || habit.userId !== uid) {
+  const normalizedHabit = normalizeHabit(habit);
+  if (!normalizedHabit || normalizedHabit.userId !== uid) {
     return;
   }
 
-  const nextCheckIns = habit.checkIns.includes(todayKey)
-    ? habit.checkIns.filter((entry) => entry !== todayKey)
-    : [...habit.checkIns, todayKey];
+  const nextCheckIns = normalizedHabit.checkIns.includes(todayKey)
+    ? normalizedHabit.checkIns.filter((entry) => entry !== todayKey)
+    : [...normalizedHabit.checkIns, todayKey];
 
-  store.habits[habitId] = { ...habit, checkIns: nextCheckIns };
+  store.habits[habitId] = { ...normalizedHabit, checkIns: nextCheckIns };
   await writeDemoStore(store);
+}
+
+export async function restoreHabitStreak(uid: string, habitId: string) {
+  const todayKey = new Date().toISOString().slice(0, 10);
+  const restoreDate = new Date(`${todayKey}T00:00:00.000Z`);
+  restoreDate.setUTCDate(restoreDate.getUTCDate() - 1);
+  const restoreKey = restoreDate.toISOString().slice(0, 10);
+
+  if (usingFirebaseBackend && firestore) {
+    const habitRef = doc(firestore, 'habits', habitId);
+    const snapshot = await getDoc(habitRef);
+    if (!snapshot.exists()) {
+      return { ok: false, message: 'That habit could not be found.' };
+    }
+
+    const habit = normalizeHabit(snapshot.data() as Habit);
+    if (!habit || habit.userId !== uid) {
+      return { ok: false, message: 'That habit could not be found.' };
+    }
+
+    const streakStatus = getHabitStreakStatus(habit);
+    if (!streakStatus.restoreEligibility.canRestoreStreak) {
+      return { ok: false, message: 'This streak is no longer eligible for a restore.' };
+    }
+
+    await updateDoc(habitRef, {
+      checkIns: arrayUnion(restoreKey),
+      restoreUsedForDate: restoreKey,
+      restoreUsedAt: new Date().toISOString(),
+    });
+    return { ok: true, message: 'Streak restored. Premium restore placeholder applied.' };
+  }
+
+  const store = await readDemoStore();
+  const habit = normalizeHabit(store.habits[habitId]);
+  if (!habit || habit.userId !== uid) {
+    return { ok: false, message: 'That habit could not be found.' };
+  }
+
+  const streakStatus = getHabitStreakStatus(habit);
+  if (!streakStatus.restoreEligibility.canRestoreStreak) {
+    return { ok: false, message: 'This streak is no longer eligible for a restore.' };
+  }
+
+  store.habits[habitId] = {
+    ...habit,
+    checkIns: [...new Set([...habit.checkIns, restoreKey])].sort(),
+    restoreUsedForDate: restoreKey,
+    restoreUsedAt: new Date().toISOString(),
+  };
+  await writeDemoStore(store);
+  return { ok: true, message: 'Streak restored. Premium restore placeholder applied.' };
 }
 
 export async function createGroup(uid: string, input: GroupSettingsInput) {
@@ -414,7 +475,7 @@ export async function getGroupDetails(groupId: string): Promise<GroupDetails | n
       await Promise.all(
         group.memberIds.map(async (uid) => {
           const snapshot = await getDocs(query(collection(db, 'habits'), where('userId', '==', uid)));
-          return snapshot.docs.map((entry) => entry.data() as Habit);
+          return snapshot.docs.map((entry) => normalizeHabit(entry.data() as Habit)).filter((habit): habit is Habit => Boolean(habit));
         })
       )
     ).flat();
@@ -433,7 +494,9 @@ export async function getGroupDetails(groupId: string): Promise<GroupDetails | n
   }
 
   const members = group.memberIds.map((uid) => normalizeProfile(store.profiles[uid])).filter(Boolean);
-  const habits = Object.values(store.habits).filter((habit) => group.memberIds.includes(habit.userId));
+  const habits = Object.values(store.habits)
+    .map((habit) => normalizeHabit(habit))
+    .filter((habit): habit is Habit => habit !== null && group.memberIds.includes(habit.userId));
   return {
     group,
     members,
@@ -483,6 +546,21 @@ function normalizeGroup(group?: Group | null): Group | null {
     stakesEnabled: Boolean(group.stakesEnabled),
     stakesText: group.stakesText || '',
     memberLimit: typeof group.memberLimit === 'number' && group.memberLimit > 0 ? group.memberLimit : null,
+  };
+}
+
+function normalizeHabit(habit?: Habit | null): Habit | null {
+  if (!habit) {
+    return null;
+  }
+
+  return {
+    ...habit,
+    emoji: habit.emoji || '🔥',
+    category: habit.category || 'General',
+    checkIns: [...new Set(habit.checkIns || [])].sort(),
+    restoreUsedForDate: habit.restoreUsedForDate || null,
+    restoreUsedAt: habit.restoreUsedAt || null,
   };
 }
 
@@ -555,7 +633,7 @@ function seedDemoStore(): DemoStore {
   const groupId = 'group-demo';
   const habitId = 'habit-demo';
   const friendHabitId = 'habit-friend';
-  const weekKeys = getCurrentWeekKeys();
+  const recentKeys = getRecentDateKeys(4);
 
   return {
     ...blankStore,
@@ -593,7 +671,9 @@ function seedDemoStore(): DemoStore {
         emoji: '🚶',
         category: 'Health',
         createdAt: new Date().toISOString(),
-        checkIns: weekKeys.slice(0, 4),
+        checkIns: recentKeys.slice(0, 3),
+        restoreUsedForDate: null,
+        restoreUsedAt: null,
       },
       [friendHabitId]: {
         id: friendHabitId,
@@ -602,7 +682,9 @@ function seedDemoStore(): DemoStore {
         emoji: '💧',
         category: 'Wellness',
         createdAt: new Date().toISOString(),
-        checkIns: weekKeys.slice(0, 5),
+        checkIns: recentKeys.slice(2, 4),
+        restoreUsedForDate: null,
+        restoreUsedAt: null,
       },
     },
     groups: {
@@ -656,6 +738,14 @@ function seedWelcomeMessages(group: Group, senderName: string, senderId: string)
       createdAt: new Date().toISOString(),
     },
   ];
+}
+
+function getRecentDateKeys(days: number) {
+  return Array.from({ length: days }, (_, index) => {
+    const date = new Date();
+    date.setDate(date.getDate() - (days - index));
+    return date.toISOString().slice(0, 10);
+  });
 }
 
 function createId(prefix: string) {

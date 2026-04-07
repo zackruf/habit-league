@@ -22,6 +22,26 @@ export type Habit = {
   category: string;
   createdAt: string;
   checkIns: string[];
+  restoreUsedForDate: string | null;
+  restoreUsedAt: string | null;
+};
+
+export type HabitRestoreEligibility = {
+  canRestoreStreak: boolean;
+  brokenOn: string | null;
+  lostStreak: number;
+  restoreBy: string | null;
+  restoreUsed: boolean;
+  premiumRestorePlaceholder: boolean;
+};
+
+export type HabitStreakStatus = {
+  currentStreak: number;
+  checkedInToday: boolean;
+  checkedInYesterday: boolean;
+  justBroken: boolean;
+  lastCompletedDate: string | null;
+  restoreEligibility: HabitRestoreEligibility;
 };
 
 export type Group = {

@@ -10,6 +10,7 @@ import {
   loadGroupMessages as loadGroupMessagesRequest,
   loadUserBundle,
   restoreSession,
+  restoreHabitStreak as restoreHabitStreakRequest,
   saveProfile as saveProfileRequest,
   sendGroupMessage as sendGroupMessageRequest,
   signIn as signInRequest,
@@ -45,6 +46,7 @@ type AppContextValue = {
   saveProfile: (patch: Partial<Profile>) => Promise<ActionResult>;
   createHabit: (input: { title: string; emoji: string; category: string }) => Promise<ActionResult>;
   toggleHabitCheckIn: (habitId: string) => Promise<void>;
+  restoreHabitStreak: (habitId: string) => Promise<ActionResult>;
   createGroup: (input: GroupSettingsInput) => Promise<GroupActionResult>;
   updateGroup: (groupId: string, input: GroupSettingsInput) => Promise<ActionResult>;
   joinGroup: (joinCode: string) => Promise<GroupActionResult>;
@@ -189,6 +191,23 @@ export function AppProvider({ children, fallback }: PropsWithChildren<{ fallback
     [refreshUserData, session]
   );
 
+  const restoreHabitStreak = useCallback(
+    async (habitId: string) => {
+      if (!session) {
+        return { ok: false, message: 'No active session.' };
+      }
+
+      setBusy(true);
+      const result = await restoreHabitStreakRequest(session.uid, habitId);
+      if (result.ok) {
+        await refreshUserData(session);
+      }
+      setBusy(false);
+      return result;
+    },
+    [refreshUserData, session]
+  );
+
   const createGroup = useCallback(
     async (input: GroupSettingsInput) => {
       if (!session) {
@@ -301,6 +320,7 @@ export function AppProvider({ children, fallback }: PropsWithChildren<{ fallback
       saveProfile,
       createHabit,
       toggleHabitCheckIn,
+      restoreHabitStreak,
       createGroup,
       updateGroup,
       joinGroup,
@@ -322,6 +342,7 @@ export function AppProvider({ children, fallback }: PropsWithChildren<{ fallback
       saveProfile,
       createHabit,
       toggleHabitCheckIn,
+      restoreHabitStreak,
       createGroup,
       updateGroup,
       joinGroup,

@@ -10,19 +10,22 @@ import { PageHeader } from '@/components/PageHeader';
 import { PressableCard } from '@/components/PressableCard';
 import { PrimaryButton } from '@/components/PrimaryButton';
 import { SectionHeader } from '@/components/SectionHeader';
+import { StreakRestoreCard } from '@/components/StreakRestoreCard';
 import { SurfaceCard } from '@/components/SurfaceCard';
 import { useApp } from '@/context/AppProvider';
 import { useThemePreferences } from '@/context/ThemeProvider';
 import { formatFriendlyDate, getCurrentWeekLabel } from '@/lib/date';
 import { getLeaderboardNotice, pickTopLeaderboardNotice } from '@/lib/leaderboard';
+import { pickTopRestoreOpportunity } from '@/lib/streaks';
 import { createCommonStyles } from '@/styles/commonStyles';
 import { GroupDetails } from '@/types/models';
 
 export default function HomeScreen() {
-  const { getGroupDetails, groups, habits, profile, refreshing, toggleHabitCheckIn } = useApp();
+  const { getGroupDetails, groups, habits, profile, refreshing, restoreHabitStreak, toggleHabitCheckIn } = useApp();
   const { theme } = useThemePreferences();
   const commonStyles = createCommonStyles(theme.colors);
   const [groupDetails, setGroupDetails] = useState<GroupDetails[]>([]);
+  const [restoreBusyId, setRestoreBusyId] = useState<string | null>(null);
 
   useEffect(() => {
     let active = true;
@@ -50,6 +53,13 @@ export default function HomeScreen() {
   const leaderboardNotice = pickTopLeaderboardNotice(
     groupDetails.map((details) => getLeaderboardNotice(details.leaderboard, profile.uid, details.group.name))
   );
+  const topRestoreOpportunity = pickTopRestoreOpportunity(habits);
+
+  async function handleRestoreStreak(habitId: string) {
+    setRestoreBusyId(habitId);
+    await restoreHabitStreak(habitId);
+    setRestoreBusyId(null);
+  }
 
   return (
     <AppScreen scrollable contentContainerStyle={commonStyles.pageStack}>
@@ -60,6 +70,17 @@ export default function HomeScreen() {
       />
 
       {leaderboardNotice ? <LeaderboardNoticeCard title={leaderboardNotice.title} message={leaderboardNotice.message} /> : null}
+
+      {topRestoreOpportunity ? (
+        <StreakRestoreCard
+          actionLabel="Restore streak"
+          busy={restoreBusyId === topRestoreOpportunity.habit.id}
+          helper="Premium restore placeholder. This second chance is free in the MVP."
+          message={`You lost your ${topRestoreOpportunity.streakStatus.restoreEligibility.lostStreak}-day streak. Save it within 24 hours.`}
+          onRestore={() => handleRestoreStreak(topRestoreOpportunity.habit.id)}
+          title="Second chance available"
+        />
+      ) : null}
 
       <View style={commonStyles.actionRowTight}>
         <PrimaryButton label="Create habit" onPress={() => router.push('/(app)/habits/new')} />
