@@ -13,6 +13,8 @@ export type Profile = {
   onboardingCompleted: boolean;
   groupIds: string[];
   friendIds: string[];
+  incomingFriendRequestIds: string[];
+  outgoingFriendRequestIds: string[];
   shopInventory: ShopInventory;
 };
 
@@ -153,6 +155,14 @@ export type UserSearchResult = {
   bio: string;
   sharedGroupNames: string[];
   isConnected: boolean;
+  friendState: 'none' | 'requested' | 'incoming' | 'friends';
+};
+
+export type FriendRequestProfile = {
+  uid: string;
+  name: string;
+  username: string;
+  bio: string;
 };
 
 export type DemoStore = {

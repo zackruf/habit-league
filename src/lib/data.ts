@@ -27,6 +27,7 @@ import {
   ActivityShoutouts,
   AppBundle,
   DemoStore,
+  FriendRequestProfile,
   Group,
   GroupDetails,
   GroupMessage,
@@ -225,9 +226,9 @@ export async function searchUsers(uid: string, searchTerm: string): Promise<User
   return buildUserSearchResults(uid, currentProfile, profiles, groups, normalizedTerm);
 }
 
-export async function connectWithUser(uid: string, friendId: string) {
+export async function sendFriendRequest(uid: string, friendId: string) {
   if (uid === friendId) {
-    return { ok: false, message: 'You are already you, which is honestly efficient.' };
+    return { ok: false, message: 'You cannot send a request to yourself.' };
   }
 
   if (usingFirebaseBackend && firestore) {
@@ -241,15 +242,19 @@ export async function connectWithUser(uid: string, friendId: string) {
 
     const profile = normalizeProfile(profileSnapshot.data() as Profile);
     const friend = normalizeProfile(friendSnapshot.data() as Profile);
-    await updateDoc(doc(firestore, 'profiles', uid), { friendIds: arrayUnion(friendId) });
-    await recordActivity({
-      type: 'connection',
-      actorId: uid,
-      actorName: profile.name,
-      targetUserId: friendId,
-      targetUserName: friend.name,
-    });
-    return { ok: true, message: 'Connected.' };
+    if (profile.friendIds.includes(friendId)) {
+      return { ok: false, message: 'You are already friends.' };
+    }
+    if (profile.outgoingFriendRequestIds.includes(friendId)) {
+      return { ok: false, message: 'Request already sent.' };
+    }
+    if (profile.incomingFriendRequestIds.includes(friendId)) {
+      return acceptFriendRequest(uid, friendId);
+    }
+
+    await updateDoc(doc(firestore, 'profiles', uid), { outgoingFriendRequestIds: arrayUnion(friendId) });
+    await updateDoc(doc(firestore, 'profiles', friendId), { incomingFriendRequestIds: arrayUnion(uid) });
+    return { ok: true, message: `Friend request sent to ${friend.name}.` };
   }
 
   const store = await readDemoStore();
@@ -259,22 +264,154 @@ export async function connectWithUser(uid: string, friendId: string) {
     return { ok: false, message: 'That user could not be found.' };
   }
 
+  if (profile.friendIds.includes(friendId)) {
+    return { ok: false, message: 'You are already friends.' };
+  }
+  if (profile.outgoingFriendRequestIds.includes(friendId)) {
+    return { ok: false, message: 'Request already sent.' };
+  }
+  if (profile.incomingFriendRequestIds.includes(friendId)) {
+    return acceptFriendRequest(uid, friendId);
+  }
+
   store.profiles[uid] = {
     ...profile,
-    friendIds: [...new Set([...profile.friendIds, friendId])],
+    outgoingFriendRequestIds: [...new Set([...profile.outgoingFriendRequestIds, friendId])],
+  };
+  store.profiles[friendId] = {
+    ...friend,
+    incomingFriendRequestIds: [...new Set([...friend.incomingFriendRequestIds, uid])],
+  };
+  await writeDemoStore(store);
+  return { ok: true, message: `Friend request sent to ${friend.name}.` };
+}
+
+export async function loadIncomingFriendRequests(uid: string): Promise<FriendRequestProfile[]> {
+  if (usingFirebaseBackend && firestore) {
+    const db = firestore;
+    const profileSnapshot = await getDoc(doc(db, 'profiles', uid));
+    const profile = normalizeProfile(profileSnapshot.data() as Profile);
+    const requesters = await Promise.all(
+      profile.incomingFriendRequestIds.map(async (requesterId) => {
+        const snapshot = await getDoc(doc(db, 'profiles', requesterId));
+        return normalizeProfile(snapshot.data() as Profile);
+      })
+    );
+    return requesters.filter(Boolean).map(buildFriendRequestProfile);
+  }
+
+  const store = await readDemoStore();
+  const profile = normalizeProfile(store.profiles[uid]);
+  if (!profile) {
+    return [];
+  }
+
+  return profile.incomingFriendRequestIds
+    .map((requesterId) => normalizeProfile(store.profiles[requesterId]))
+    .filter(Boolean)
+    .map(buildFriendRequestProfile);
+}
+
+export async function acceptFriendRequest(uid: string, requesterId: string) {
+  if (uid === requesterId) {
+    return { ok: false, message: 'You cannot accept your own request.' };
+  }
+
+  if (usingFirebaseBackend && firestore) {
+    const [profileSnapshot, requesterSnapshot] = await Promise.all([
+      getDoc(doc(firestore, 'profiles', uid)),
+      getDoc(doc(firestore, 'profiles', requesterId)),
+    ]);
+    if (!profileSnapshot.exists() || !requesterSnapshot.exists()) {
+      return { ok: false, message: 'That request could not be found.' };
+    }
+
+    const profile = normalizeProfile(profileSnapshot.data() as Profile);
+    const requester = normalizeProfile(requesterSnapshot.data() as Profile);
+    if (!profile.incomingFriendRequestIds.includes(requesterId) && !requester.outgoingFriendRequestIds.includes(uid)) {
+      return { ok: false, message: 'That request is no longer pending.' };
+    }
+
+    await updateDoc(doc(firestore, 'profiles', uid), {
+      friendIds: arrayUnion(requesterId),
+      incomingFriendRequestIds: arrayRemove(requesterId),
+      outgoingFriendRequestIds: arrayRemove(requesterId),
+    });
+    await updateDoc(doc(firestore, 'profiles', requesterId), {
+      friendIds: arrayUnion(uid),
+      outgoingFriendRequestIds: arrayRemove(uid),
+      incomingFriendRequestIds: arrayRemove(uid),
+    });
+    await recordActivity({
+      type: 'connection',
+      actorId: requesterId,
+      actorName: requester.name,
+      targetUserId: uid,
+      targetUserName: profile.name,
+    });
+    return { ok: true, message: `You and ${requester.name} are now friends.` };
+  }
+
+  const store = await readDemoStore();
+  const profile = normalizeProfile(store.profiles[uid]);
+  const requester = normalizeProfile(store.profiles[requesterId]);
+  if (!profile || !requester) {
+    return { ok: false, message: 'That request could not be found.' };
+  }
+  if (!profile.incomingFriendRequestIds.includes(requesterId) && !requester.outgoingFriendRequestIds.includes(uid)) {
+    return { ok: false, message: 'That request is no longer pending.' };
+  }
+
+  store.profiles[uid] = {
+    ...profile,
+    friendIds: [...new Set([...profile.friendIds, requesterId])],
+    incomingFriendRequestIds: profile.incomingFriendRequestIds.filter((entry) => entry !== requesterId),
+    outgoingFriendRequestIds: profile.outgoingFriendRequestIds.filter((entry) => entry !== requesterId),
+  };
+  store.profiles[requesterId] = {
+    ...requester,
+    friendIds: [...new Set([...requester.friendIds, uid])],
+    outgoingFriendRequestIds: requester.outgoingFriendRequestIds.filter((entry) => entry !== uid),
+    incomingFriendRequestIds: requester.incomingFriendRequestIds.filter((entry) => entry !== uid),
   };
   store.activities = [
     buildActivity({
       type: 'connection',
-      actorId: uid,
-      actorName: profile.name,
-      targetUserId: friendId,
-      targetUserName: friend.name,
+      actorId: requesterId,
+      actorName: requester.name,
+      targetUserId: uid,
+      targetUserName: profile.name,
     }),
     ...(store.activities ?? []),
   ].slice(0, 80);
   await writeDemoStore(store);
-  return { ok: true, message: 'Connected.' };
+  return { ok: true, message: `You and ${requester.name} are now friends.` };
+}
+
+export async function declineFriendRequest(uid: string, requesterId: string) {
+  if (usingFirebaseBackend && firestore) {
+    await updateDoc(doc(firestore, 'profiles', uid), { incomingFriendRequestIds: arrayRemove(requesterId) });
+    await updateDoc(doc(firestore, 'profiles', requesterId), { outgoingFriendRequestIds: arrayRemove(uid) });
+    return { ok: true, message: 'Request declined.' };
+  }
+
+  const store = await readDemoStore();
+  const profile = normalizeProfile(store.profiles[uid]);
+  const requester = normalizeProfile(store.profiles[requesterId]);
+  if (!profile || !requester) {
+    return { ok: false, message: 'That request could not be found.' };
+  }
+
+  store.profiles[uid] = {
+    ...profile,
+    incomingFriendRequestIds: profile.incomingFriendRequestIds.filter((entry) => entry !== requesterId),
+  };
+  store.profiles[requesterId] = {
+    ...requester,
+    outgoingFriendRequestIds: requester.outgoingFriendRequestIds.filter((entry) => entry !== uid),
+  };
+  await writeDemoStore(store);
+  return { ok: true, message: 'Request declined.' };
 }
 
 export async function createHabit(uid: string, input: { title: string; emoji: string; category: string }) {
@@ -772,6 +909,8 @@ function buildProfile(uid: string, email: string, name = ''): Profile {
     onboardingCompleted: Boolean(name),
     groupIds: [],
     friendIds: [],
+    incomingFriendRequestIds: [],
+    outgoingFriendRequestIds: [],
     shopInventory: getDefaultShopInventory(),
   };
 }
@@ -786,7 +925,18 @@ function normalizeProfile(profile: Profile) {
     onboardingCompleted: Boolean(profile?.onboardingCompleted),
     groupIds: profile?.groupIds || [],
     friendIds: profile?.friendIds || [],
+    incomingFriendRequestIds: profile?.incomingFriendRequestIds || [],
+    outgoingFriendRequestIds: profile?.outgoingFriendRequestIds || [],
     shopInventory: normalizeShopInventory(profile?.shopInventory),
+  };
+}
+
+function buildFriendRequestProfile(profile: Profile): FriendRequestProfile {
+  return {
+    uid: profile.uid,
+    name: profile.name,
+    username: profile.username,
+    bio: profile.bio,
   };
 }
 
@@ -806,16 +956,29 @@ function buildUserSearchResults(
 
       return `${profile.name} ${profile.username}`.toLowerCase().includes(normalizedTerm);
     })
-    .map((profile) => ({
-      uid: profile.uid,
-      name: profile.name,
-      username: profile.username,
-      bio: profile.bio,
-      sharedGroupNames: groups
-        .filter((group) => group.memberIds.includes(uid) && group.memberIds.includes(profile.uid))
-        .map((group) => group.name),
-      isConnected: currentProfile.friendIds.includes(profile.uid),
-    }))
+    .map((profile) => {
+      const isConnected = currentProfile.friendIds.includes(profile.uid);
+      const hasOutgoingRequest = currentProfile.outgoingFriendRequestIds.includes(profile.uid);
+      const hasIncomingRequest = currentProfile.incomingFriendRequestIds.includes(profile.uid);
+      const friendState: UserSearchResult['friendState'] = isConnected
+        ? 'friends'
+        : hasOutgoingRequest
+          ? 'requested'
+          : hasIncomingRequest
+            ? 'incoming'
+            : 'none';
+      return {
+        uid: profile.uid,
+        name: profile.name,
+        username: profile.username,
+        bio: profile.bio,
+        sharedGroupNames: groups
+          .filter((group) => group.memberIds.includes(uid) && group.memberIds.includes(profile.uid))
+          .map((group) => group.name),
+        isConnected,
+        friendState,
+      };
+    })
     .sort((left, right) => {
       if (left.isConnected !== right.isConnected) {
         return left.isConnected ? 1 : -1;
@@ -945,7 +1108,7 @@ function buildActivitySummary(input: ActivityInput) {
   }
 
   if (input.type === 'connection') {
-    return `${actor} connected with ${input.targetUserName || 'a teammate'}`;
+    return `${actor} and ${input.targetUserName || 'a teammate'} connected`;
   }
 
   return `${actor} made progress`;
@@ -1061,6 +1224,8 @@ function seedDemoStore(): DemoStore {
         onboardingCompleted: true,
         groupIds: [groupId],
         friendIds: [friendUid],
+        incomingFriendRequestIds: [readerUid],
+        outgoingFriendRequestIds: [],
         shopInventory: {
           ...getDefaultShopInventory(),
           streakRestoreCredits: 1,
@@ -1076,6 +1241,8 @@ function seedDemoStore(): DemoStore {
         onboardingCompleted: true,
         groupIds: [groupId],
         friendIds: [demoUid],
+        incomingFriendRequestIds: [],
+        outgoingFriendRequestIds: [],
         shopInventory: getDefaultShopInventory(),
       },
       [runnerUid]: {
@@ -1088,6 +1255,8 @@ function seedDemoStore(): DemoStore {
         onboardingCompleted: true,
         groupIds: [publicFitnessGroupId],
         friendIds: [],
+        incomingFriendRequestIds: [],
+        outgoingFriendRequestIds: [],
         shopInventory: getDefaultShopInventory(),
       },
       [readerUid]: {
@@ -1100,6 +1269,8 @@ function seedDemoStore(): DemoStore {
         onboardingCompleted: true,
         groupIds: [publicFocusGroupId],
         friendIds: [],
+        incomingFriendRequestIds: [],
+        outgoingFriendRequestIds: [demoUid],
         shopInventory: getDefaultShopInventory(),
       },
     },

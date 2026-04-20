@@ -3,9 +3,10 @@ import { createContext, PropsWithChildren, ReactNode, useCallback, useContext, u
 
 import {
   addActivityShoutout as addActivityShoutoutRequest,
+  acceptFriendRequest as acceptFriendRequestRequest,
   createGroup as createGroupRequest,
   createHabit as createHabitRequest,
-  connectWithUser as connectWithUserRequest,
+  declineFriendRequest as declineFriendRequestRequest,
   getGroupDetails,
   initializeUserProfile,
   joinGroup as joinGroupRequest,
@@ -13,7 +14,9 @@ import {
   listPublicGroups as listPublicGroupsRequest,
   loadActivityFeed as loadActivityFeedRequest,
   loadGroupMessages as loadGroupMessagesRequest,
+  loadIncomingFriendRequests as loadIncomingFriendRequestsRequest,
   recordActivity as recordActivityRequest,
+  sendFriendRequest as sendFriendRequestRequest,
   loadUserBundle,
   restoreSession,
   restoreHabitStreak as restoreHabitStreakRequest,
@@ -33,6 +36,7 @@ import {
   ActivityItem,
   ActivityShoutoutType,
   AppBundle,
+  FriendRequestProfile,
   GroupDetails,
   GroupMessage,
   GroupSettingsInput,
@@ -74,7 +78,10 @@ type AppContextValue = {
   joinPublicGroup: (groupId: string) => Promise<GroupActionResult>;
   listPublicGroups: () => Promise<AppBundle['groups']>;
   searchUsers: (searchTerm: string) => Promise<UserSearchResult[]>;
-  connectWithUser: (userId: string) => Promise<ActionResult>;
+  sendFriendRequest: (userId: string) => Promise<ActionResult>;
+  getIncomingFriendRequests: () => Promise<FriendRequestProfile[]>;
+  acceptFriendRequest: (userId: string) => Promise<ActionResult>;
+  declineFriendRequest: (userId: string) => Promise<ActionResult>;
   getGroupDetails: (groupId: string) => Promise<GroupDetails | null>;
   getGroupMessages: (groupId: string) => Promise<GroupMessage[]>;
   sendGroupMessage: (groupId: string, text: string) => Promise<ActionResult>;
@@ -350,14 +357,56 @@ export function AppProvider({ children, fallback }: PropsWithChildren<{ fallback
     [session]
   );
 
-  const connectWithUser = useCallback(
+  const sendFriendRequest = useCallback(
     async (userId: string) => {
       if (!session) {
         return { ok: false, message: 'No active session.' };
       }
 
       setBusy(true);
-      const result = await connectWithUserRequest(session.uid, userId);
+      const result = await sendFriendRequestRequest(session.uid, userId);
+      if (result.ok) {
+        await refreshUserData(session);
+      }
+      setBusy(false);
+      return result;
+    },
+    [refreshUserData, session]
+  );
+
+  const getIncomingFriendRequests = useCallback(async () => {
+    if (!session) {
+      return [];
+    }
+
+    return loadIncomingFriendRequestsRequest(session.uid);
+  }, [session]);
+
+  const acceptFriendRequest = useCallback(
+    async (userId: string) => {
+      if (!session) {
+        return { ok: false, message: 'No active session.' };
+      }
+
+      setBusy(true);
+      const result = await acceptFriendRequestRequest(session.uid, userId);
+      if (result.ok) {
+        await refreshUserData(session);
+      }
+      setBusy(false);
+      return result;
+    },
+    [refreshUserData, session]
+  );
+
+  const declineFriendRequest = useCallback(
+    async (userId: string) => {
+      if (!session) {
+        return { ok: false, message: 'No active session.' };
+      }
+
+      setBusy(true);
+      const result = await declineFriendRequestRequest(session.uid, userId);
       if (result.ok) {
         await refreshUserData(session);
       }
@@ -445,7 +494,10 @@ export function AppProvider({ children, fallback }: PropsWithChildren<{ fallback
       joinPublicGroup,
       listPublicGroups,
       searchUsers,
-      connectWithUser,
+      sendFriendRequest,
+      getIncomingFriendRequests,
+      acceptFriendRequest,
+      declineFriendRequest,
       getGroupDetails,
       getGroupMessages,
       sendGroupMessage,
@@ -475,7 +527,10 @@ export function AppProvider({ children, fallback }: PropsWithChildren<{ fallback
       joinPublicGroup,
       listPublicGroups,
       searchUsers,
-      connectWithUser,
+      sendFriendRequest,
+      getIncomingFriendRequests,
+      acceptFriendRequest,
+      declineFriendRequest,
       getGroupMessages,
       sendGroupMessage,
       getActivityFeed,

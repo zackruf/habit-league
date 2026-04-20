@@ -12,7 +12,7 @@ import { TextField } from '@/components/TextField';
 import { useApp } from '@/context/AppProvider';
 import { useThemePreferences } from '@/context/ThemeProvider';
 import { createCommonStyles } from '@/styles/commonStyles';
-import { ActivityItem, ActivityShoutoutType, GroupDetails, UserSearchResult } from '@/types/models';
+import { ActivityItem, ActivityShoutoutType, FriendRequestProfile, GroupDetails, UserSearchResult } from '@/types/models';
 
 type FriendStanding = {
   userId: string;
@@ -23,7 +23,19 @@ type FriendStanding = {
 };
 
 export default function FriendsTabScreen() {
-  const { addActivityShoutout, busy, connectWithUser, getActivityFeed, getGroupDetails, groups, profile, searchUsers } = useApp();
+  const {
+    acceptFriendRequest,
+    addActivityShoutout,
+    busy,
+    declineFriendRequest,
+    getActivityFeed,
+    getGroupDetails,
+    getIncomingFriendRequests,
+    groups,
+    profile,
+    searchUsers,
+    sendFriendRequest,
+  } = useApp();
   const { theme } = useThemePreferences();
   const commonStyles = createCommonStyles(theme.colors);
   const [query, setQuery] = useState('');
@@ -32,6 +44,7 @@ export default function FriendsTabScreen() {
   const [connectingId, setConnectingId] = useState<string | null>(null);
   const [groupDetails, setGroupDetails] = useState<GroupDetails[]>([]);
   const [activities, setActivities] = useState<ActivityItem[]>([]);
+  const [incomingRequests, setIncomingRequests] = useState<FriendRequestProfile[]>([]);
 
   useEffect(() => {
     let active = true;
@@ -41,9 +54,10 @@ export default function FriendsTabScreen() {
         return;
       }
 
-      const [details, people] = await Promise.all([
+      const [details, people, requests] = await Promise.all([
         Promise.all(groups.map((group) => getGroupDetails(group.id))),
         searchUsers(query),
+        getIncomingFriendRequests(),
       ]);
 
       if (!active) {
@@ -52,6 +66,7 @@ export default function FriendsTabScreen() {
 
       setGroupDetails(details.filter(Boolean) as GroupDetails[]);
       setResults(people);
+      setIncomingRequests(requests);
     }
 
     loadSocialState();
@@ -59,7 +74,7 @@ export default function FriendsTabScreen() {
     return () => {
       active = false;
     };
-  }, [getGroupDetails, groups, profile, query, searchUsers]);
+  }, [getGroupDetails, getIncomingFriendRequests, groups, profile, query, searchUsers]);
 
   useEffect(() => {
     let active = true;
@@ -115,17 +130,46 @@ export default function FriendsTabScreen() {
   const discoveryResults = results.filter((person) => !connectedIds.has(person.uid));
   const profileId = profile.uid;
 
-  async function handleConnect(userId: string) {
+  async function refreshSocialLists() {
+    const [nextResults, nextRequests, nextFeed] = await Promise.all([searchUsers(query), getIncomingFriendRequests(), getActivityFeed()]);
+    setResults(nextResults);
+    setIncomingRequests(nextRequests);
+    setActivities(nextFeed);
+  }
+
+  async function handleSendRequest(userId: string) {
     setFeedback('');
     setConnectingId(userId);
-    const result = await connectWithUser(userId);
+    const result = await sendFriendRequest(userId);
     setFeedback(result.message);
     setConnectingId(null);
 
     if (result.ok) {
-      const nextResults = await searchUsers(query);
-      setResults(nextResults);
-      setActivities(await getActivityFeed());
+      await refreshSocialLists();
+    }
+  }
+
+  async function handleAcceptRequest(userId: string) {
+    setFeedback('');
+    setConnectingId(userId);
+    const result = await acceptFriendRequest(userId);
+    setFeedback(result.message);
+    setConnectingId(null);
+
+    if (result.ok) {
+      await refreshSocialLists();
+    }
+  }
+
+  async function handleDeclineRequest(userId: string) {
+    setFeedback('');
+    setConnectingId(userId);
+    const result = await declineFriendRequest(userId);
+    setFeedback(result.message);
+    setConnectingId(null);
+
+    if (result.ok) {
+      await refreshSocialLists();
     }
   }
 
@@ -151,6 +195,26 @@ export default function FriendsTabScreen() {
         onShoutout={handleShoutout}
       />
 
+      <SectionHeader title="Friend requests" />
+      <View style={commonStyles.compactSection}>
+        {incomingRequests.length ? (
+          incomingRequests.map((person) => (
+            <RequestCard
+              key={person.uid}
+              person={person}
+              busy={busy || connectingId === person.uid}
+              onAccept={() => handleAcceptRequest(person.uid)}
+              onDecline={() => handleDeclineRequest(person.uid)}
+            />
+          ))
+        ) : (
+          <SurfaceCard>
+            <Text style={commonStyles.cardTitle}>No pending requests</Text>
+            <Text style={commonStyles.cardCopy}>When someone adds you, their request will show up here first.</Text>
+          </SurfaceCard>
+        )}
+      </View>
+
       <SurfaceCard style={commonStyles.sectionCard}>
         <SectionHeader title="Search people" />
         <TextField
@@ -173,9 +237,9 @@ export default function FriendsTabScreen() {
             <PersonCard
               key={person.uid}
               person={person}
-              actionLabel={connectingId === person.uid ? 'Connecting...' : 'Connect'}
-              actionDisabled={busy || connectingId === person.uid}
-              onAction={() => handleConnect(person.uid)}
+              actionLabel={getPersonActionLabel(person, connectingId === person.uid)}
+              actionDisabled={busy || connectingId === person.uid || person.friendState === 'requested' || person.friendState === 'friends'}
+              onAction={() => (person.friendState === 'incoming' ? handleAcceptRequest(person.uid) : handleSendRequest(person.uid))}
             />
           ))
         ) : (
@@ -199,7 +263,7 @@ export default function FriendsTabScreen() {
         ) : (
           <SurfaceCard>
             <Text style={commonStyles.cardTitle}>No connections yet</Text>
-            <Text style={commonStyles.cardCopy}>Connect with suggested people to start building a social graph for future invites and shoutouts.</Text>
+            <Text style={commonStyles.cardCopy}>Add people from discovery to start building a social graph for future invites and shoutouts.</Text>
           </SurfaceCard>
         )}
       </View>
@@ -228,6 +292,54 @@ export default function FriendsTabScreen() {
         )}
       </View>
     </AppScreen>
+  );
+}
+
+function getPersonActionLabel(person: UserSearchResult, isBusy: boolean) {
+  if (isBusy) {
+    return 'Working...';
+  }
+  if (person.friendState === 'friends') {
+    return 'Friends';
+  }
+  if (person.friendState === 'requested') {
+    return 'Requested';
+  }
+  if (person.friendState === 'incoming') {
+    return 'Accept';
+  }
+
+  return 'Add friend';
+}
+
+function RequestCard({
+  busy,
+  onAccept,
+  onDecline,
+  person,
+}: {
+  busy: boolean;
+  onAccept: () => void;
+  onDecline: () => void;
+  person: FriendRequestProfile;
+}) {
+  const { theme } = useThemePreferences();
+  const commonStyles = createCommonStyles(theme.colors);
+
+  return (
+    <SurfaceCard style={commonStyles.listCard}>
+      <View style={commonStyles.listRow}>
+        <View style={commonStyles.listRowMeta}>
+          <Text style={commonStyles.listRowTitle}>{person.name}</Text>
+          <Text style={commonStyles.usernameText}>@{person.username}</Text>
+          {person.bio ? <Text style={commonStyles.listRowSubtitle}>{person.bio}</Text> : null}
+        </View>
+      </View>
+      <View style={commonStyles.actionRowTight}>
+        <PrimaryButton label={busy ? 'Accepting...' : 'Accept'} onPress={onAccept} disabled={busy} />
+        <PrimaryButton label="Decline" onPress={onDecline} disabled={busy} variant="secondary" />
+      </View>
+    </SurfaceCard>
   );
 }
 
