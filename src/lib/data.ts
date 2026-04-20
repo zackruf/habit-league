@@ -353,6 +353,27 @@ export async function updateGroup(uid: string, groupId: string, input: GroupSett
   return { ok: true, message: 'Group updated.' };
 }
 
+export async function listPublicGroups(uid?: string): Promise<Group[]> {
+  if (usingFirebaseBackend && firestore) {
+    const snapshot = await getDocs(query(collection(firestore, 'groups'), where('discoverable', '==', true), limit(8)));
+    return snapshot.docs
+      .map((entry) => normalizeGroup(entry.data() as Group))
+      .filter((group): group is Group => Boolean(group))
+      .filter((group) => !uid || !group.memberIds.includes(uid))
+      .filter((group) => !group.memberLimit || group.memberIds.length < group.memberLimit)
+      .sort((left, right) => right.memberIds.length - left.memberIds.length);
+  }
+
+  const store = await readDemoStore();
+  return Object.values(store.groups)
+    .map((entry) => normalizeGroup(entry))
+    .filter((group): group is Group => Boolean(group))
+    .filter((group) => group.discoverable && group.visibility === 'public')
+    .filter((group) => !uid || !group.memberIds.includes(uid))
+    .filter((group) => !group.memberLimit || group.memberIds.length < group.memberLimit)
+    .sort((left, right) => right.memberIds.length - left.memberIds.length);
+}
+
 export async function loadGroupMessages(groupId: string): Promise<GroupMessage[]> {
   if (usingFirebaseBackend && firestore) {
     const snapshot = await getDocs(query(collection(firestore, 'groups', groupId, 'messages'), orderBy('createdAt', 'asc')));
@@ -451,6 +472,42 @@ export async function joinGroup(uid: string, joinCode: string) {
   store.profiles[uid].groupIds = [...new Set([...(store.profiles[uid].groupIds ?? []), group.id])];
   await writeDemoStore(store);
   return { ok: true, message: 'Joined group.', groupId: group.id };
+}
+
+export async function joinPublicGroup(uid: string, groupId: string) {
+  if (usingFirebaseBackend && firestore) {
+    const groupRef = doc(firestore, 'groups', groupId);
+    const snapshot = await getDoc(groupRef);
+    if (!snapshot.exists()) {
+      return { ok: false, message: 'That public league could not be found.' };
+    }
+
+    const group = normalizeGroup(snapshot.data() as Group);
+    if (!group || group.visibility !== 'public' || !group.discoverable) {
+      return { ok: false, message: 'That league is not open for public joining.' };
+    }
+    if (group.memberLimit && group.memberIds.length >= group.memberLimit && !group.memberIds.includes(uid)) {
+      return { ok: false, message: 'This league is full right now.' };
+    }
+
+    await updateDoc(groupRef, { memberIds: arrayUnion(uid) });
+    await updateDoc(doc(firestore, 'profiles', uid), { groupIds: arrayUnion(group.id) });
+    return { ok: true, message: 'Joined public league.', groupId: group.id };
+  }
+
+  const store = await readDemoStore();
+  const group = normalizeGroup(store.groups[groupId]);
+  if (!group || group.visibility !== 'public' || !group.discoverable) {
+    return { ok: false, message: 'That league is not open for public joining.' };
+  }
+  if (group.memberLimit && group.memberIds.length >= group.memberLimit && !group.memberIds.includes(uid)) {
+    return { ok: false, message: 'This league is full right now.' };
+  }
+
+  store.groups[group.id] = { ...group, memberIds: [...new Set([...group.memberIds, uid])] };
+  store.profiles[uid].groupIds = [...new Set([...(store.profiles[uid].groupIds ?? []), group.id])];
+  await writeDemoStore(store);
+  return { ok: true, message: 'Joined public league.', groupId: group.id };
 }
 
 export async function getGroupDetails(groupId: string): Promise<GroupDetails | null> {
@@ -614,10 +671,15 @@ async function readDemoStore(): Promise<DemoStore> {
   const raw = await AsyncStorage.getItem(STORAGE_KEY);
   if (raw) {
     const parsed = JSON.parse(raw) as DemoStore;
+    const seeded = seedDemoStore();
     return {
       ...blankStore,
       ...parsed,
-      groupMessages: parsed.groupMessages || {},
+      users: { ...seeded.users, ...(parsed.users || {}) },
+      profiles: { ...seeded.profiles, ...(parsed.profiles || {}) },
+      habits: { ...seeded.habits, ...(parsed.habits || {}) },
+      groups: { ...seeded.groups, ...(parsed.groups || {}) },
+      groupMessages: { ...seeded.groupMessages, ...(parsed.groupMessages || {}) },
     };
   }
 
@@ -633,9 +695,15 @@ async function writeDemoStore(store: DemoStore) {
 function seedDemoStore(): DemoStore {
   const demoUid = 'user-demo';
   const friendUid = 'user-friend';
+  const runnerUid = 'user-runner';
+  const readerUid = 'user-reader';
   const groupId = 'group-demo';
+  const publicFitnessGroupId = 'group-public-fitness';
+  const publicFocusGroupId = 'group-public-focus';
   const habitId = 'habit-demo';
   const friendHabitId = 'habit-friend';
+  const runnerHabitId = 'habit-runner';
+  const readerHabitId = 'habit-reader';
   const recentKeys = getRecentDateKeys(4);
 
   return {
@@ -643,6 +711,8 @@ function seedDemoStore(): DemoStore {
     users: {
       [demoUid]: { uid: demoUid, email: 'demo@habitleague.app', password: 'password123' },
       [friendUid]: { uid: friendUid, email: 'friend@habitleague.app', password: 'password123' },
+      [runnerUid]: { uid: runnerUid, email: 'runner@habitleague.app', password: 'password123' },
+      [readerUid]: { uid: readerUid, email: 'reader@habitleague.app', password: 'password123' },
     },
     profiles: {
       [demoUid]: {
@@ -670,6 +740,28 @@ function seedDemoStore(): DemoStore {
         groupIds: [groupId],
         shopInventory: getDefaultShopInventory(),
       },
+      [runnerUid]: {
+        uid: runnerUid,
+        email: 'runner@habitleague.app',
+        name: 'Avery',
+        username: 'avery-runs',
+        bio: 'Trying to stay ready for a 10K.',
+        weeklyGoal: 5,
+        onboardingCompleted: true,
+        groupIds: [publicFitnessGroupId],
+        shopInventory: getDefaultShopInventory(),
+      },
+      [readerUid]: {
+        uid: readerUid,
+        email: 'reader@habitleague.app',
+        name: 'Mika',
+        username: 'mika-reads',
+        bio: 'Reading before screens.',
+        weeklyGoal: 4,
+        onboardingCompleted: true,
+        groupIds: [publicFocusGroupId],
+        shopInventory: getDefaultShopInventory(),
+      },
     },
     habits: {
       [habitId]: {
@@ -694,6 +786,28 @@ function seedDemoStore(): DemoStore {
         restoreUsedForDate: null,
         restoreUsedAt: null,
       },
+      [runnerHabitId]: {
+        id: runnerHabitId,
+        userId: runnerUid,
+        title: 'Workout',
+        emoji: 'Fit',
+        category: 'Fitness',
+        createdAt: new Date().toISOString(),
+        checkIns: recentKeys.slice(1, 4),
+        restoreUsedForDate: null,
+        restoreUsedAt: null,
+      },
+      [readerHabitId]: {
+        id: readerHabitId,
+        userId: readerUid,
+        title: 'Read 10 pages',
+        emoji: 'R',
+        category: 'Learning',
+        createdAt: new Date().toISOString(),
+        checkIns: recentKeys.slice(0, 2),
+        restoreUsedForDate: null,
+        restoreUsedAt: null,
+      },
     },
     groups: {
       [groupId]: {
@@ -709,6 +823,36 @@ function seedDemoStore(): DemoStore {
         stakesEnabled: true,
         stakesText: 'Last place buys coffee on Monday.',
         memberLimit: 8,
+        createdAt: new Date().toISOString(),
+      },
+      [publicFitnessGroupId]: {
+        id: publicFitnessGroupId,
+        name: 'Morning Movers',
+        description: 'A public starter league for walking, workouts, and small daily fitness wins.',
+        ownerId: runnerUid,
+        memberIds: [runnerUid],
+        joinCode: 'MOVE10',
+        visibility: 'public',
+        inviteOnly: false,
+        discoverable: true,
+        stakesEnabled: false,
+        stakesText: '',
+        memberLimit: 12,
+        createdAt: new Date().toISOString(),
+      },
+      [publicFocusGroupId]: {
+        id: publicFocusGroupId,
+        name: 'Focus Circle',
+        description: 'A calm public league for reading, planning, and screen-free routines.',
+        ownerId: readerUid,
+        memberIds: [readerUid],
+        joinCode: 'FOCUS1',
+        visibility: 'public',
+        inviteOnly: false,
+        discoverable: true,
+        stakesEnabled: false,
+        stakesText: '',
+        memberLimit: 10,
         createdAt: new Date().toISOString(),
       },
     },
@@ -729,6 +873,26 @@ function seedDemoStore(): DemoStore {
           senderName: 'Demo Captain',
           text: 'I am catching up tonight. Keep the pressure on.',
           createdAt: new Date(Date.now() - 1000 * 60 * 30).toISOString(),
+        },
+      ],
+      [publicFitnessGroupId]: [
+        {
+          id: 'message-public-fitness-1',
+          groupId: publicFitnessGroupId,
+          senderId: runnerUid,
+          senderName: 'Avery',
+          text: 'Welcome. Small check-ins count here, just do not disappear.',
+          createdAt: new Date(Date.now() - 1000 * 60 * 55).toISOString(),
+        },
+      ],
+      [publicFocusGroupId]: [
+        {
+          id: 'message-public-focus-1',
+          groupId: publicFocusGroupId,
+          senderId: readerUid,
+          senderName: 'Mika',
+          text: 'Fresh week, fresh pages. Jump in when you are ready.',
+          createdAt: new Date(Date.now() - 1000 * 60 * 70).toISOString(),
         },
       ],
     },

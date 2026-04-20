@@ -7,6 +7,8 @@ import {
   getGroupDetails,
   initializeUserProfile,
   joinGroup as joinGroupRequest,
+  joinPublicGroup as joinPublicGroupRequest,
+  listPublicGroups as listPublicGroupsRequest,
   loadGroupMessages as loadGroupMessagesRequest,
   loadUserBundle,
   restoreSession,
@@ -52,6 +54,8 @@ type AppContextValue = {
   createGroup: (input: GroupSettingsInput) => Promise<GroupActionResult>;
   updateGroup: (groupId: string, input: GroupSettingsInput) => Promise<ActionResult>;
   joinGroup: (joinCode: string) => Promise<GroupActionResult>;
+  joinPublicGroup: (groupId: string) => Promise<GroupActionResult>;
+  listPublicGroups: () => Promise<AppBundle['groups']>;
   getGroupDetails: (groupId: string) => Promise<GroupDetails | null>;
   getGroupMessages: (groupId: string) => Promise<GroupMessage[]>;
   sendGroupMessage: (groupId: string, text: string) => Promise<ActionResult>;
@@ -294,6 +298,25 @@ export function AppProvider({ children, fallback }: PropsWithChildren<{ fallback
     [refreshUserData, session]
   );
 
+  const joinPublicGroup = useCallback(
+    async (groupId: string) => {
+      if (!session) {
+        return { ok: false, message: 'No active session.' };
+      }
+
+      setBusy(true);
+      const result = await joinPublicGroupRequest(session.uid, groupId);
+      if (result.ok) {
+        await refreshUserData(session);
+      }
+      setBusy(false);
+      return result;
+    },
+    [refreshUserData, session]
+  );
+
+  const listPublicGroups = useCallback(async () => listPublicGroupsRequest(session?.uid), [session?.uid]);
+
   const getGroupMessages = useCallback(async (groupId: string) => loadGroupMessagesRequest(groupId), []);
 
   const sendGroupMessage = useCallback(
@@ -332,6 +355,8 @@ export function AppProvider({ children, fallback }: PropsWithChildren<{ fallback
       createGroup,
       updateGroup,
       joinGroup,
+      joinPublicGroup,
+      listPublicGroups,
       getGroupDetails,
       getGroupMessages,
       sendGroupMessage,
@@ -355,6 +380,8 @@ export function AppProvider({ children, fallback }: PropsWithChildren<{ fallback
       createGroup,
       updateGroup,
       joinGroup,
+      joinPublicGroup,
+      listPublicGroups,
       getGroupMessages,
       sendGroupMessage,
     ]

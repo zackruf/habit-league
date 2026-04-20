@@ -27,6 +27,33 @@ export function getCurrentWeekKeys() {
   });
 }
 
+export function getWeekUrgencyMessage(date: Date = new Date()) {
+  const day = date.getDay();
+
+  if (day === 6) {
+    return {
+      title: 'Final push',
+      message: 'One day left to move up before the week resets.',
+    };
+  }
+
+  if (day === 0) {
+    return {
+      title: 'Reset starts tomorrow',
+      message: 'Check in today, then everyone gets a fresh leaderboard on Monday.',
+    };
+  }
+
+  if (day === 1) {
+    return {
+      title: 'Fresh week',
+      message: 'A clean leaderboard is live. Early check-ins set the pace.',
+    };
+  }
+
+  return null;
+}
+
 function getStartOfWeek(date: Date) {
   const next = new Date(date);
   const day = next.getDay();

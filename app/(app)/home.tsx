@@ -14,7 +14,7 @@ import { StreakRestoreCard } from '@/components/StreakRestoreCard';
 import { SurfaceCard } from '@/components/SurfaceCard';
 import { useApp } from '@/context/AppProvider';
 import { useThemePreferences } from '@/context/ThemeProvider';
-import { formatFriendlyDate, getCurrentWeekLabel } from '@/lib/date';
+import { formatFriendlyDate, getCurrentWeekLabel, getWeekUrgencyMessage } from '@/lib/date';
 import { getLeaderboardNotice, pickTopLeaderboardNotice } from '@/lib/leaderboard';
 import { pickTopRestoreOpportunity } from '@/lib/streaks';
 import { createCommonStyles } from '@/styles/commonStyles';
@@ -54,6 +54,7 @@ export default function HomeScreen() {
     groupDetails.map((details) => getLeaderboardNotice(details.leaderboard, profile.uid, details.group.name))
   );
   const topRestoreOpportunity = pickTopRestoreOpportunity(habits);
+  const weekUrgency = getWeekUrgencyMessage();
 
   async function handleRestoreStreak(habitId: string) {
     setRestoreBusyId(habitId);
@@ -70,6 +71,13 @@ export default function HomeScreen() {
       />
 
       {leaderboardNotice ? <LeaderboardNoticeCard title={leaderboardNotice.title} message={leaderboardNotice.message} /> : null}
+
+      {weekUrgency ? (
+        <SurfaceCard style={commonStyles.noticeCard}>
+          <Text style={commonStyles.noticeEyebrow}>{weekUrgency.title}</Text>
+          <Text style={commonStyles.noticeMessage}>{weekUrgency.message}</Text>
+        </SurfaceCard>
+      ) : null}
 
       {topRestoreOpportunity ? (
         <StreakRestoreCard
