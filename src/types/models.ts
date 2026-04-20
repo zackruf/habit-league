@@ -106,6 +106,7 @@ export type GroupDetails = {
   group: Group;
   members: Profile[];
   leaderboard: LeaderboardEntry[];
+  previousWeekLeaderboard: LeaderboardEntry[];
 };
 
 export type DemoStore = {

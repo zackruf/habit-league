@@ -1,5 +1,5 @@
 import { router } from 'expo-router';
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { Text, View } from 'react-native';
 
 import { AppScreen } from '@/components/AppScreen';
@@ -19,9 +19,28 @@ import { formatFriendlyDate, getCurrentWeekLabel, getWeekUrgencyMessage } from '
 import { getLeaderboardNotice, pickTopLeaderboardNotice } from '@/lib/leaderboard';
 import { pickTopRestoreOpportunity } from '@/lib/streaks';
 import { createCommonStyles } from '@/styles/commonStyles';
-import { GroupDetails } from '@/types/models';
+import { GroupDetails, Habit, LeaderboardEntry } from '@/types/models';
 
 const dismissedRestoreMomentKeys = new Set<string>();
+const dismissedWeeklyRecapKeys = new Set<string>();
+
+type RankSnapshot = {
+  groupId: string;
+  groupName: string;
+  rank: number | null;
+};
+
+type RankFeedback = {
+  title: string;
+  message: string;
+};
+
+type WeeklyRecap = {
+  key: string;
+  title: string;
+  message: string;
+  detail: string;
+};
 
 export default function HomeScreen() {
   const { getGroupDetails, groups, habits, profile, refreshing, restoreHabitStreak, shopInventory, toggleHabitCheckIn } = useApp();
@@ -30,12 +49,18 @@ export default function HomeScreen() {
   const [groupDetails, setGroupDetails] = useState<GroupDetails[]>([]);
   const [restoreBusyId, setRestoreBusyId] = useState<string | null>(null);
   const [activeRestoreMomentKey, setActiveRestoreMomentKey] = useState<string | null>(null);
+  const [rankFeedback, setRankFeedback] = useState<RankFeedback | null>(null);
+  const [dismissedWeeklyRecapKey, setDismissedWeeklyRecapKey] = useState<string | null>(null);
+
+  const loadGroupDetailsSnapshot = useCallback(async () => {
+    return (await Promise.all(groups.map((group) => getGroupDetails(group.id)))).filter(Boolean) as GroupDetails[];
+  }, [getGroupDetails, groups]);
 
   useEffect(() => {
     let active = true;
 
     async function loadGroupDetails() {
-      const details = (await Promise.all(groups.map((group) => getGroupDetails(group.id)))).filter(Boolean) as GroupDetails[];
+      const details = await loadGroupDetailsSnapshot();
       if (active) {
         setGroupDetails(details);
       }
@@ -46,7 +71,7 @@ export default function HomeScreen() {
     return () => {
       active = false;
     };
-  }, [getGroupDetails, groups]);
+  }, [loadGroupDetailsSnapshot]);
 
   const topRestoreOpportunity = pickTopRestoreOpportunity(habits);
   const weekUrgency = getWeekUrgencyMessage();
@@ -78,6 +103,12 @@ export default function HomeScreen() {
   const leaderboardNotice = pickTopLeaderboardNotice(
     groupDetails.map((details) => getLeaderboardNotice(details.leaderboard, profile.uid, details.group.name))
   );
+  const weeklyRecap = getWeeklyRecap(groupDetails, profile.uid);
+  const showWeeklyRecap = Boolean(
+    weeklyRecap &&
+      weeklyRecap.key !== dismissedWeeklyRecapKey &&
+      !dismissedWeeklyRecapKeys.has(weeklyRecap.key)
+  );
 
   async function handleRestoreStreak(habitId: string) {
     setRestoreBusyId(habitId);
@@ -101,6 +132,34 @@ export default function HomeScreen() {
     router.push('/(app)/(tabs)/shop');
   }
 
+  async function handleToggleHabitCheckIn(habit: Habit) {
+    if (!profile) {
+      return;
+    }
+
+    const wasCheckedInToday = habit.checkIns.includes(todayKey);
+    const beforeRanks = buildRankSnapshots(groupDetails, profile.uid);
+
+    await toggleHabitCheckIn(habit.id);
+    const nextDetails = await loadGroupDetailsSnapshot();
+    setGroupDetails(nextDetails);
+
+    if (!wasCheckedInToday) {
+      setRankFeedback(getRankFeedback(beforeRanks, buildRankSnapshots(nextDetails, profile.uid)));
+    } else {
+      setRankFeedback(null);
+    }
+  }
+
+  function handleDismissWeeklyRecap() {
+    if (!weeklyRecap) {
+      return;
+    }
+
+    dismissedWeeklyRecapKeys.add(weeklyRecap.key);
+    setDismissedWeeklyRecapKey(weeklyRecap.key);
+  }
+
   return (
     <AppScreen scrollable contentContainerStyle={commonStyles.pageStack}>
       {topRestoreOpportunity ? (
@@ -121,6 +180,24 @@ export default function HomeScreen() {
         title={`Hi, ${profile.name.split(' ')[0]}.`}
         subtitle={`${completedToday} of ${habits.length} habits checked in today. ${getCurrentWeekLabel()}.`}
       />
+
+      {rankFeedback ? (
+        <SurfaceCard style={commonStyles.currentUserCard}>
+          <Text style={commonStyles.noticeEyebrow}>{rankFeedback.title}</Text>
+          <Text style={commonStyles.noticeMessage}>{rankFeedback.message}</Text>
+        </SurfaceCard>
+      ) : null}
+
+      {showWeeklyRecap && weeklyRecap ? (
+        <SurfaceCard style={commonStyles.weeklyPreviewCard}>
+          <Text style={commonStyles.noticeEyebrow}>{weeklyRecap.title}</Text>
+          <Text style={commonStyles.noticeMessage}>{weeklyRecap.message}</Text>
+          <Text style={commonStyles.smallMuted}>{weeklyRecap.detail}</Text>
+          <View style={commonStyles.actionRowTight}>
+            <PrimaryButton label="Got it" onPress={handleDismissWeeklyRecap} variant="secondary" />
+          </View>
+        </SurfaceCard>
+      ) : null}
 
       {leaderboardNotice ? <LeaderboardNoticeCard title={leaderboardNotice.title} message={leaderboardNotice.message} /> : null}
 
@@ -158,7 +235,7 @@ export default function HomeScreen() {
       <SectionHeader title="Today's habits" action={refreshing ? <Text style={commonStyles.mutedText}>Syncing...</Text> : undefined} />
       <View style={commonStyles.compactSection}>
         {habits.length ? (
-          habits.map((habit) => <HabitCard key={habit.id} habit={habit} onToggle={() => toggleHabitCheckIn(habit.id)} />)
+          habits.map((habit) => <HabitCard key={habit.id} habit={habit} onToggle={() => handleToggleHabitCheckIn(habit)} />)
         ) : (
           <SurfaceCard>
             <Text style={commonStyles.cardTitle}>No habits yet</Text>
@@ -205,4 +282,81 @@ export default function HomeScreen() {
       </View>
     </AppScreen>
   );
+}
+
+function buildRankSnapshots(groupDetails: GroupDetails[], userId: string): RankSnapshot[] {
+  return groupDetails.map((details) => ({
+    groupId: details.group.id,
+    groupName: details.group.name,
+    rank: getRank(details.leaderboard, userId),
+  }));
+}
+
+function getRank(leaderboard: LeaderboardEntry[], userId: string) {
+  const index = leaderboard.findIndex((entry) => entry.userId === userId);
+  return index === -1 ? null : index + 1;
+}
+
+function getRankFeedback(beforeRanks: RankSnapshot[], afterRanks: RankSnapshot[]): RankFeedback | null {
+  const movements = afterRanks
+    .map((after) => {
+      const before = beforeRanks.find((entry) => entry.groupId === after.groupId);
+      if (!after.rank) {
+        return null;
+      }
+      if (!before?.rank) {
+        return {
+          ...after,
+          spotsMoved: 0,
+          title: 'You are on the board',
+          message: `You are now #${after.rank} in ${after.groupName}.`,
+        };
+      }
+      if (after.rank < before.rank) {
+        const spotsMoved = before.rank - after.rank;
+        return {
+          ...after,
+          spotsMoved,
+          title: spotsMoved === 1 ? 'You moved up 1 spot' : `You moved up ${spotsMoved} spots`,
+          message: `You are now #${after.rank} in ${after.groupName}.`,
+        };
+      }
+
+      return null;
+    })
+    .filter((movement): movement is NonNullable<typeof movement> => Boolean(movement))
+    .sort((left, right) => right.spotsMoved - left.spotsMoved || (left.rank ?? 99) - (right.rank ?? 99));
+
+  const bestMovement = movements[0];
+  return bestMovement ? { title: bestMovement.title, message: bestMovement.message } : null;
+}
+
+function getWeeklyRecap(groupDetails: GroupDetails[], userId: string): WeeklyRecap | null {
+  const today = new Date();
+  if (today.getDay() !== 1) {
+    return null;
+  }
+
+  const recaps = groupDetails
+    .map((details) => {
+      const leaderboard = details.previousWeekLeaderboard;
+      const rank = getRank(leaderboard, userId);
+      const topPerformer = leaderboard[0];
+      if (!rank || !topPerformer || leaderboard.length < 2) {
+        return null;
+      }
+
+      return {
+        key: `${details.group.id}:${formatFriendlyDate(today, 'key')}`,
+        title: 'Weekly recap',
+        message: `Last week you finished #${rank} in ${details.group.name}.`,
+        detail: `Top performer: ${topPerformer.name}. Fresh week, fresh start — check in early to set the pace.`,
+        rank,
+        groupSize: leaderboard.length,
+      };
+    })
+    .filter((recap): recap is NonNullable<typeof recap> => Boolean(recap))
+    .sort((left, right) => left.rank - right.rank || right.groupSize - left.groupSize);
+
+  return recaps[0] ?? null;
 }

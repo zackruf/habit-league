@@ -27,6 +27,17 @@ export function getCurrentWeekKeys() {
   });
 }
 
+export function getPreviousWeekKeys() {
+  const start = getStartOfWeek(new Date());
+  start.setDate(start.getDate() - 7);
+
+  return Array.from({ length: 7 }, (_, index) => {
+    const date = new Date(start);
+    date.setDate(start.getDate() + index);
+    return formatFriendlyDate(date, 'key');
+  });
+}
+
 export function getWeekUrgencyMessage(date: Date = new Date()) {
   const day = date.getDay();
 

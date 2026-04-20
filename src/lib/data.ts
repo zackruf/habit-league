@@ -17,7 +17,7 @@ import {
 } from 'firebase/firestore';
 
 import { firebaseAuth, firebaseConfigured, firestore } from '@/lib/firebase';
-import { getCurrentWeekKeys } from '@/lib/date';
+import { getCurrentWeekKeys, getPreviousWeekKeys } from '@/lib/date';
 import { getDefaultShopInventory, normalizeShopInventory } from '@/lib/shop';
 import { getHabitStreakStatus } from '@/lib/streaks';
 import { AppBundle, DemoStore, Group, GroupDetails, GroupMessage, GroupSettingsInput, Habit, LeaderboardEntry, Profile, SessionUser } from '@/types/models';
@@ -542,6 +542,7 @@ export async function getGroupDetails(groupId: string): Promise<GroupDetails | n
       group,
       members,
       leaderboard: buildLeaderboard(members, habits),
+      previousWeekLeaderboard: buildLeaderboard(members, habits, getPreviousWeekKeys()),
     };
   }
 
@@ -559,6 +560,7 @@ export async function getGroupDetails(groupId: string): Promise<GroupDetails | n
     group,
     members,
     leaderboard: buildLeaderboard(members, habits),
+    previousWeekLeaderboard: buildLeaderboard(members, habits, getPreviousWeekKeys()),
   };
 }
 
@@ -648,8 +650,8 @@ function buildMessage(groupId: string, sender: Profile, text: string): GroupMess
   };
 }
 
-function buildLeaderboard(members: Profile[], habits: Habit[]): LeaderboardEntry[] {
-  const weekKeys = new Set(getCurrentWeekKeys());
+function buildLeaderboard(members: Profile[], habits: Habit[], weekKeysInput = getCurrentWeekKeys()): LeaderboardEntry[] {
+  const weekKeys = new Set(weekKeysInput);
 
   return members
     .map((member) => {
