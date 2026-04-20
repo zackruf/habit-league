@@ -4,6 +4,7 @@ import { createContext, PropsWithChildren, ReactNode, useCallback, useContext, u
 import {
   createGroup as createGroupRequest,
   createHabit as createHabitRequest,
+  connectWithUser as connectWithUserRequest,
   getGroupDetails,
   initializeUserProfile,
   joinGroup as joinGroupRequest,
@@ -15,6 +16,7 @@ import {
   restoreHabitStreak as restoreHabitStreakRequest,
   saveProfile as saveProfileRequest,
   sendGroupMessage as sendGroupMessageRequest,
+  searchUsers as searchUsersRequest,
   signIn as signInRequest,
   signOut as signOutRequest,
   signUp as signUpRequest,
@@ -23,7 +25,7 @@ import {
   usingFirebaseBackend,
 } from '@/lib/data';
 import { consumeRestoreStreak } from '@/lib/shop';
-import { AppBundle, GroupDetails, GroupMessage, GroupSettingsInput, Habit, Profile, SessionUser } from '@/types/models';
+import { AppBundle, GroupDetails, GroupMessage, GroupSettingsInput, Habit, Profile, SessionUser, UserSearchResult } from '@/types/models';
 
 type ActionResult = {
   ok: boolean;
@@ -56,6 +58,8 @@ type AppContextValue = {
   joinGroup: (joinCode: string) => Promise<GroupActionResult>;
   joinPublicGroup: (groupId: string) => Promise<GroupActionResult>;
   listPublicGroups: () => Promise<AppBundle['groups']>;
+  searchUsers: (searchTerm: string) => Promise<UserSearchResult[]>;
+  connectWithUser: (userId: string) => Promise<ActionResult>;
   getGroupDetails: (groupId: string) => Promise<GroupDetails | null>;
   getGroupMessages: (groupId: string) => Promise<GroupMessage[]>;
   sendGroupMessage: (groupId: string, text: string) => Promise<ActionResult>;
@@ -317,6 +321,34 @@ export function AppProvider({ children, fallback }: PropsWithChildren<{ fallback
 
   const listPublicGroups = useCallback(async () => listPublicGroupsRequest(session?.uid), [session?.uid]);
 
+  const searchUsers = useCallback(
+    async (searchTerm: string) => {
+      if (!session) {
+        return [];
+      }
+
+      return searchUsersRequest(session.uid, searchTerm);
+    },
+    [session]
+  );
+
+  const connectWithUser = useCallback(
+    async (userId: string) => {
+      if (!session) {
+        return { ok: false, message: 'No active session.' };
+      }
+
+      setBusy(true);
+      const result = await connectWithUserRequest(session.uid, userId);
+      if (result.ok) {
+        await refreshUserData(session);
+      }
+      setBusy(false);
+      return result;
+    },
+    [refreshUserData, session]
+  );
+
   const getGroupMessages = useCallback(async (groupId: string) => loadGroupMessagesRequest(groupId), []);
 
   const sendGroupMessage = useCallback(
@@ -357,6 +389,8 @@ export function AppProvider({ children, fallback }: PropsWithChildren<{ fallback
       joinGroup,
       joinPublicGroup,
       listPublicGroups,
+      searchUsers,
+      connectWithUser,
       getGroupDetails,
       getGroupMessages,
       sendGroupMessage,
@@ -382,6 +416,8 @@ export function AppProvider({ children, fallback }: PropsWithChildren<{ fallback
       joinGroup,
       joinPublicGroup,
       listPublicGroups,
+      searchUsers,
+      connectWithUser,
       getGroupMessages,
       sendGroupMessage,
     ]

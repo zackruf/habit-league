@@ -20,7 +20,19 @@ import { firebaseAuth, firebaseConfigured, firestore } from '@/lib/firebase';
 import { getCurrentWeekKeys, getPreviousWeekKeys } from '@/lib/date';
 import { getDefaultShopInventory, normalizeShopInventory } from '@/lib/shop';
 import { getHabitStreakStatus } from '@/lib/streaks';
-import { AppBundle, DemoStore, Group, GroupDetails, GroupMessage, GroupSettingsInput, Habit, LeaderboardEntry, Profile, SessionUser } from '@/types/models';
+import {
+  AppBundle,
+  DemoStore,
+  Group,
+  GroupDetails,
+  GroupMessage,
+  GroupSettingsInput,
+  Habit,
+  LeaderboardEntry,
+  Profile,
+  SessionUser,
+  UserSearchResult,
+} from '@/types/models';
 
 const STORAGE_KEY = 'habitleague:demo-store';
 
@@ -184,6 +196,61 @@ export async function saveProfile(uid: string, patch: Partial<Profile>) {
   const store = await readDemoStore();
   store.profiles[uid] = { ...store.profiles[uid], ...patch };
   await writeDemoStore(store);
+}
+
+export async function searchUsers(uid: string, searchTerm: string): Promise<UserSearchResult[]> {
+  const normalizedTerm = searchTerm.trim().toLowerCase();
+
+  if (usingFirebaseBackend && firestore) {
+    const [profileSnapshot, profilesSnapshot, groupsSnapshot] = await Promise.all([
+      getDoc(doc(firestore, 'profiles', uid)),
+      getDocs(query(collection(firestore, 'profiles'), limit(25))),
+      getDocs(query(collection(firestore, 'groups'), where('discoverable', '==', true), limit(25))),
+    ]);
+    const currentProfile = normalizeProfile(profileSnapshot.data() as Profile);
+    const groups = groupsSnapshot.docs.map((entry) => normalizeGroup(entry.data() as Group)).filter((group): group is Group => Boolean(group));
+    const profiles = profilesSnapshot.docs.map((entry) => normalizeProfile(entry.data() as Profile));
+    return buildUserSearchResults(uid, currentProfile, profiles, groups, normalizedTerm);
+  }
+
+  const store = await readDemoStore();
+  const currentProfile = normalizeProfile(store.profiles[uid]);
+  const profiles = Object.values(store.profiles).map((profile) => normalizeProfile(profile));
+  const groups = Object.values(store.groups).map((group) => normalizeGroup(group)).filter((group): group is Group => Boolean(group));
+  return buildUserSearchResults(uid, currentProfile, profiles, groups, normalizedTerm);
+}
+
+export async function connectWithUser(uid: string, friendId: string) {
+  if (uid === friendId) {
+    return { ok: false, message: 'You are already you, which is honestly efficient.' };
+  }
+
+  if (usingFirebaseBackend && firestore) {
+    const [profileSnapshot, friendSnapshot] = await Promise.all([
+      getDoc(doc(firestore, 'profiles', uid)),
+      getDoc(doc(firestore, 'profiles', friendId)),
+    ]);
+    if (!profileSnapshot.exists() || !friendSnapshot.exists()) {
+      return { ok: false, message: 'That user could not be found.' };
+    }
+
+    await updateDoc(doc(firestore, 'profiles', uid), { friendIds: arrayUnion(friendId) });
+    return { ok: true, message: 'Connected.' };
+  }
+
+  const store = await readDemoStore();
+  const profile = normalizeProfile(store.profiles[uid]);
+  const friend = normalizeProfile(store.profiles[friendId]);
+  if (!profile || !friend) {
+    return { ok: false, message: 'That user could not be found.' };
+  }
+
+  store.profiles[uid] = {
+    ...profile,
+    friendIds: [...new Set([...profile.friendIds, friendId])],
+  };
+  await writeDemoStore(store);
+  return { ok: true, message: 'Connected.' };
 }
 
 export async function createHabit(uid: string, input: { title: string; emoji: string; category: string }) {
@@ -575,6 +642,7 @@ function buildProfile(uid: string, email: string, name = ''): Profile {
     weeklyGoal: 5,
     onboardingCompleted: Boolean(name),
     groupIds: [],
+    friendIds: [],
     shopInventory: getDefaultShopInventory(),
   };
 }
@@ -588,8 +656,44 @@ function normalizeProfile(profile: Profile) {
     weeklyGoal: profile?.weeklyGoal || 5,
     onboardingCompleted: Boolean(profile?.onboardingCompleted),
     groupIds: profile?.groupIds || [],
+    friendIds: profile?.friendIds || [],
     shopInventory: normalizeShopInventory(profile?.shopInventory),
   };
+}
+
+function buildUserSearchResults(
+  uid: string,
+  currentProfile: Profile,
+  profiles: Profile[],
+  groups: Group[],
+  normalizedTerm: string
+): UserSearchResult[] {
+  return profiles
+    .filter((profile) => profile.uid !== uid)
+    .filter((profile) => {
+      if (!normalizedTerm) {
+        return true;
+      }
+
+      return `${profile.name} ${profile.username}`.toLowerCase().includes(normalizedTerm);
+    })
+    .map((profile) => ({
+      uid: profile.uid,
+      name: profile.name,
+      username: profile.username,
+      bio: profile.bio,
+      sharedGroupNames: groups
+        .filter((group) => group.memberIds.includes(uid) && group.memberIds.includes(profile.uid))
+        .map((group) => group.name),
+      isConnected: currentProfile.friendIds.includes(profile.uid),
+    }))
+    .sort((left, right) => {
+      if (left.isConnected !== right.isConnected) {
+        return left.isConnected ? 1 : -1;
+      }
+      return right.sharedGroupNames.length - left.sharedGroupNames.length || left.name.localeCompare(right.name);
+    })
+    .slice(0, normalizedTerm ? 10 : 6);
 }
 
 function normalizeGroup(group?: Group | null): Group | null {
@@ -726,6 +830,7 @@ function seedDemoStore(): DemoStore {
         weeklyGoal: 5,
         onboardingCompleted: true,
         groupIds: [groupId],
+        friendIds: [friendUid],
         shopInventory: {
           ...getDefaultShopInventory(),
           streakRestoreCredits: 1,
@@ -740,6 +845,7 @@ function seedDemoStore(): DemoStore {
         weeklyGoal: 6,
         onboardingCompleted: true,
         groupIds: [groupId],
+        friendIds: [demoUid],
         shopInventory: getDefaultShopInventory(),
       },
       [runnerUid]: {
@@ -751,6 +857,7 @@ function seedDemoStore(): DemoStore {
         weeklyGoal: 5,
         onboardingCompleted: true,
         groupIds: [publicFitnessGroupId],
+        friendIds: [],
         shopInventory: getDefaultShopInventory(),
       },
       [readerUid]: {
@@ -762,6 +869,7 @@ function seedDemoStore(): DemoStore {
         weeklyGoal: 4,
         onboardingCompleted: true,
         groupIds: [publicFocusGroupId],
+        friendIds: [],
         shopInventory: getDefaultShopInventory(),
       },
     },

@@ -1,4 +1,3 @@
-import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useEffect, useMemo, useState } from 'react';
 import { Text, View } from 'react-native';
 
@@ -12,13 +11,7 @@ import { TextField } from '@/components/TextField';
 import { useApp } from '@/context/AppProvider';
 import { useThemePreferences } from '@/context/ThemeProvider';
 import { createCommonStyles } from '@/styles/commonStyles';
-import { GroupDetails } from '@/types/models';
-
-type FriendInvite = {
-  id: string;
-  name: string;
-  email: string;
-};
+import { GroupDetails, UserSearchResult } from '@/types/models';
 
 type FriendStanding = {
   userId: string;
@@ -29,25 +22,26 @@ type FriendStanding = {
 };
 
 export default function FriendsTabScreen() {
-  const { getGroupDetails, groups, profile } = useApp();
+  const { busy, connectWithUser, getGroupDetails, groups, profile, searchUsers } = useApp();
   const { theme } = useThemePreferences();
   const commonStyles = createCommonStyles(theme.colors);
-  const [name, setName] = useState('');
-  const [email, setEmail] = useState('');
-  const [invites, setInvites] = useState<FriendInvite[]>([]);
+  const [query, setQuery] = useState('');
+  const [results, setResults] = useState<UserSearchResult[]>([]);
+  const [feedback, setFeedback] = useState('');
+  const [connectingId, setConnectingId] = useState<string | null>(null);
   const [groupDetails, setGroupDetails] = useState<GroupDetails[]>([]);
 
   useEffect(() => {
     let active = true;
 
-    async function loadPageState() {
+    async function loadSocialState() {
       if (!profile) {
         return;
       }
 
-      const [details, storedInvites] = await Promise.all([
+      const [details, people] = await Promise.all([
         Promise.all(groups.map((group) => getGroupDetails(group.id))),
-        AsyncStorage.getItem(getInviteStorageKey(profile.uid)),
+        searchUsers(query),
       ]);
 
       if (!active) {
@@ -55,15 +49,15 @@ export default function FriendsTabScreen() {
       }
 
       setGroupDetails(details.filter(Boolean) as GroupDetails[]);
-      setInvites(storedInvites ? (JSON.parse(storedInvites) as FriendInvite[]) : []);
+      setResults(people);
     }
 
-    loadPageState();
+    loadSocialState();
 
     return () => {
       active = false;
     };
-  }, [getGroupDetails, groups, profile]);
+  }, [getGroupDetails, groups, profile, query, searchUsers]);
 
   const standings = useMemo(() => {
     const map = new Map<string, FriendStanding>();
@@ -97,35 +91,84 @@ export default function FriendsTabScreen() {
     return <LoadingScreen message="Loading your friends..." />;
   }
 
+  const connectedIds = new Set(profile.friendIds);
+  const connectedPeople = results.filter((person) => connectedIds.has(person.uid));
+  const discoveryResults = results.filter((person) => !connectedIds.has(person.uid));
   const profileId = profile.uid;
-  const connectedFriends = standings.filter((entry) => entry.userId !== profileId);
 
-  async function handleAddFriend() {
-    if (!name.trim() || !email.trim()) {
-      return;
+  async function handleConnect(userId: string) {
+    setFeedback('');
+    setConnectingId(userId);
+    const result = await connectWithUser(userId);
+    setFeedback(result.message);
+    setConnectingId(null);
+
+    if (result.ok) {
+      const nextResults = await searchUsers(query);
+      setResults(nextResults);
     }
-
-    const nextInvites = [{ id: `invite-${Date.now()}`, name: name.trim(), email: email.trim() }, ...invites];
-    setInvites(nextInvites);
-    await AsyncStorage.setItem(getInviteStorageKey(profileId), JSON.stringify(nextInvites));
-    setName('');
-    setEmail('');
   }
 
   return (
     <AppScreen scrollable contentContainerStyle={commonStyles.pageStack}>
       <PageHeader
         eyebrow="Friends"
-        title="Your circle"
-        subtitle={`You currently share progress with ${connectedFriends.length} people and have ${invites.length} saved invites.`}
+        title="Discover your circle"
+        subtitle="Find people by name or handle, connect quickly, and turn solo habits into visible accountability."
       />
 
       <SurfaceCard style={commonStyles.sectionCard}>
-        <SectionHeader title="Add friends" />
-        <TextField label="Friend name" value={name} onChangeText={setName} placeholder="Jamie" />
-        <TextField label="Friend email" value={email} onChangeText={setEmail} autoCapitalize="none" keyboardType="email-address" />
-        <PrimaryButton label="Save invite" onPress={handleAddFriend} />
+        <SectionHeader title="Search people" />
+        <TextField
+          label="Name or username"
+          value={query}
+          onChangeText={setQuery}
+          autoCapitalize="none"
+          placeholder="Search Jamie or @avery-runs"
+        />
+        <Text style={commonStyles.smallMuted}>
+          {query.trim() ? 'Showing matching people.' : 'Suggested people appear here so the app never feels empty.'}
+        </Text>
+        {feedback ? <Text style={commonStyles.inlineLink}>{feedback}</Text> : null}
       </SurfaceCard>
+
+      <SectionHeader title={query.trim() ? 'Search results' : 'Suggested people'} />
+      <View style={commonStyles.compactSection}>
+        {discoveryResults.length ? (
+          discoveryResults.map((person) => (
+            <PersonCard
+              key={person.uid}
+              person={person}
+              actionLabel={connectingId === person.uid ? 'Connecting...' : 'Connect'}
+              actionDisabled={busy || connectingId === person.uid}
+              onAction={() => handleConnect(person.uid)}
+            />
+          ))
+        ) : (
+          <SurfaceCard>
+            <Text style={commonStyles.cardTitle}>{query.trim() ? 'No people found' : 'No suggestions yet'}</Text>
+            <Text style={commonStyles.cardCopy}>
+              {query.trim()
+                ? 'Try searching by display name or username.'
+                : 'Join a public league or invite people to make discovery more useful.'}
+            </Text>
+          </SurfaceCard>
+        )}
+      </View>
+
+      <SectionHeader title="Your connections" />
+      <View style={commonStyles.compactSection}>
+        {connectedPeople.length ? (
+          connectedPeople.map((person) => (
+            <PersonCard key={person.uid} person={person} actionLabel="Connected" actionDisabled onAction={() => undefined} />
+          ))
+        ) : (
+          <SurfaceCard>
+            <Text style={commonStyles.cardTitle}>No connections yet</Text>
+            <Text style={commonStyles.cardCopy}>Connect with suggested people to start building a social graph for future invites and shoutouts.</Text>
+          </SurfaceCard>
+        )}
+      </View>
 
       <SectionHeader title="Leaderboard with friends" />
       <View style={commonStyles.compactSection}>
@@ -150,27 +193,36 @@ export default function FriendsTabScreen() {
           </SurfaceCard>
         )}
       </View>
-
-      <SectionHeader title="Saved invites" />
-      <View style={commonStyles.compactSection}>
-        {invites.length ? (
-          invites.map((invite) => (
-            <SurfaceCard key={invite.id} style={commonStyles.listCard}>
-              <Text style={commonStyles.listRowTitle}>{invite.name}</Text>
-              <Text style={commonStyles.listRowSubtitle}>{invite.email}</Text>
-            </SurfaceCard>
-          ))
-        ) : (
-          <SurfaceCard>
-            <Text style={commonStyles.cardTitle}>No invites saved</Text>
-            <Text style={commonStyles.cardCopy}>Store a few names here when you think of people to invite later.</Text>
-          </SurfaceCard>
-        )}
-      </View>
     </AppScreen>
   );
 }
 
-function getInviteStorageKey(uid: string) {
-  return `habitleague:friend-invites:${uid}`;
+function PersonCard({
+  actionDisabled,
+  actionLabel,
+  onAction,
+  person,
+}: {
+  actionDisabled?: boolean;
+  actionLabel: string;
+  onAction: () => void;
+  person: UserSearchResult;
+}) {
+  const { theme } = useThemePreferences();
+  const commonStyles = createCommonStyles(theme.colors);
+  const sharedLabel = person.sharedGroupNames.length ? person.sharedGroupNames.join(', ') : 'No shared league yet';
+
+  return (
+    <SurfaceCard style={commonStyles.listCard}>
+      <View style={commonStyles.listRow}>
+        <View style={commonStyles.listRowMeta}>
+          <Text style={commonStyles.listRowTitle}>{person.name}</Text>
+          <Text style={commonStyles.usernameText}>@{person.username}</Text>
+          {person.bio ? <Text style={commonStyles.listRowSubtitle}>{person.bio}</Text> : null}
+          <Text style={commonStyles.smallMuted}>{sharedLabel}</Text>
+        </View>
+        <PrimaryButton label={actionLabel} onPress={onAction} disabled={actionDisabled} variant={actionDisabled ? 'secondary' : 'primary'} />
+      </View>
+    </SurfaceCard>
+  );
 }

@@ -12,6 +12,7 @@ export type Profile = {
   weeklyGoal: number;
   onboardingCompleted: boolean;
   groupIds: string[];
+  friendIds: string[];
   shopInventory: ShopInventory;
 };
 
@@ -107,6 +108,15 @@ export type GroupDetails = {
   members: Profile[];
   leaderboard: LeaderboardEntry[];
   previousWeekLeaderboard: LeaderboardEntry[];
+};
+
+export type UserSearchResult = {
+  uid: string;
+  name: string;
+  username: string;
+  bio: string;
+  sharedGroupNames: string[];
+  isConnected: boolean;
 };
 
 export type DemoStore = {
