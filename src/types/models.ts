@@ -90,6 +90,42 @@ export type GroupMessage = {
   createdAt: string;
 };
 
+export type ActivityType = 'check_in' | 'rank_movement' | 'league_join' | 'connection';
+
+export type ActivityShoutoutType = 'keep_going' | 'on_fire' | 'nice_work';
+
+export type ActivityShoutouts = Record<ActivityShoutoutType, string[]>;
+
+export type ActivityItem = {
+  id: string;
+  type: ActivityType;
+  actorId: string;
+  actorName: string;
+  groupId: string | null;
+  groupName: string | null;
+  habitId: string | null;
+  habitTitle: string | null;
+  targetUserId: string | null;
+  targetUserName: string | null;
+  summary: string;
+  createdAt: string;
+  shoutouts: ActivityShoutouts;
+};
+
+export type ActivityInput = {
+  type: ActivityType;
+  actorId: string;
+  actorName: string;
+  groupId?: string | null;
+  groupName?: string | null;
+  habitId?: string | null;
+  habitTitle?: string | null;
+  targetUserId?: string | null;
+  targetUserName?: string | null;
+  spotsMoved?: number;
+  rank?: number | null;
+};
+
 export type AppBundle = {
   profile: Profile;
   habits: Habit[];
@@ -126,4 +162,5 @@ export type DemoStore = {
   habits: Record<string, Habit>;
   groups: Record<string, Group>;
   groupMessages: Record<string, GroupMessage[]>;
+  activities: ActivityItem[];
 };

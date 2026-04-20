@@ -2,6 +2,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { createContext, PropsWithChildren, ReactNode, useCallback, useContext, useEffect, useMemo, useState } from 'react';
 
 import {
+  addActivityShoutout as addActivityShoutoutRequest,
   createGroup as createGroupRequest,
   createHabit as createHabitRequest,
   connectWithUser as connectWithUserRequest,
@@ -10,7 +11,9 @@ import {
   joinGroup as joinGroupRequest,
   joinPublicGroup as joinPublicGroupRequest,
   listPublicGroups as listPublicGroupsRequest,
+  loadActivityFeed as loadActivityFeedRequest,
   loadGroupMessages as loadGroupMessagesRequest,
+  recordActivity as recordActivityRequest,
   loadUserBundle,
   restoreSession,
   restoreHabitStreak as restoreHabitStreakRequest,
@@ -25,7 +28,19 @@ import {
   usingFirebaseBackend,
 } from '@/lib/data';
 import { consumeRestoreStreak } from '@/lib/shop';
-import { AppBundle, GroupDetails, GroupMessage, GroupSettingsInput, Habit, Profile, SessionUser, UserSearchResult } from '@/types/models';
+import {
+  ActivityInput,
+  ActivityItem,
+  ActivityShoutoutType,
+  AppBundle,
+  GroupDetails,
+  GroupMessage,
+  GroupSettingsInput,
+  Habit,
+  Profile,
+  SessionUser,
+  UserSearchResult,
+} from '@/types/models';
 
 type ActionResult = {
   ok: boolean;
@@ -63,6 +78,9 @@ type AppContextValue = {
   getGroupDetails: (groupId: string) => Promise<GroupDetails | null>;
   getGroupMessages: (groupId: string) => Promise<GroupMessage[]>;
   sendGroupMessage: (groupId: string, text: string) => Promise<ActionResult>;
+  getActivityFeed: (groupId?: string) => Promise<ActivityItem[]>;
+  recordActivity: (input: Omit<ActivityInput, 'actorId' | 'actorName'>) => Promise<void>;
+  addActivityShoutout: (activityId: string, shoutoutType: ActivityShoutoutType) => Promise<ActionResult>;
 };
 
 const AppContext = createContext<AppContextValue | undefined>(undefined);
@@ -366,6 +384,43 @@ export function AppProvider({ children, fallback }: PropsWithChildren<{ fallback
     [profile]
   );
 
+  const getActivityFeed = useCallback(
+    async (groupId?: string) => {
+      if (!session) {
+        return [];
+      }
+
+      return loadActivityFeedRequest(session.uid, groupId);
+    },
+    [session]
+  );
+
+  const recordActivity = useCallback(
+    async (input: Omit<ActivityInput, 'actorId' | 'actorName'>) => {
+      if (!profile) {
+        return;
+      }
+
+      await recordActivityRequest({
+        ...input,
+        actorId: profile.uid,
+        actorName: profile.name,
+      });
+    },
+    [profile]
+  );
+
+  const addActivityShoutout = useCallback(
+    async (activityId: string, shoutoutType: ActivityShoutoutType) => {
+      if (!session) {
+        return { ok: false, message: 'No active session.' };
+      }
+
+      return addActivityShoutoutRequest(session.uid, activityId, shoutoutType);
+    },
+    [session]
+  );
+
   const value = useMemo<AppContextValue>(
     () => ({
       authReady,
@@ -394,6 +449,9 @@ export function AppProvider({ children, fallback }: PropsWithChildren<{ fallback
       getGroupDetails,
       getGroupMessages,
       sendGroupMessage,
+      getActivityFeed,
+      recordActivity,
+      addActivityShoutout,
     }),
     [
       authReady,
@@ -420,6 +478,9 @@ export function AppProvider({ children, fallback }: PropsWithChildren<{ fallback
       connectWithUser,
       getGroupMessages,
       sendGroupMessage,
+      getActivityFeed,
+      recordActivity,
+      addActivityShoutout,
     ]
   );
 

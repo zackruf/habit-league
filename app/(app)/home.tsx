@@ -33,6 +33,10 @@ type RankSnapshot = {
 type RankFeedback = {
   title: string;
   message: string;
+  groupId: string;
+  groupName: string;
+  spotsMoved: number;
+  rank: number;
 };
 
 type WeeklyRecap = {
@@ -43,7 +47,7 @@ type WeeklyRecap = {
 };
 
 export default function HomeScreen() {
-  const { getGroupDetails, groups, habits, profile, refreshing, restoreHabitStreak, shopInventory, toggleHabitCheckIn } = useApp();
+  const { getGroupDetails, groups, habits, profile, recordActivity, refreshing, restoreHabitStreak, shopInventory, toggleHabitCheckIn } = useApp();
   const { theme } = useThemePreferences();
   const commonStyles = createCommonStyles(theme.colors);
   const [groupDetails, setGroupDetails] = useState<GroupDetails[]>([]);
@@ -145,7 +149,32 @@ export default function HomeScreen() {
     setGroupDetails(nextDetails);
 
     if (!wasCheckedInToday) {
-      setRankFeedback(getRankFeedback(beforeRanks, buildRankSnapshots(nextDetails, profile.uid)));
+      const activityGroups = nextDetails.filter((details) => details.group.memberIds.includes(profile.uid));
+      await Promise.all(
+        activityGroups.map((details) =>
+          recordActivity({
+            type: 'check_in',
+            groupId: details.group.id,
+            groupName: details.group.name,
+            habitId: habit.id,
+            habitTitle: habit.title,
+          })
+        )
+      );
+
+      const feedback = getRankFeedback(beforeRanks, buildRankSnapshots(nextDetails, profile.uid));
+      setRankFeedback(feedback);
+      if (feedback && feedback.spotsMoved > 0) {
+        await recordActivity({
+          type: 'rank_movement',
+          groupId: feedback.groupId,
+          groupName: feedback.groupName,
+          habitId: habit.id,
+          habitTitle: habit.title,
+          spotsMoved: feedback.spotsMoved,
+          rank: feedback.rank,
+        });
+      }
     } else {
       setRankFeedback(null);
     }
@@ -328,7 +357,16 @@ function getRankFeedback(beforeRanks: RankSnapshot[], afterRanks: RankSnapshot[]
     .sort((left, right) => right.spotsMoved - left.spotsMoved || (left.rank ?? 99) - (right.rank ?? 99));
 
   const bestMovement = movements[0];
-  return bestMovement ? { title: bestMovement.title, message: bestMovement.message } : null;
+  return bestMovement && bestMovement.rank
+    ? {
+        title: bestMovement.title,
+        message: bestMovement.message,
+        groupId: bestMovement.groupId,
+        groupName: bestMovement.groupName,
+        spotsMoved: bestMovement.spotsMoved,
+        rank: bestMovement.rank,
+      }
+    : null;
 }
 
 function getWeeklyRecap(groupDetails: GroupDetails[], userId: string): WeeklyRecap | null {

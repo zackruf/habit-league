@@ -2,6 +2,7 @@ import { router, useLocalSearchParams } from 'expo-router';
 import { useEffect, useState } from 'react';
 import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 
+import { ActivityFeed } from '@/components/ActivityFeed';
 import { AppScreen } from '@/components/AppScreen';
 import { GroupChatPanel } from '@/components/GroupChatPanel';
 import { GroupSummaryCard } from '@/components/GroupSummaryCard';
@@ -14,16 +15,17 @@ import { useApp } from '@/context/AppProvider';
 import { useThemePreferences } from '@/context/ThemeProvider';
 import { getLeaderboardNotice } from '@/lib/leaderboard';
 import { createCommonStyles } from '@/styles/commonStyles';
-import { GroupDetails } from '@/types/models';
+import { ActivityItem, ActivityShoutoutType, GroupDetails } from '@/types/models';
 import { spacing } from '@/constants/theme';
 
 export default function GroupScreen() {
   const { groupId } = useLocalSearchParams<{ groupId: string }>();
-  const { getGroupDetails, session } = useApp();
+  const { addActivityShoutout, getActivityFeed, getGroupDetails, session } = useApp();
   const { theme } = useThemePreferences();
   const commonStyles = createCommonStyles(theme.colors);
   const [details, setDetails] = useState<GroupDetails | null>(null);
   const [activeTab, setActiveTab] = useState<'overview' | 'chat'>('overview');
+  const [activities, setActivities] = useState<ActivityItem[]>([]);
 
   useEffect(() => {
     if (!groupId) {
@@ -33,12 +35,41 @@ export default function GroupScreen() {
     getGroupDetails(groupId).then(setDetails);
   }, [getGroupDetails, groupId]);
 
+  useEffect(() => {
+    let active = true;
+    if (!groupId) {
+      return undefined;
+    }
+
+    async function loadFeed() {
+      const feed = await getActivityFeed(groupId);
+      if (active) {
+        setActivities(feed);
+      }
+    }
+
+    loadFeed();
+
+    return () => {
+      active = false;
+    };
+  }, [getActivityFeed, groupId]);
+
   if (!details) {
     return <LoadingScreen message="Loading your group..." />;
   }
 
   const leaderboardNotice = session ? getLeaderboardNotice(details.leaderboard, session.uid) : null;
   const isOwner = session?.uid === details.group.ownerId;
+
+  async function handleShoutout(activityId: string, shoutoutType: ActivityShoutoutType) {
+    if (!details) {
+      return;
+    }
+
+    await addActivityShoutout(activityId, shoutoutType);
+    setActivities(await getActivityFeed(details.group.id));
+  }
 
   return (
     <AppScreen contentContainerStyle={styles.screenContent} disableBottomPadding>
@@ -78,6 +109,15 @@ export default function GroupScreen() {
           style={styles.body}
         >
           <GroupSummaryCard group={details.group} memberCount={details.members.length} onEdit={isOwner ? () => router.push(`/(app)/groups/${details.group.id}/edit`) : undefined} />
+
+          <SectionHeader title="Recent activity" />
+          <ActivityFeed
+            activities={activities.slice(0, 4)}
+            currentUserId={session?.uid}
+            emptyMessage="Check-ins, rank moves, and new joins for this group will show up here."
+            emptyTitle="No group activity yet"
+            onShoutout={handleShoutout}
+          />
 
           <SectionHeader title="Weekly leaderboard" />
           <View style={commonStyles.compactSection}>

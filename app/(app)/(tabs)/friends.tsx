@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Text, View } from 'react-native';
 
+import { ActivityFeed } from '@/components/ActivityFeed';
 import { AppScreen } from '@/components/AppScreen';
 import { LoadingScreen } from '@/components/LoadingScreen';
 import { PageHeader } from '@/components/PageHeader';
@@ -11,7 +12,7 @@ import { TextField } from '@/components/TextField';
 import { useApp } from '@/context/AppProvider';
 import { useThemePreferences } from '@/context/ThemeProvider';
 import { createCommonStyles } from '@/styles/commonStyles';
-import { GroupDetails, UserSearchResult } from '@/types/models';
+import { ActivityItem, ActivityShoutoutType, GroupDetails, UserSearchResult } from '@/types/models';
 
 type FriendStanding = {
   userId: string;
@@ -22,7 +23,7 @@ type FriendStanding = {
 };
 
 export default function FriendsTabScreen() {
-  const { busy, connectWithUser, getGroupDetails, groups, profile, searchUsers } = useApp();
+  const { addActivityShoutout, busy, connectWithUser, getActivityFeed, getGroupDetails, groups, profile, searchUsers } = useApp();
   const { theme } = useThemePreferences();
   const commonStyles = createCommonStyles(theme.colors);
   const [query, setQuery] = useState('');
@@ -30,6 +31,7 @@ export default function FriendsTabScreen() {
   const [feedback, setFeedback] = useState('');
   const [connectingId, setConnectingId] = useState<string | null>(null);
   const [groupDetails, setGroupDetails] = useState<GroupDetails[]>([]);
+  const [activities, setActivities] = useState<ActivityItem[]>([]);
 
   useEffect(() => {
     let active = true;
@@ -58,6 +60,23 @@ export default function FriendsTabScreen() {
       active = false;
     };
   }, [getGroupDetails, groups, profile, query, searchUsers]);
+
+  useEffect(() => {
+    let active = true;
+
+    async function loadFeed() {
+      const feed = await getActivityFeed();
+      if (active) {
+        setActivities(feed);
+      }
+    }
+
+    loadFeed();
+
+    return () => {
+      active = false;
+    };
+  }, [getActivityFeed, profile?.friendIds, groups]);
 
   const standings = useMemo(() => {
     const map = new Map<string, FriendStanding>();
@@ -106,7 +125,13 @@ export default function FriendsTabScreen() {
     if (result.ok) {
       const nextResults = await searchUsers(query);
       setResults(nextResults);
+      setActivities(await getActivityFeed());
     }
+  }
+
+  async function handleShoutout(activityId: string, shoutoutType: ActivityShoutoutType) {
+    await addActivityShoutout(activityId, shoutoutType);
+    setActivities(await getActivityFeed());
   }
 
   return (
@@ -115,6 +140,15 @@ export default function FriendsTabScreen() {
         eyebrow="Friends"
         title="Discover your circle"
         subtitle="Find people by name or handle, connect quickly, and turn solo habits into visible accountability."
+      />
+
+      <SectionHeader title="Social feed" />
+      <ActivityFeed
+        activities={activities}
+        currentUserId={profile.uid}
+        emptyMessage="Connect with people or join a league to see check-ins, rank moves, and shoutouts here."
+        emptyTitle="Your feed is warming up"
+        onShoutout={handleShoutout}
       />
 
       <SurfaceCard style={commonStyles.sectionCard}>

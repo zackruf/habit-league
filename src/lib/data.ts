@@ -21,6 +21,10 @@ import { getCurrentWeekKeys, getPreviousWeekKeys } from '@/lib/date';
 import { getDefaultShopInventory, normalizeShopInventory } from '@/lib/shop';
 import { getHabitStreakStatus } from '@/lib/streaks';
 import {
+  ActivityInput,
+  ActivityItem,
+  ActivityShoutoutType,
+  ActivityShoutouts,
   AppBundle,
   DemoStore,
   Group,
@@ -45,6 +49,7 @@ const blankStore: DemoStore = {
   habits: {},
   groups: {},
   groupMessages: {},
+  activities: [],
 };
 
 export async function restoreSession(): Promise<SessionUser | null> {
@@ -234,7 +239,16 @@ export async function connectWithUser(uid: string, friendId: string) {
       return { ok: false, message: 'That user could not be found.' };
     }
 
+    const profile = normalizeProfile(profileSnapshot.data() as Profile);
+    const friend = normalizeProfile(friendSnapshot.data() as Profile);
     await updateDoc(doc(firestore, 'profiles', uid), { friendIds: arrayUnion(friendId) });
+    await recordActivity({
+      type: 'connection',
+      actorId: uid,
+      actorName: profile.name,
+      targetUserId: friendId,
+      targetUserName: friend.name,
+    });
     return { ok: true, message: 'Connected.' };
   }
 
@@ -249,6 +263,16 @@ export async function connectWithUser(uid: string, friendId: string) {
     ...profile,
     friendIds: [...new Set([...profile.friendIds, friendId])],
   };
+  store.activities = [
+    buildActivity({
+      type: 'connection',
+      actorId: uid,
+      actorName: profile.name,
+      targetUserId: friendId,
+      targetUserName: friend.name,
+    }),
+    ...(store.activities ?? []),
+  ].slice(0, 80);
   await writeDemoStore(store);
   return { ok: true, message: 'Connected.' };
 }
@@ -469,6 +493,73 @@ export async function sendGroupMessage(groupId: string, sender: Profile, text: s
   await writeDemoStore(store);
 }
 
+export async function loadActivityFeed(uid: string, groupId?: string): Promise<ActivityItem[]> {
+  if (usingFirebaseBackend && firestore) {
+    const profileSnapshot = await getDoc(doc(firestore, 'profiles', uid));
+    const profile = normalizeProfile(profileSnapshot.data() as Profile);
+    const snapshot = await getDocs(query(collection(firestore, 'activities'), orderBy('createdAt', 'desc'), limit(50)));
+    return snapshot.docs
+      .map((entry) => normalizeActivity(entry.data() as ActivityItem))
+      .filter((activity): activity is ActivityItem => Boolean(activity))
+      .filter((activity) => activityMatchesFeed(activity, uid, profile, groupId))
+      .slice(0, groupId ? 8 : 12);
+  }
+
+  const store = await readDemoStore();
+  const profile = normalizeProfile(store.profiles[uid]);
+  return (store.activities ?? [])
+    .map((activity) => normalizeActivity(activity))
+    .filter((activity): activity is ActivityItem => Boolean(activity))
+    .filter((activity) => activityMatchesFeed(activity, uid, profile, groupId))
+    .sort((left, right) => right.createdAt.localeCompare(left.createdAt))
+    .slice(0, groupId ? 8 : 12);
+}
+
+export async function recordActivity(input: ActivityInput) {
+  const activity = buildActivity(input);
+
+  if (usingFirebaseBackend && firestore) {
+    await setDoc(doc(firestore, 'activities', activity.id), activity);
+    return activity;
+  }
+
+  const store = await readDemoStore();
+  store.activities = [activity, ...(store.activities ?? [])].slice(0, 80);
+  await writeDemoStore(store);
+  return activity;
+}
+
+export async function addActivityShoutout(uid: string, activityId: string, shoutoutType: ActivityShoutoutType) {
+  if (usingFirebaseBackend && firestore) {
+    const activityRef = doc(firestore, 'activities', activityId);
+    const snapshot = await getDoc(activityRef);
+    if (!snapshot.exists()) {
+      return { ok: false, message: 'That activity is no longer available.' };
+    }
+
+    const activity = normalizeActivity(snapshot.data() as ActivityItem);
+    if (!activity) {
+      return { ok: false, message: 'That activity is no longer available.' };
+    }
+
+    const nextShoutouts = addShoutoutUser(activity.shoutouts, shoutoutType, uid);
+    await updateDoc(activityRef, { shoutouts: nextShoutouts });
+    return { ok: true, message: 'Shoutout sent.' };
+  }
+
+  const store = await readDemoStore();
+  const activity = normalizeActivity((store.activities ?? []).find((entry) => entry.id === activityId));
+  if (!activity) {
+    return { ok: false, message: 'That activity is no longer available.' };
+  }
+
+  store.activities = (store.activities ?? []).map((entry) =>
+    entry.id === activityId ? { ...activity, shoutouts: addShoutoutUser(activity.shoutouts, shoutoutType, uid) } : entry
+  );
+  await writeDemoStore(store);
+  return { ok: true, message: 'Shoutout sent.' };
+}
+
 function buildGroup(ownerId: string, input: GroupSettingsInput): Group {
   const visibility = input.visibility;
 
@@ -518,8 +609,17 @@ export async function joinGroup(uid: string, joinCode: string) {
     if (group.memberLimit && group.memberIds.length >= group.memberLimit && !group.memberIds.includes(uid)) {
       return { ok: false, message: 'This group is full right now.' };
     }
+    const profileSnapshot = await getDoc(doc(firestore, 'profiles', uid));
+    const profile = normalizeProfile(profileSnapshot.data() as Profile);
     await updateDoc(doc(firestore, 'groups', group.id), { memberIds: arrayUnion(uid) });
     await updateDoc(doc(firestore, 'profiles', uid), { groupIds: arrayUnion(group.id) });
+    await recordActivity({
+      type: 'league_join',
+      actorId: uid,
+      actorName: profile.name,
+      groupId: group.id,
+      groupName: group.name,
+    });
     return { ok: true, message: 'Joined group.', groupId: group.id };
   }
 
@@ -537,6 +637,16 @@ export async function joinGroup(uid: string, joinCode: string) {
 
   store.groups[group.id] = { ...group, memberIds: [...new Set([...group.memberIds, uid])] };
   store.profiles[uid].groupIds = [...new Set([...(store.profiles[uid].groupIds ?? []), group.id])];
+  store.activities = [
+    buildActivity({
+      type: 'league_join',
+      actorId: uid,
+      actorName: store.profiles[uid].name,
+      groupId: group.id,
+      groupName: group.name,
+    }),
+    ...(store.activities ?? []),
+  ].slice(0, 80);
   await writeDemoStore(store);
   return { ok: true, message: 'Joined group.', groupId: group.id };
 }
@@ -557,8 +667,17 @@ export async function joinPublicGroup(uid: string, groupId: string) {
       return { ok: false, message: 'This league is full right now.' };
     }
 
+    const profileSnapshot = await getDoc(doc(firestore, 'profiles', uid));
+    const profile = normalizeProfile(profileSnapshot.data() as Profile);
     await updateDoc(groupRef, { memberIds: arrayUnion(uid) });
     await updateDoc(doc(firestore, 'profiles', uid), { groupIds: arrayUnion(group.id) });
+    await recordActivity({
+      type: 'league_join',
+      actorId: uid,
+      actorName: profile.name,
+      groupId: group.id,
+      groupName: group.name,
+    });
     return { ok: true, message: 'Joined public league.', groupId: group.id };
   }
 
@@ -573,6 +692,16 @@ export async function joinPublicGroup(uid: string, groupId: string) {
 
   store.groups[group.id] = { ...group, memberIds: [...new Set([...group.memberIds, uid])] };
   store.profiles[uid].groupIds = [...new Set([...(store.profiles[uid].groupIds ?? []), group.id])];
+  store.activities = [
+    buildActivity({
+      type: 'league_join',
+      actorId: uid,
+      actorName: store.profiles[uid].name,
+      groupId: group.id,
+      groupName: group.name,
+    }),
+    ...(store.activities ?? []),
+  ].slice(0, 80);
   await writeDemoStore(store);
   return { ok: true, message: 'Joined public league.', groupId: group.id };
 }
@@ -743,6 +872,29 @@ function normalizeMessage(message?: GroupMessage | null): GroupMessage | null {
   };
 }
 
+function normalizeActivity(activity?: ActivityItem | null): ActivityItem | null {
+  if (!activity) {
+    return null;
+  }
+
+  return {
+    ...activity,
+    actorName: activity.actorName || 'Someone',
+    groupId: activity.groupId ?? null,
+    groupName: activity.groupName ?? null,
+    habitId: activity.habitId ?? null,
+    habitTitle: activity.habitTitle ?? null,
+    targetUserId: activity.targetUserId ?? null,
+    targetUserName: activity.targetUserName ?? null,
+    summary: activity.summary || buildActivitySummary(activity),
+    createdAt: activity.createdAt || new Date().toISOString(),
+    shoutouts: {
+      ...getEmptyShoutouts(),
+      ...(activity.shoutouts || {}),
+    },
+  };
+}
+
 function buildMessage(groupId: string, sender: Profile, text: string): GroupMessage {
   return {
     id: createId('message'),
@@ -752,6 +904,83 @@ function buildMessage(groupId: string, sender: Profile, text: string): GroupMess
     text: text.trim(),
     createdAt: new Date().toISOString(),
   };
+}
+
+function buildActivity(input: ActivityInput): ActivityItem {
+  const groupName = input.groupName ?? null;
+  const habitTitle = input.habitTitle ?? null;
+  const targetUserName = input.targetUserName ?? null;
+
+  return {
+    id: createId('activity'),
+    type: input.type,
+    actorId: input.actorId,
+    actorName: input.actorName || 'Someone',
+    groupId: input.groupId ?? null,
+    groupName,
+    habitId: input.habitId ?? null,
+    habitTitle,
+    targetUserId: input.targetUserId ?? null,
+    targetUserName,
+    summary: buildActivitySummary(input),
+    createdAt: new Date().toISOString(),
+    shoutouts: getEmptyShoutouts(),
+  };
+}
+
+function buildActivitySummary(input: ActivityInput) {
+  const actor = input.actorName || 'Someone';
+
+  if (input.type === 'check_in') {
+    return `${actor} checked in ${input.habitTitle || 'a habit'}`;
+  }
+
+  if (input.type === 'rank_movement') {
+    const spots = input.spotsMoved === 1 ? '1 spot' : `${input.spotsMoved || 0} spots`;
+    return `${actor} moved up ${spots}${input.groupName ? ` in ${input.groupName}` : ''}`;
+  }
+
+  if (input.type === 'league_join') {
+    return `${actor} joined ${input.groupName || 'a league'}`;
+  }
+
+  if (input.type === 'connection') {
+    return `${actor} connected with ${input.targetUserName || 'a teammate'}`;
+  }
+
+  return `${actor} made progress`;
+}
+
+function getEmptyShoutouts(): ActivityShoutouts {
+  return {
+    keep_going: [],
+    on_fire: [],
+    nice_work: [],
+  };
+}
+
+function addShoutoutUser(shoutouts: ActivityShoutouts, type: ActivityShoutoutType, uid: string): ActivityShoutouts {
+  return {
+    ...getEmptyShoutouts(),
+    ...shoutouts,
+    [type]: [...new Set([...(shoutouts[type] ?? []), uid])],
+  };
+}
+
+function activityMatchesFeed(activity: ActivityItem, uid: string, profile: Profile | null, groupId?: string) {
+  if (groupId) {
+    return activity.groupId === groupId;
+  }
+
+  if (activity.actorId === uid || activity.targetUserId === uid) {
+    return true;
+  }
+
+  if (!profile) {
+    return false;
+  }
+
+  return profile.friendIds.includes(activity.actorId) || Boolean(activity.groupId && profile.groupIds.includes(activity.groupId));
 }
 
 function buildLeaderboard(members: Profile[], habits: Habit[], weekKeysInput = getCurrentWeekKeys()): LeaderboardEntry[] {
@@ -786,6 +1015,7 @@ async function readDemoStore(): Promise<DemoStore> {
       habits: { ...seeded.habits, ...(parsed.habits || {}) },
       groups: { ...seeded.groups, ...(parsed.groups || {}) },
       groupMessages: { ...seeded.groupMessages, ...(parsed.groupMessages || {}) },
+      activities: [...(parsed.activities || []), ...seeded.activities.filter((seededActivity) => !(parsed.activities || []).some((entry) => entry.id === seededActivity.id))],
     };
   }
 
@@ -1006,6 +1236,56 @@ function seedDemoStore(): DemoStore {
         },
       ],
     },
+    activities: [
+      {
+        id: 'activity-demo-check-in',
+        type: 'check_in',
+        actorId: friendUid,
+        actorName: 'Jamie',
+        groupId,
+        groupName: 'Starter League',
+        habitId: friendHabitId,
+        habitTitle: 'Drink water',
+        targetUserId: null,
+        targetUserName: null,
+        summary: 'Jamie checked in Drink water',
+        createdAt: new Date(Date.now() - 1000 * 60 * 35).toISOString(),
+        shoutouts: {
+          ...getEmptyShoutouts(),
+          keep_going: [demoUid],
+        },
+      },
+      {
+        id: 'activity-demo-rank',
+        type: 'rank_movement',
+        actorId: demoUid,
+        actorName: 'Demo Captain',
+        groupId,
+        groupName: 'Starter League',
+        habitId,
+        habitTitle: 'Morning walk',
+        targetUserId: null,
+        targetUserName: null,
+        summary: 'Demo Captain moved up 1 spot in Starter League',
+        createdAt: new Date(Date.now() - 1000 * 60 * 80).toISOString(),
+        shoutouts: getEmptyShoutouts(),
+      },
+      {
+        id: 'activity-demo-join',
+        type: 'league_join',
+        actorId: runnerUid,
+        actorName: 'Avery',
+        groupId: publicFitnessGroupId,
+        groupName: 'Morning Movers',
+        habitId: null,
+        habitTitle: null,
+        targetUserId: null,
+        targetUserName: null,
+        summary: 'Avery joined Morning Movers',
+        createdAt: new Date(Date.now() - 1000 * 60 * 140).toISOString(),
+        shoutouts: getEmptyShoutouts(),
+      },
+    ],
   };
 }
 
