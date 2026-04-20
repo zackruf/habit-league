@@ -11,6 +11,7 @@ import { PressableCard } from '@/components/PressableCard';
 import { PrimaryButton } from '@/components/PrimaryButton';
 import { SectionHeader } from '@/components/SectionHeader';
 import { StreakRestoreCard } from '@/components/StreakRestoreCard';
+import { StreakRestoreMoment } from '@/components/StreakRestoreMoment';
 import { SurfaceCard } from '@/components/SurfaceCard';
 import { useApp } from '@/context/AppProvider';
 import { useThemePreferences } from '@/context/ThemeProvider';
@@ -20,12 +21,15 @@ import { pickTopRestoreOpportunity } from '@/lib/streaks';
 import { createCommonStyles } from '@/styles/commonStyles';
 import { GroupDetails } from '@/types/models';
 
+const dismissedRestoreMomentKeys = new Set<string>();
+
 export default function HomeScreen() {
   const { getGroupDetails, groups, habits, profile, refreshing, restoreHabitStreak, shopInventory, toggleHabitCheckIn } = useApp();
   const { theme } = useThemePreferences();
   const commonStyles = createCommonStyles(theme.colors);
   const [groupDetails, setGroupDetails] = useState<GroupDetails[]>([]);
   const [restoreBusyId, setRestoreBusyId] = useState<string | null>(null);
+  const [activeRestoreMomentKey, setActiveRestoreMomentKey] = useState<string | null>(null);
 
   useEffect(() => {
     let active = true;
@@ -44,6 +48,27 @@ export default function HomeScreen() {
     };
   }, [getGroupDetails, groups]);
 
+  const topRestoreOpportunity = pickTopRestoreOpportunity(habits);
+  const weekUrgency = getWeekUrgencyMessage();
+  const restoreMomentKey = topRestoreOpportunity
+    ? `${topRestoreOpportunity.habit.id}:${topRestoreOpportunity.streakStatus.restoreEligibility.brokenOn ?? 'unknown'}`
+    : null;
+  const showRestoreMoment = Boolean(
+    topRestoreOpportunity &&
+      restoreMomentKey &&
+      activeRestoreMomentKey === restoreMomentKey &&
+      !dismissedRestoreMomentKeys.has(restoreMomentKey)
+  );
+
+  useEffect(() => {
+    if (!restoreMomentKey || dismissedRestoreMomentKeys.has(restoreMomentKey)) {
+      setActiveRestoreMomentKey(null);
+      return;
+    }
+
+    setActiveRestoreMomentKey(restoreMomentKey);
+  }, [restoreMomentKey]);
+
   if (!profile) {
     return <LoadingScreen message="Preparing your dashboard..." />;
   }
@@ -53,17 +78,44 @@ export default function HomeScreen() {
   const leaderboardNotice = pickTopLeaderboardNotice(
     groupDetails.map((details) => getLeaderboardNotice(details.leaderboard, profile.uid, details.group.name))
   );
-  const topRestoreOpportunity = pickTopRestoreOpportunity(habits);
-  const weekUrgency = getWeekUrgencyMessage();
 
   async function handleRestoreStreak(habitId: string) {
     setRestoreBusyId(habitId);
-    await restoreHabitStreak(habitId);
+    const result = await restoreHabitStreak(habitId);
+    if (result.ok && restoreMomentKey) {
+      dismissedRestoreMomentKeys.add(restoreMomentKey);
+      setActiveRestoreMomentKey(null);
+    }
     setRestoreBusyId(null);
+  }
+
+  function handleDismissRestoreMoment() {
+    if (restoreMomentKey) {
+      dismissedRestoreMomentKeys.add(restoreMomentKey);
+    }
+    setActiveRestoreMomentKey(null);
+  }
+
+  function handleGetRestore() {
+    handleDismissRestoreMoment();
+    router.push('/(app)/(tabs)/shop');
   }
 
   return (
     <AppScreen scrollable contentContainerStyle={commonStyles.pageStack}>
+      {topRestoreOpportunity ? (
+        <StreakRestoreMoment
+          busy={restoreBusyId === topRestoreOpportunity.habit.id}
+          habit={topRestoreOpportunity.habit}
+          hasRestoreCredit={Boolean(shopInventory && shopInventory.streakRestoreCredits > 0)}
+          onDismiss={handleDismissRestoreMoment}
+          onGetRestore={handleGetRestore}
+          onRestore={() => handleRestoreStreak(topRestoreOpportunity.habit.id)}
+          streakStatus={topRestoreOpportunity.streakStatus}
+          visible={showRestoreMoment}
+        />
+      ) : null}
+
       <PageHeader
         eyebrow="Dashboard"
         title={`Hi, ${profile.name.split(' ')[0]}.`}
@@ -85,10 +137,10 @@ export default function HomeScreen() {
           busy={restoreBusyId === topRestoreOpportunity.habit.id}
           helper={
             shopInventory && shopInventory.streakRestoreCredits > 0
-              ? 'One restore credit is ready. Premium billing can gate this later without changing the streak flow.'
-              : 'Pick up a restore in the Shop to save this streak while the 24-hour window is still open.'
+              ? 'One restore credit is ready. Use it before this second-chance window closes.'
+              : 'Get a restore in the Shop to save this streak while the window is still open.'
           }
-          message={`You lost your ${topRestoreOpportunity.streakStatus.restoreEligibility.lostStreak}-day streak. Save it within 24 hours.`}
+          message={`You lost your ${topRestoreOpportunity.streakStatus.restoreEligibility.lostStreak}-day streak. Restore it today.`}
           onRestore={() =>
             shopInventory && shopInventory.streakRestoreCredits > 0
               ? handleRestoreStreak(topRestoreOpportunity.habit.id)
