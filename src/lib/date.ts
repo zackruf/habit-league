@@ -18,6 +18,10 @@ export function getCurrentWeekLabel() {
   return `${formatFriendlyDate(start)} - ${formatFriendlyDate(end)}`;
 }
 
+export function getCurrentDateKey(date: Date = new Date()) {
+  return formatFriendlyDate(date, 'key');
+}
+
 export function getCurrentWeekKeys() {
   const start = getStartOfWeek(new Date());
   return Array.from({ length: 7 }, (_, index) => {
@@ -25,6 +29,13 @@ export function getCurrentWeekKeys() {
     date.setDate(start.getDate() + index);
     return formatFriendlyDate(date, 'key');
   });
+}
+
+export function getCurrentWeekEndKey(date: Date = new Date()) {
+  const start = getStartOfWeek(date);
+  const end = new Date(start);
+  end.setDate(start.getDate() + 6);
+  return formatFriendlyDate(end, 'key');
 }
 
 export function getPreviousWeekKeys() {
@@ -36,6 +47,24 @@ export function getPreviousWeekKeys() {
     date.setDate(start.getDate() + index);
     return formatFriendlyDate(date, 'key');
   });
+}
+
+export function getDateKeysBetween(startKey: string, endKey: string) {
+  const start = new Date(`${startKey}T00:00:00.000Z`);
+  const end = new Date(`${endKey}T00:00:00.000Z`);
+  const keys: string[] = [];
+
+  for (const current = new Date(start); current <= end; current.setUTCDate(current.getUTCDate() + 1)) {
+    keys.push(current.toISOString().slice(0, 10));
+  }
+
+  return keys;
+}
+
+export function getDaysUntilDateKey(targetKey: string, from: Date = new Date()) {
+  const start = new Date(`${getCurrentDateKey(from)}T00:00:00.000Z`);
+  const target = new Date(`${targetKey}T00:00:00.000Z`);
+  return Math.round((target.getTime() - start.getTime()) / (1000 * 60 * 60 * 24));
 }
 
 export function getWeekUrgencyMessage(date: Date = new Date()) {

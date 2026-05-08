@@ -72,8 +72,9 @@ export default function GroupsTabScreen() {
             const rank = foundIndex === -1 ? details.members.length : foundIndex + 1;
             const memberLabel = details.members.length === 1 ? '1 member' : `${details.members.length} members`;
             const visibilityLabel = details.group.visibility === 'public' ? 'Public' : 'Private';
-            const challengeLabel = details.challenges[0]?.title
-              ? `${details.challenges.length === 1 ? 'Active challenge' : `${details.challenges.length} active challenges`}: ${details.challenges[0].title}`
+            const activeChallenges = details.challenges.filter((challenge) => challenge.status === 'active');
+            const challengeLabel = activeChallenges[0]?.title
+              ? `${activeChallenges.length === 1 ? 'Active challenge' : `${activeChallenges.length} active challenges`}: ${activeChallenges[0].title}`
               : 'Add the first shared league challenge';
             const statusLine = `#${rank} this week / ${memberLabel}`;
             const secondaryLine = details.group.stakesEnabled && details.group.stakesText ? `${visibilityLabel} / Stakes live` : visibilityLabel;

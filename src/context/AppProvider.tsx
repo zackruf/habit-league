@@ -27,6 +27,7 @@ import {
   signOut as signOutRequest,
   signUp as signUpRequest,
   toggleHabitCheckIn as toggleHabitCheckInRequest,
+  updateLeagueChallengeLifecycle as updateLeagueChallengeLifecycleRequest,
   updateGroup as updateGroupRequest,
   usingFirebaseBackend,
 } from '@/lib/data';
@@ -70,6 +71,7 @@ type AppContextValue = {
   signOut: () => Promise<void>;
   saveProfile: (patch: Partial<Profile>) => Promise<ActionResult>;
   createHabit: (input: { groupId: string; title: string; emoji: string; category: string; description?: string; frequency?: string }) => Promise<ActionResult>;
+  updateLeagueChallengeLifecycle: (challengeId: string, action: 'archive' | 'complete' | 'reactivate') => Promise<ActionResult>;
   toggleHabitCheckIn: (habitId: string) => Promise<void>;
   restoreHabitStreak: (habitId: string) => Promise<ActionResult>;
   createGroup: (input: GroupSettingsInput) => Promise<GroupActionResult>;
@@ -334,6 +336,23 @@ export function AppProvider({ children, fallback }: PropsWithChildren<{ fallback
     [refreshUserData, session]
   );
 
+  const updateLeagueChallengeLifecycle = useCallback(
+    async (challengeId: string, action: 'archive' | 'complete' | 'reactivate') => {
+      if (!session) {
+        return { ok: false, message: 'No active session.' };
+      }
+
+      setBusy(true);
+      const result = await updateLeagueChallengeLifecycleRequest(session.uid, challengeId, action);
+      if (result.ok) {
+        await refreshUserData(session);
+      }
+      setBusy(false);
+      return result;
+    },
+    [refreshUserData, session]
+  );
+
   const joinPublicGroup = useCallback(
     async (groupId: string) => {
       if (!session) {
@@ -493,6 +512,7 @@ export function AppProvider({ children, fallback }: PropsWithChildren<{ fallback
       signOut,
       saveProfile,
       createHabit,
+      updateLeagueChallengeLifecycle,
       toggleHabitCheckIn,
       restoreHabitStreak,
       createGroup,
@@ -526,6 +546,7 @@ export function AppProvider({ children, fallback }: PropsWithChildren<{ fallback
       signOut,
       saveProfile,
       createHabit,
+      updateLeagueChallengeLifecycle,
       toggleHabitCheckIn,
       restoreHabitStreak,
       createGroup,

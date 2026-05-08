@@ -14,7 +14,7 @@ import { SectionHeader } from '@/components/SectionHeader';
 import { SurfaceCard } from '@/components/SurfaceCard';
 import { useApp } from '@/context/AppProvider';
 import { useThemePreferences } from '@/context/ThemeProvider';
-import { formatFriendlyDate } from '@/lib/date';
+import { formatFriendlyDate, getCurrentWeekKeys, getDaysUntilDateKey, getPreviousWeekKeys } from '@/lib/date';
 import { getLeaderboardNotice } from '@/lib/leaderboard';
 import { createCommonStyles } from '@/styles/commonStyles';
 import { ActivityItem, ActivityShoutoutType, GroupDetails, LeagueChallenge } from '@/types/models';
@@ -22,12 +22,13 @@ import { spacing } from '@/constants/theme';
 
 export default function GroupScreen() {
   const { groupId } = useLocalSearchParams<{ groupId: string }>();
-  const { addActivityShoutout, getActivityFeed, getGroupDetails, recordActivity, session, toggleHabitCheckIn } = useApp();
+  const { addActivityShoutout, getActivityFeed, getGroupDetails, recordActivity, session, toggleHabitCheckIn, updateLeagueChallengeLifecycle } = useApp();
   const { theme } = useThemePreferences();
   const commonStyles = createCommonStyles(theme.colors);
   const [details, setDetails] = useState<GroupDetails | null>(null);
   const [activeTab, setActiveTab] = useState<'overview' | 'chat'>('overview');
   const [activities, setActivities] = useState<ActivityItem[]>([]);
+  const [challengeActionId, setChallengeActionId] = useState<string | null>(null);
 
   useEffect(() => {
     if (!groupId) {
@@ -64,6 +65,8 @@ export default function GroupScreen() {
   const leaderboardNotice = session ? getLeaderboardNotice(details.leaderboard, session.uid) : null;
   const isOwner = session?.uid === details.group.ownerId;
   const todayKey = formatFriendlyDate(new Date(), 'key');
+  const activeChallenges = details.challenges.filter((challenge) => challenge.status === 'active');
+  const pastChallenges = details.challenges.filter((challenge) => challenge.status !== 'active');
 
   async function handleShoutout(activityId: string, shoutoutType: ActivityShoutoutType) {
     if (!details) {
@@ -124,6 +127,31 @@ export default function GroupScreen() {
     setActivities(await getActivityFeed(nextDetails.group.id));
   }
 
+  async function handleChallengeAction(challenge: LeagueChallenge, action: 'archive' | 'complete' | 'reactivate') {
+    if (!details) {
+      return;
+    }
+
+    setChallengeActionId(`${challenge.id}:${action}`);
+    const result = await updateLeagueChallengeLifecycle(challenge.id, action);
+    if (result.ok) {
+      const nextDetails = await getGroupDetails(details.group.id);
+      if (nextDetails) {
+        setDetails(nextDetails);
+      }
+      await recordActivity({
+        type: 'challenge_update',
+        groupId: details.group.id,
+        groupName: details.group.name,
+        habitId: challenge.id,
+        habitTitle: challenge.title,
+        summaryOverride: getChallengeActivitySummary(action, challenge.title, details.group.name),
+      });
+      setActivities(await getActivityFeed(details.group.id));
+    }
+    setChallengeActionId(null);
+  }
+
   return (
     <AppScreen contentContainerStyle={styles.screenContent} disableBottomPadding>
       <View style={commonStyles.pageStack}>
@@ -167,20 +195,23 @@ export default function GroupScreen() {
             <PrimaryButton label="Add challenge" onPress={() => router.push(`/(app)/habits/new?groupId=${details.group.id}`)} variant="secondary" />
           </View>
 
-          <SectionHeader title="League challenges" />
+          <SectionHeader title="Active challenges" />
           <View style={commonStyles.compactSection}>
-            {details.challenges.length ? (
-              details.challenges.map((challenge) => {
+            {activeChallenges.length ? (
+              activeChallenges.map((challenge) => {
                 const userParticipation = session
                   ? details.challengeParticipations.find(
                       (entry) => entry.challengeId === challenge.id && entry.userId === session.uid
                     )
                   : null;
+                const canManage = Boolean(session && (session.uid === details.group.ownerId || session.uid === challenge.createdBy));
                 const checkedToday = Boolean(userParticipation?.checkIns.includes(todayKey));
                 const checkedInCount = details.challengeParticipations.filter(
                   (entry) => entry.challengeId === challenge.id && entry.checkIns.includes(todayKey)
                 ).length;
                 const participantsLabel = checkedInCount === 1 ? '1 check-in today' : `${checkedInCount} check-ins today`;
+                const currentLeader = getChallengeLeaderLabel(challenge, details, 'current');
+                const endingLabel = getChallengeEndingLabel(challenge);
                 return (
                   <SurfaceCard key={challenge.id}>
                     <View style={commonStyles.rowBetween}>
@@ -197,6 +228,8 @@ export default function GroupScreen() {
                         <Text style={commonStyles.smallMuted}>
                           {checkedToday ? 'You checked in today.' : 'Ready for today.'} / {participantsLabel}
                         </Text>
+                        {currentLeader ? <Text style={commonStyles.smallMuted}>{currentLeader}</Text> : null}
+                        {endingLabel ? <Text style={commonStyles.smallMuted}>{endingLabel}</Text> : null}
                       </View>
                       {userParticipation ? (
                         <PrimaryButton
@@ -208,16 +241,82 @@ export default function GroupScreen() {
                         <Text style={commonStyles.smallMuted}>Joins automatically</Text>
                       )}
                     </View>
+                    {canManage ? (
+                      <View style={commonStyles.actionRowTight}>
+                        <PrimaryButton
+                          label={challengeActionId === `${challenge.id}:complete` ? 'Saving...' : 'Complete'}
+                          onPress={() => handleChallengeAction(challenge, 'complete')}
+                          disabled={Boolean(challengeActionId)}
+                          variant="ghost"
+                        />
+                        <PrimaryButton
+                          label={challengeActionId === `${challenge.id}:archive` ? 'Saving...' : 'Archive'}
+                          onPress={() => handleChallengeAction(challenge, 'archive')}
+                          disabled={Boolean(challengeActionId)}
+                          variant="ghost"
+                        />
+                      </View>
+                    ) : null}
                   </SurfaceCard>
                 );
               })
             ) : (
               <SurfaceCard>
-                <Text style={commonStyles.cardTitle}>No league challenges yet</Text>
-                <Text style={commonStyles.cardCopy}>Add the first challenge here so the league has something concrete to compete around this week.</Text>
+                <Text style={commonStyles.cardTitle}>No active challenges right now</Text>
+                <Text style={commonStyles.cardCopy}>Keep the league moving by starting the next shared challenge for everyone.</Text>
+                {isOwner ? (
+                  <View style={commonStyles.actionRowTight}>
+                    <PrimaryButton label="Start the next challenge" onPress={() => router.push(`/(app)/habits/new?groupId=${details.group.id}`)} />
+                  </View>
+                ) : null}
               </SurfaceCard>
             )}
           </View>
+
+          {pastChallenges.length ? (
+            <>
+              <SectionHeader title="Past challenges" />
+              <View style={commonStyles.compactSection}>
+                {pastChallenges.map((challenge) => {
+                  const canManage = Boolean(session && (session.uid === details.group.ownerId || session.uid === challenge.createdBy));
+                  const winnerLabel = getChallengeLeaderLabel(challenge, details, 'winner');
+                  return (
+                    <SurfaceCard key={challenge.id}>
+                      <View style={commonStyles.cardCopyBlock}>
+                        <Text style={commonStyles.cardTitle}>
+                          {challenge.emoji} {challenge.title}
+                        </Text>
+                        <Text style={commonStyles.cardCopy}>
+                          {challenge.status === 'completed' ? 'Completed challenge' : 'Archived challenge'}
+                        </Text>
+                        {winnerLabel ? <Text style={commonStyles.smallMuted}>{winnerLabel}</Text> : null}
+                      </View>
+                      {canManage ? (
+                        <View style={commonStyles.actionRowTight}>
+                          <PrimaryButton
+                            label={challengeActionId === `${challenge.id}:reactivate` ? 'Saving...' : 'Reactivate'}
+                            onPress={() => handleChallengeAction(challenge, 'reactivate')}
+                            disabled={Boolean(challengeActionId)}
+                            variant="ghost"
+                          />
+                        </View>
+                      ) : null}
+                    </SurfaceCard>
+                  );
+                })}
+              </View>
+            </>
+          ) : null}
+
+          {isOwner && pastChallenges.length ? (
+            <SurfaceCard>
+              <Text style={commonStyles.cardTitle}>Keep the league moving</Text>
+              <Text style={commonStyles.cardCopy}>Wrap one challenge, then start the next one before the league loses momentum.</Text>
+              <View style={commonStyles.actionRowTight}>
+                <PrimaryButton label="Start the next challenge" onPress={() => router.push(`/(app)/habits/new?groupId=${details.group.id}`)} />
+              </View>
+            </SurfaceCard>
+          ) : null}
 
           <SectionHeader title="Recent activity" />
           <ActivityFeed
@@ -265,6 +364,57 @@ export default function GroupScreen() {
 function getRank(leaderboard: GroupDetails['leaderboard'], userId: string) {
   const index = leaderboard.findIndex((entry) => entry.userId === userId);
   return index === -1 ? null : index + 1;
+}
+
+function getChallengeEndingLabel(challenge: LeagueChallenge) {
+  if (challenge.status !== 'active' || !challenge.endDateKey) {
+    return null;
+  }
+
+  const daysUntil = getDaysUntilDateKey(challenge.endDateKey);
+  if (daysUntil === 0) {
+    return 'Final push / Ends today';
+  }
+  if (daysUntil === 1) {
+    return 'Ending soon / Ends tomorrow';
+  }
+
+  return null;
+}
+
+function getChallengeLeaderLabel(challenge: LeagueChallenge, details: GroupDetails, mode: 'current' | 'winner') {
+  if (mode === 'winner' && challenge.winnerDisplayName) {
+    return `Winner: ${challenge.winnerDisplayName}`;
+  }
+
+  const keys = new Set(mode === 'winner' ? getPreviousWeekKeys() : getCurrentWeekKeys());
+  const scores = details.challengeParticipations
+    .filter((entry) => entry.challengeId === challenge.id)
+    .map((entry) => ({
+      userId: entry.userId,
+      total: entry.checkIns.filter((dateKey) => keys.has(dateKey)).length,
+      name: details.members.find((member) => member.uid === entry.userId)?.name ?? 'Teammate',
+    }))
+    .filter((entry) => entry.total > 0)
+    .sort((left, right) => right.total - left.total || left.name.localeCompare(right.name));
+
+  if (!scores.length) {
+    return mode === 'winner' ? null : 'Current leader will appear after the first check-ins.';
+  }
+
+  return mode === 'winner'
+    ? `Last winner: ${scores[0].name}`
+    : `Current leader: ${scores[0].name}`;
+}
+
+function getChallengeActivitySummary(action: 'archive' | 'complete' | 'reactivate', challengeTitle: string, groupName: string) {
+  if (action === 'archive') {
+    return `Archived ${challengeTitle} in ${groupName}`;
+  }
+  if (action === 'reactivate') {
+    return `Reactivated ${challengeTitle} in ${groupName}`;
+  }
+  return `Completed ${challengeTitle} in ${groupName}`;
 }
 
 const styles = StyleSheet.create({

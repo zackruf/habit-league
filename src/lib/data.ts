@@ -17,7 +17,7 @@ import {
 } from 'firebase/firestore';
 
 import { firebaseAuth, firebaseConfigured, firestore } from '@/lib/firebase';
-import { getCurrentWeekKeys, getPreviousWeekKeys } from '@/lib/date';
+import { getCurrentDateKey, getCurrentWeekEndKey, getCurrentWeekKeys, getDateKeysBetween, getPreviousWeekKeys } from '@/lib/date';
 import { getDefaultShopInventory, normalizeShopInventory } from '@/lib/shop';
 import { getHabitStreakStatus } from '@/lib/streaks';
 import {
@@ -34,6 +34,7 @@ import {
   GroupSettingsInput,
   Habit,
   LeagueChallenge,
+  LeagueChallengeStatus,
   LeaderboardEntry,
   Profile,
   SessionUser,
@@ -453,6 +454,73 @@ export async function createLeagueChallenge(
   createDemoParticipationsForMembers(store, group.memberIds, challenge);
   await writeDemoStore(store);
   return challenge.id;
+}
+
+export async function updateLeagueChallengeLifecycle(
+  uid: string,
+  challengeId: string,
+  action: 'archive' | 'complete' | 'reactivate'
+) {
+  if (usingFirebaseBackend && firestore) {
+    const db = firestore;
+    const challengeSnapshot = await getDoc(doc(db, 'challenges', challengeId));
+    if (!challengeSnapshot.exists()) {
+      return { ok: false, message: 'That challenge could not be found.' };
+    }
+
+    const challenge = normalizeChallenge(challengeSnapshot.data() as LeagueChallenge);
+    if (!challenge) {
+      return { ok: false, message: 'That challenge could not be found.' };
+    }
+
+    const groupSnapshot = await getDoc(doc(db, 'groups', challenge.groupId));
+    const group = normalizeGroup(groupSnapshot.data() as Group);
+    if (!group) {
+      return { ok: false, message: 'That league could not be found.' };
+    }
+    if (!canManageChallenge(uid, group, challenge)) {
+      return { ok: false, message: 'Only the league owner or challenge creator can do that.' };
+    }
+
+    const participationSnapshot = await getDocs(query(collection(db, 'habits'), where('challengeId', '==', challenge.id)));
+    const participations = participationSnapshot.docs
+      .map((entry) => normalizeHabit(entry.data() as Habit, challenge.groupId))
+      .filter((entry): entry is Habit => Boolean(entry));
+    const profiles = await Promise.all(
+      group.memberIds.map(async (memberId) => {
+        const snapshot = await getDoc(doc(db, 'profiles', memberId));
+        return normalizeProfile(snapshot.data() as Profile);
+      })
+    );
+    const patch = buildChallengeLifecyclePatch(action, uid, challenge, participations, profiles.filter(Boolean) as Profile[]);
+    await updateDoc(doc(db, 'challenges', challenge.id), patch);
+    return { ok: true, message: getChallengeLifecycleMessage(action, patch.status) };
+  }
+
+  const store = await readDemoStore();
+  const challenge = normalizeChallenge(store.challenges[challengeId]);
+  if (!challenge) {
+    return { ok: false, message: 'That challenge could not be found.' };
+  }
+  const group = normalizeGroup(store.groups[challenge.groupId]);
+  if (!group) {
+    return { ok: false, message: 'That league could not be found.' };
+  }
+  if (!canManageChallenge(uid, group, challenge)) {
+    return { ok: false, message: 'Only the league owner or challenge creator can do that.' };
+  }
+
+  const participations = Object.values(store.habits)
+    .map((entry) => normalizeHabit(entry, challenge.groupId))
+    .filter((entry): entry is Habit => Boolean(entry))
+    .filter((entry) => entry.challengeId === challenge.id);
+  const profiles = group.memberIds
+    .map((memberId) => normalizeProfile(store.profiles[memberId]))
+    .filter((entry): entry is Profile => Boolean(entry));
+  const patch = buildChallengeLifecyclePatch(action, uid, challenge, participations, profiles);
+  store.challenges[challenge.id] = { ...challenge, ...patch };
+  await writeDemoStore(store);
+  return { ok: true, message: getChallengeLifecycleMessage(action, patch.status) };
 }
 
 export async function toggleHabitCheckIn(uid: string, habitId: string) {
@@ -1046,11 +1114,20 @@ function normalizeChallenge(challenge?: LeagueChallenge | null): LeagueChallenge
     return null;
   }
 
+  const status = challenge.status ?? (challenge.active === false ? 'archived' : 'active');
   return {
     ...challenge,
     description: challenge.description || '',
     frequency: challenge.frequency || 'Daily',
-    active: challenge.active ?? true,
+    status,
+    startDateKey: challenge.startDateKey || getCurrentDateKey(new Date(challenge.createdAt || new Date().toISOString())),
+    endDateKey: challenge.endDateKey || null,
+    archivedAt: challenge.archivedAt || null,
+    archivedBy: challenge.archivedBy || null,
+    completedAt: challenge.completedAt || null,
+    winnerUserId: challenge.winnerUserId || null,
+    winnerDisplayName: challenge.winnerDisplayName || null,
+    active: status === 'active',
   };
 }
 
@@ -1122,6 +1199,7 @@ function buildLeagueChallenge(
   uid: string,
   input: { groupId: string; title: string; emoji: string; category: string; description?: string; frequency?: string }
 ): LeagueChallenge {
+  const createdAt = new Date().toISOString();
   return {
     id: createId('challenge'),
     groupId: input.groupId,
@@ -1131,7 +1209,15 @@ function buildLeagueChallenge(
     description: input.description?.trim() || '',
     frequency: input.frequency?.trim() || 'Daily',
     createdBy: uid,
-    createdAt: new Date().toISOString(),
+    createdAt,
+    status: 'active',
+    startDateKey: getCurrentDateKey(new Date(createdAt)),
+    endDateKey: getCurrentWeekEndKey(new Date(createdAt)),
+    archivedAt: null,
+    archivedBy: null,
+    completedAt: null,
+    winnerUserId: null,
+    winnerDisplayName: null,
     active: true,
   };
 }
@@ -1220,6 +1306,95 @@ function ensureDemoMemberParticipationsForGroup(store: DemoStore, uid: string, g
   challenges.forEach((challenge) => createDemoParticipationsForMembers(store, [uid], challenge));
 }
 
+function canManageChallenge(uid: string, group: Group, challenge: LeagueChallenge) {
+  return group.ownerId === uid || challenge.createdBy === uid;
+}
+
+function buildChallengeLifecyclePatch(
+  action: 'archive' | 'complete' | 'reactivate',
+  uid: string,
+  challenge: LeagueChallenge,
+  participations: Habit[],
+  members: Profile[]
+) {
+  const timestamp = new Date().toISOString();
+
+  if (action === 'archive') {
+    return {
+      status: 'archived' as LeagueChallengeStatus,
+      active: false,
+      archivedAt: timestamp,
+      archivedBy: uid,
+    };
+  }
+
+  if (action === 'reactivate') {
+    return {
+      status: 'active' as LeagueChallengeStatus,
+      active: true,
+      archivedAt: null,
+      archivedBy: null,
+      completedAt: null,
+      winnerUserId: null,
+      winnerDisplayName: null,
+      endDateKey: challenge.endDateKey || getCurrentWeekEndKey(),
+    };
+  }
+
+  const winner = getChallengeLeader(challenge, participations, members, true);
+  return {
+    status: 'completed' as LeagueChallengeStatus,
+    active: false,
+    completedAt: timestamp,
+    endDateKey: challenge.endDateKey || getCurrentDateKey(),
+    winnerUserId: winner?.userId ?? null,
+    winnerDisplayName: winner?.name ?? null,
+  };
+}
+
+function getChallengeLifecycleMessage(action: 'archive' | 'complete' | 'reactivate', status: LeagueChallengeStatus) {
+  if (action === 'archive' || status === 'archived') {
+    return 'Challenge archived.';
+  }
+  if (action === 'reactivate' || status === 'active') {
+    return 'Challenge is live again.';
+  }
+  return 'Challenge marked complete.';
+}
+
+function getChallengeWindowKeys(challenge: LeagueChallenge, useCompletedWindow = false) {
+  const startKey = challenge.startDateKey || getCurrentDateKey(new Date(challenge.createdAt));
+  const fallbackEndKey =
+    useCompletedWindow && challenge.completedAt
+      ? getCurrentDateKey(new Date(challenge.completedAt))
+      : challenge.endDateKey || getCurrentWeekEndKey(new Date(challenge.createdAt));
+  const endKey = challenge.endDateKey || fallbackEndKey;
+  if (!endKey || startKey > endKey) {
+    return [startKey];
+  }
+  return getDateKeysBetween(startKey, endKey);
+}
+
+function getChallengeLeader(
+  challenge: LeagueChallenge,
+  participations: Habit[],
+  members: Profile[],
+  useCompletedWindow = false
+) {
+  const relevantParticipations = participations.filter((entry) => entry.challengeId === challenge.id);
+  const keys = new Set(getChallengeWindowKeys(challenge, useCompletedWindow));
+  const scores = relevantParticipations
+    .map((entry) => ({
+      userId: entry.userId,
+      total: entry.checkIns.filter((dateKey) => keys.has(dateKey)).length,
+      name: members.find((member) => member.uid === entry.userId)?.name ?? 'Teammate',
+    }))
+    .filter((entry) => entry.total > 0)
+    .sort((left, right) => right.total - left.total || left.name.localeCompare(right.name));
+
+  return scores[0] ?? null;
+}
+
 function mergeLegacyChallenges(challenges: LeagueChallenge[], participations: Habit[], groupId: string) {
   const challengeMap = new Map(challenges.map((challenge) => [challenge.id, challenge]));
 
@@ -1238,6 +1413,14 @@ function mergeLegacyChallenges(challenges: LeagueChallenge[], participations: Ha
       frequency: 'Daily',
       createdBy: participation.userId,
       createdAt: participation.createdAt,
+      status: 'active',
+      startDateKey: getCurrentDateKey(new Date(participation.createdAt)),
+      endDateKey: null,
+      archivedAt: null,
+      archivedBy: null,
+      completedAt: null,
+      winnerUserId: null,
+      winnerDisplayName: null,
       active: true,
     });
   });
@@ -1268,6 +1451,10 @@ function buildActivity(input: ActivityInput): ActivityItem {
 }
 
 function buildActivitySummary(input: ActivityInput) {
+  if (input.summaryOverride?.trim()) {
+    return input.summaryOverride.trim();
+  }
+
   const actor = input.actorName || 'Someone';
 
   if (input.type === 'check_in') {
@@ -1285,6 +1472,10 @@ function buildActivitySummary(input: ActivityInput) {
 
   if (input.type === 'connection') {
     return `${actor} and ${input.targetUserName || 'a teammate'} connected`;
+  }
+
+  if (input.type === 'challenge_update') {
+    return `${actor} updated ${input.habitTitle || 'a league challenge'}${input.groupName ? ` in ${input.groupName}` : ''}`;
   }
 
   return `${actor} made progress`;
@@ -1379,15 +1570,20 @@ function seedDemoStore(): DemoStore {
   const publicFocusGroupId = 'group-public-focus';
   const walkChallengeId = 'challenge-starter-walk';
   const waterChallengeId = 'challenge-starter-water';
+  const journalChallengeId = 'challenge-starter-journal';
   const workoutChallengeId = 'challenge-public-workout';
   const readingChallengeId = 'challenge-public-reading';
   const demoWalkParticipationId = 'habit-demo-walk';
   const friendWalkParticipationId = 'habit-friend-walk';
   const demoWaterParticipationId = 'habit-demo-water';
   const friendWaterParticipationId = 'habit-friend-water';
+  const demoJournalParticipationId = 'habit-demo-journal';
+  const friendJournalParticipationId = 'habit-friend-journal';
   const runnerHabitId = 'habit-runner-workout';
   const readerHabitId = 'habit-reader-reading';
   const recentKeys = getRecentDateKeys(4);
+  const currentWeekKeys = getCurrentWeekKeys();
+  const previousWeekKeys = getPreviousWeekKeys();
 
   return {
     ...blankStore,
@@ -1469,6 +1665,14 @@ function seedDemoStore(): DemoStore {
         frequency: 'Daily',
         createdBy: demoUid,
         createdAt: new Date().toISOString(),
+        status: 'active',
+        startDateKey: currentWeekKeys[0],
+        endDateKey: getCurrentWeekEndKey(),
+        archivedAt: null,
+        archivedBy: null,
+        completedAt: null,
+        winnerUserId: null,
+        winnerDisplayName: null,
         active: true,
       },
       [waterChallengeId]: {
@@ -1481,7 +1685,35 @@ function seedDemoStore(): DemoStore {
         frequency: 'Daily',
         createdBy: friendUid,
         createdAt: new Date().toISOString(),
+        status: 'active',
+        startDateKey: currentWeekKeys[0],
+        endDateKey: getCurrentWeekEndKey(),
+        archivedAt: null,
+        archivedBy: null,
+        completedAt: null,
+        winnerUserId: null,
+        winnerDisplayName: null,
         active: true,
+      },
+      [journalChallengeId]: {
+        id: journalChallengeId,
+        groupId,
+        title: 'Night journal',
+        emoji: 'Write',
+        category: 'Reflection',
+        description: 'Close the day with a short journal entry and keep the streak of honesty going.',
+        frequency: 'Daily',
+        createdBy: demoUid,
+        createdAt: new Date(Date.now() - 1000 * 60 * 60 * 24 * 8).toISOString(),
+        status: 'completed',
+        startDateKey: previousWeekKeys[0],
+        endDateKey: previousWeekKeys[previousWeekKeys.length - 1],
+        archivedAt: null,
+        archivedBy: null,
+        completedAt: new Date(Date.now() - 1000 * 60 * 60 * 24).toISOString(),
+        winnerUserId: friendUid,
+        winnerDisplayName: 'Jamie',
+        active: false,
       },
       [workoutChallengeId]: {
         id: workoutChallengeId,
@@ -1493,6 +1725,14 @@ function seedDemoStore(): DemoStore {
         frequency: 'Daily',
         createdBy: runnerUid,
         createdAt: new Date().toISOString(),
+        status: 'active',
+        startDateKey: currentWeekKeys[0],
+        endDateKey: getCurrentWeekEndKey(),
+        archivedAt: null,
+        archivedBy: null,
+        completedAt: null,
+        winnerUserId: null,
+        winnerDisplayName: null,
         active: true,
       },
       [readingChallengeId]: {
@@ -1505,6 +1745,14 @@ function seedDemoStore(): DemoStore {
         frequency: 'Daily',
         createdBy: readerUid,
         createdAt: new Date().toISOString(),
+        status: 'active',
+        startDateKey: currentWeekKeys[0],
+        endDateKey: getCurrentWeekEndKey(),
+        archivedAt: null,
+        archivedBy: null,
+        completedAt: null,
+        winnerUserId: null,
+        winnerDisplayName: null,
         active: true,
       },
     },
@@ -1558,6 +1806,32 @@ function seedDemoStore(): DemoStore {
         category: 'Wellness',
         createdAt: new Date().toISOString(),
         checkIns: recentKeys.slice(2, 4),
+        restoreUsedForDate: null,
+        restoreUsedAt: null,
+      },
+      [demoJournalParticipationId]: {
+        id: demoJournalParticipationId,
+        userId: demoUid,
+        groupId,
+        challengeId: journalChallengeId,
+        title: 'Night journal',
+        emoji: 'Write',
+        category: 'Reflection',
+        createdAt: new Date(Date.now() - 1000 * 60 * 60 * 24 * 8).toISOString(),
+        checkIns: previousWeekKeys.slice(0, 3),
+        restoreUsedForDate: null,
+        restoreUsedAt: null,
+      },
+      [friendJournalParticipationId]: {
+        id: friendJournalParticipationId,
+        userId: friendUid,
+        groupId,
+        challengeId: journalChallengeId,
+        title: 'Night journal',
+        emoji: 'Write',
+        category: 'Reflection',
+        createdAt: new Date(Date.now() - 1000 * 60 * 60 * 24 * 8).toISOString(),
+        checkIns: previousWeekKeys.slice(0, 5),
         restoreUsedForDate: null,
         restoreUsedAt: null,
       },

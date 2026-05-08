@@ -15,11 +15,11 @@ import { StreakRestoreMoment } from '@/components/StreakRestoreMoment';
 import { SurfaceCard } from '@/components/SurfaceCard';
 import { useApp } from '@/context/AppProvider';
 import { useThemePreferences } from '@/context/ThemeProvider';
-import { formatFriendlyDate, getCurrentWeekLabel, getWeekUrgencyMessage } from '@/lib/date';
+import { formatFriendlyDate, getCurrentWeekLabel, getDaysUntilDateKey, getWeekUrgencyMessage } from '@/lib/date';
 import { getLeaderboardNotice, pickTopLeaderboardNotice } from '@/lib/leaderboard';
 import { pickTopRestoreOpportunity } from '@/lib/streaks';
 import { createCommonStyles } from '@/styles/commonStyles';
-import { GroupDetails, Habit, LeaderboardEntry } from '@/types/models';
+import { GroupDetails, Habit, LeaderboardEntry, LeagueChallenge } from '@/types/models';
 
 const dismissedRestoreMomentKeys = new Set<string>();
 const dismissedWeeklyRecapKeys = new Set<string>();
@@ -98,14 +98,20 @@ export default function HomeScreen() {
     setActiveRestoreMomentKey(restoreMomentKey);
   }, [restoreMomentKey]);
 
-  const groupMap = useMemo(() => new Map(groups.map((group) => [group.id, group.name])), [groups]);
-  const activeLeagueHabits = habits.filter((habit) => habit.groupId);
-
   if (!profile) {
     return <LoadingScreen message="Preparing your dashboard..." />;
   }
 
   const todayKey = formatFriendlyDate(new Date(), 'key');
+  const challengeMap = new Map(groupDetails.flatMap((details) => details.challenges.map((challenge) => [challenge.id, challenge] as const)));
+  const activeLeagueHabits =
+    groupDetails.length === 0
+      ? habits.filter((habit) => habit.groupId)
+      : habits.filter((habit) => {
+          const challenge = challengeMap.get(habit.challengeId);
+          return habit.groupId && (!challenge || challenge.status === 'active');
+        });
+  const endingSoonChallenges = Array.from(challengeMap.values()).filter((challenge) => isChallengeEndingSoon(challenge));
   const completedToday = activeLeagueHabits.filter((habit) => habit.checkIns.includes(todayKey)).length;
   const leaderboardNotice = pickTopLeaderboardNotice(
     groupDetails.map((details) => getLeaderboardNotice(details.leaderboard, profile.uid, details.group.name))
@@ -238,6 +244,15 @@ export default function HomeScreen() {
         </SurfaceCard>
       ) : null}
 
+      {endingSoonChallenges.length ? (
+        <SurfaceCard style={commonStyles.noticeCard}>
+          <Text style={commonStyles.noticeEyebrow}>Ending soon</Text>
+          <Text style={commonStyles.noticeMessage}>
+            {endingSoonChallenges[0].title} in {groupDetails.find((details) => details.group.id === endingSoonChallenges[0].groupId)?.group.name ?? 'your league'} is in its final push.
+          </Text>
+        </SurfaceCard>
+      ) : null}
+
       {topRestoreOpportunity ? (
         <StreakRestoreCard
           actionLabel={shopInventory && shopInventory.streakRestoreCredits > 0 ? 'Restore streak' : 'Open Shop'}
@@ -273,7 +288,7 @@ export default function HomeScreen() {
               key={habit.id}
               actionLabel="Check in for league"
               habit={habit}
-              helperText={`${groupMap.get(habit.groupId) ?? 'League'} / Shared challenge / ${habit.category}`}
+              helperText={getDashboardHabitHelper(habit, challengeMap.get(habit.challengeId), groupDetails)}
               onToggle={() => handleToggleHabitCheckIn(habit)}
             />
           ))
@@ -292,7 +307,7 @@ export default function HomeScreen() {
             const foundIndex = details.leaderboard.findIndex((entry) => entry.userId === profile.uid);
             const rank = foundIndex === -1 ? null : foundIndex + 1;
             const visibilityLabel = details.group.visibility === 'public' ? 'Public' : 'Private';
-            const topChallenge = details.challenges[0]?.title;
+            const topChallenge = details.challenges.find((challenge) => challenge.status === 'active')?.title;
             const metadata = rank
               ? `#${rank} this week / ${visibilityLabel}${topChallenge ? ` / ${topChallenge}` : ''}`
               : `Leader: ${details.leaderboard[0]?.name ?? 'Nobody yet'} / ${visibilityLabel}`;
@@ -326,6 +341,24 @@ export default function HomeScreen() {
       </View>
     </AppScreen>
   );
+}
+
+function getDashboardHabitHelper(habit: Habit, challenge: LeagueChallenge | undefined, groupDetails: GroupDetails[]) {
+  const groupName = groupDetails.find((details) => details.group.id === habit.groupId)?.group.name ?? 'League';
+  if (challenge && isChallengeEndingSoon(challenge)) {
+    return `${groupName} / Final push / ${habit.category}`;
+  }
+
+  return `${groupName} / Shared challenge / ${habit.category}`;
+}
+
+function isChallengeEndingSoon(challenge: LeagueChallenge) {
+  if (challenge.status !== 'active' || !challenge.endDateKey) {
+    return false;
+  }
+
+  const daysUntil = getDaysUntilDateKey(challenge.endDateKey);
+  return daysUntil >= 0 && daysUntil <= 1;
 }
 
 function buildRankSnapshots(groupDetails: GroupDetails[], userId: string): RankSnapshot[] {

@@ -60,6 +60,8 @@ export type HabitStreakStatus = {
   restoreEligibility: HabitRestoreEligibility;
 };
 
+export type LeagueChallengeStatus = 'active' | 'archived' | 'completed';
+
 export type LeagueChallenge = {
   id: string;
   groupId: string;
@@ -70,6 +72,14 @@ export type LeagueChallenge = {
   frequency: string;
   createdBy: string;
   createdAt: string;
+  status: LeagueChallengeStatus;
+  startDateKey: string;
+  endDateKey: string | null;
+  archivedAt: string | null;
+  archivedBy: string | null;
+  completedAt: string | null;
+  winnerUserId: string | null;
+  winnerDisplayName: string | null;
   active: boolean;
 };
 
@@ -107,7 +117,7 @@ export type GroupMessage = {
   createdAt: string;
 };
 
-export type ActivityType = 'check_in' | 'rank_movement' | 'league_join' | 'connection';
+export type ActivityType = 'check_in' | 'rank_movement' | 'league_join' | 'connection' | 'challenge_update';
 
 export type ActivityShoutoutType = 'keep_going' | 'on_fire' | 'nice_work';
 
@@ -139,6 +149,7 @@ export type ActivityInput = {
   habitTitle?: string | null;
   targetUserId?: string | null;
   targetUserName?: string | null;
+  summaryOverride?: string;
   spotsMoved?: number;
   rank?: number | null;
 };
