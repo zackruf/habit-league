@@ -31,6 +31,7 @@ export type ShopInventory = {
 export type Habit = {
   id: string;
   userId: string;
+  groupId: string;
   title: string;
   emoji: string;
   category: string;
@@ -144,6 +145,7 @@ export type LeaderboardEntry = {
 export type GroupDetails = {
   group: Group;
   members: Profile[];
+  habits: Habit[];
   leaderboard: LeaderboardEntry[];
   previousWeekLeaderboard: LeaderboardEntry[];
 };

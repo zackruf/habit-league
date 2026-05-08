@@ -32,7 +32,7 @@ export default function CreateGroupScreen() {
   return (
     <AppScreen scrollable contentContainerStyle={commonStyles.pageStack}>
       <PageHeader
-        eyebrow="Create group"
+        eyebrow="Create league"
         title="Start a league for your crew"
         subtitle="Set the basics, choose visibility, and optionally add a challenge consequence without adding anything risky."
       />

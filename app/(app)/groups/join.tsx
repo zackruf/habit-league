@@ -48,15 +48,15 @@ export default function JoinGroupScreen() {
 
   return (
     <AppScreen scrollable>
-      <Text style={commonStyles.eyebrow}>Join group</Text>
+      <Text style={commonStyles.eyebrow}>Join league</Text>
       <Text style={commonStyles.pageTitle}>Get into competition</Text>
       <Text style={commonStyles.pageCopy}>Use a friend code, or join an open starter league right now.</Text>
 
       <SurfaceCard>
-        <Text style={commonStyles.cardTitle}>Friend invite</Text>
+        <Text style={commonStyles.cardTitle}>Invite code</Text>
         <TextField label="Join code" value={joinCode} onChangeText={setJoinCode} autoCapitalize="characters" placeholder="ABC123" />
         {error ? <Text style={commonStyles.errorText}>{error}</Text> : null}
-        <PrimaryButton label={busy ? 'Joining...' : 'Join group'} onPress={handleJoin} disabled={busy} />
+        <PrimaryButton label={busy ? 'Joining...' : 'Join league'} onPress={handleJoin} disabled={busy} />
       </SurfaceCard>
 
       <SurfaceCard>

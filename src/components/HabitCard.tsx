@@ -10,10 +10,12 @@ import { SurfaceCard } from './SurfaceCard';
 
 type HabitCardProps = {
   habit: Habit;
+  helperText?: string;
+  actionLabel?: string;
   onToggle: () => void;
 };
 
-export function HabitCard({ habit, onToggle }: HabitCardProps) {
+export function HabitCard({ actionLabel = 'Check in', habit, helperText, onToggle }: HabitCardProps) {
   const { theme } = useThemePreferences();
   const commonStyles = createCommonStyles(theme.colors);
   const checkedToday = habit.checkIns.includes(formatFriendlyDate(new Date(), 'key'));
@@ -27,11 +29,11 @@ export function HabitCard({ habit, onToggle }: HabitCardProps) {
           <Text style={commonStyles.cardTitle}>
             {habit.emoji} {habit.title}
           </Text>
-          <Text style={commonStyles.cardCopy}>{habit.category}</Text>
+          <Text style={commonStyles.cardCopy}>{helperText || habit.category}</Text>
           <Text style={commonStyles.smallMuted}>{streakLine}</Text>
         </View>
         <PrimaryButton
-          label={checkedToday ? 'Checked in' : 'Check in'}
+          label={checkedToday ? 'Checked in' : actionLabel}
           onPress={onToggle}
           variant={checkedToday ? 'secondary' : 'primary'}
         />

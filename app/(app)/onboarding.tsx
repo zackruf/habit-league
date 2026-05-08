@@ -36,9 +36,7 @@ export default function OnboardingScreen() {
     return <Redirect href="/" />;
   }
 
-  async function handleSave() {
-    setError('');
-    const selectedTemplate = HABIT_TEMPLATES.find((template) => template.id === selectedTemplateId) ?? getDefaultHabitTemplate();
+  async function saveBasics() {
     const result = await saveProfile({
       name,
       bio,
@@ -48,10 +46,32 @@ export default function OnboardingScreen() {
 
     if (!result.ok) {
       setError(result.message);
+      return false;
+    }
+
+    return true;
+  }
+
+  async function handleSave() {
+    setError('');
+    const selectedTemplate = HABIT_TEMPLATES.find((template) => template.id === selectedTemplateId) ?? getDefaultHabitTemplate();
+    const basicsSaved = await saveBasics();
+    if (!basicsSaved) {
+      return;
+    }
+    if (!selectedGroupId) {
+      setError('Choose a starter league or create your own.');
+      return;
+    }
+
+    const joinResult = await joinPublicGroup(selectedGroupId);
+    if (!joinResult.ok || !joinResult.groupId) {
+      setError(joinResult.message);
       return;
     }
 
     const habitResult = await createHabit({
+      groupId: joinResult.groupId,
       title: selectedTemplate.title,
       emoji: selectedTemplate.emoji,
       category: selectedTemplate.category,
@@ -62,20 +82,22 @@ export default function OnboardingScreen() {
       return;
     }
 
-    if (selectedGroupId) {
-      const joinResult = await joinPublicGroup(selectedGroupId);
-      if (joinResult.ok && joinResult.groupId) {
-        router.replace(`/(app)/groups/${joinResult.groupId}`);
-        return;
-      }
-      if (!joinResult.ok) {
-        setError(joinResult.message);
-        return;
-      }
-    }
+    router.replace(`/(app)/groups/${joinResult.groupId}`);
+  }
 
-    if (result.ok) {
-      router.replace('/(app)/(tabs)/dashboard');
+  async function handleCreateLeague() {
+    setError('');
+    const basicsSaved = await saveBasics();
+    if (basicsSaved) {
+      router.push('/(app)/groups/new');
+    }
+  }
+
+  async function handleUseInviteCode() {
+    setError('');
+    const basicsSaved = await saveBasics();
+    if (basicsSaved) {
+      router.push('/(app)/groups/join');
     }
   }
 
@@ -83,7 +105,7 @@ export default function OnboardingScreen() {
     <AppScreen scrollable>
       <Text style={commonStyles.eyebrow}>Onboarding</Text>
       <Text style={commonStyles.pageTitle}>Get into your first league</Text>
-      <Text style={commonStyles.pageCopy}>Pick one habit and join a starter league now. You can refine everything later.</Text>
+      <Text style={commonStyles.pageCopy}>Pick a challenge direction, then join or create a league so your first check-in lands inside competition.</Text>
 
       <SurfaceCard>
         <Text style={commonStyles.cardTitle}>How others will see you</Text>
@@ -93,8 +115,8 @@ export default function OnboardingScreen() {
       </SurfaceCard>
 
       <SurfaceCard>
-        <Text style={commonStyles.cardTitle}>Choose your first habit</Text>
-        <Text style={commonStyles.cardCopy}>Templates reduce the blank-page problem and get you to a check-in faster.</Text>
+        <Text style={commonStyles.cardTitle}>Choose your first league challenge</Text>
+        <Text style={commonStyles.cardCopy}>Templates reduce blank-page friction and give your league a challenge to rally around immediately.</Text>
         <View style={styles.templateGrid}>
           {HABIT_TEMPLATES.slice(0, 4).map((template) => {
             const selected = template.id === selectedTemplateId;
@@ -124,7 +146,7 @@ export default function OnboardingScreen() {
 
       <SurfaceCard>
         <Text style={commonStyles.cardTitle}>Join a public starter league</Text>
-        <Text style={commonStyles.cardCopy}>No friend code needed. Start with strangers now, invite friends later.</Text>
+        <Text style={commonStyles.cardCopy}>No invite needed. Start with a live league now, or branch into your own setup below.</Text>
         {publicGroups.length ? (
           publicGroups.slice(0, 3).map((group) => {
             const selected = group.id === selectedGroupId;
@@ -158,7 +180,13 @@ export default function OnboardingScreen() {
           <Text style={commonStyles.cardCopy}>No public leagues are open yet. You can create or join one from Groups after setup.</Text>
         )}
         {error ? <Text style={commonStyles.errorText}>{error}</Text> : null}
-        <PrimaryButton label={busy ? 'Saving...' : 'Finish onboarding'} onPress={handleSave} disabled={busy} />
+        <View style={commonStyles.actionRowTight}>
+          <PrimaryButton label={busy ? 'Saving...' : 'Join league and continue'} onPress={handleSave} disabled={busy} />
+        </View>
+        <View style={commonStyles.actionRowTight}>
+          <PrimaryButton label="Use invite code" onPress={handleUseInviteCode} variant="secondary" disabled={busy} />
+          <PrimaryButton label="Create a league" onPress={handleCreateLeague} variant="secondary" disabled={busy} />
+        </View>
       </SurfaceCard>
     </AppScreen>
   );

@@ -9,6 +9,7 @@ import { GroupSummaryCard } from '@/components/GroupSummaryCard';
 import { LeaderboardNoticeCard } from '@/components/LeaderboardNoticeCard';
 import { LoadingScreen } from '@/components/LoadingScreen';
 import { PageHeader } from '@/components/PageHeader';
+import { PrimaryButton } from '@/components/PrimaryButton';
 import { SectionHeader } from '@/components/SectionHeader';
 import { SurfaceCard } from '@/components/SurfaceCard';
 import { useApp } from '@/context/AppProvider';
@@ -75,7 +76,7 @@ export default function GroupScreen() {
     <AppScreen contentContainerStyle={styles.screenContent} disableBottomPadding>
       <View style={commonStyles.pageStack}>
         <PageHeader
-          eyebrow="Group"
+          eyebrow="League"
           title={details.group.name}
           subtitle={details.group.description || 'A focused accountability group built around showing up each week.'}
         />
@@ -109,6 +110,37 @@ export default function GroupScreen() {
           style={styles.body}
         >
           <GroupSummaryCard group={details.group} memberCount={details.members.length} onEdit={isOwner ? () => router.push(`/(app)/groups/${details.group.id}/edit`) : undefined} />
+
+          <View style={commonStyles.actionRowTight}>
+            <PrimaryButton label="Add challenge" onPress={() => router.push(`/(app)/habits/new?groupId=${details.group.id}`)} variant="secondary" />
+          </View>
+
+          <SectionHeader title="League challenges" />
+          <View style={commonStyles.compactSection}>
+            {details.habits.length ? (
+              details.habits.map((habit) => {
+                const owner = details.members.find((member) => member.uid === habit.userId);
+                return (
+                  <SurfaceCard key={habit.id}>
+                    <View style={commonStyles.rowBetween}>
+                      <View style={commonStyles.cardCopyBlock}>
+                        <Text style={commonStyles.cardTitle}>
+                          {habit.emoji} {habit.title}
+                        </Text>
+                        <Text style={commonStyles.cardCopy}>{owner?.name ?? 'League member'} / {habit.category}</Text>
+                      </View>
+                      <Text style={commonStyles.listValue}>{habit.checkIns.length}</Text>
+                    </View>
+                  </SurfaceCard>
+                );
+              })
+            ) : (
+              <SurfaceCard>
+                <Text style={commonStyles.cardTitle}>No league challenges yet</Text>
+                <Text style={commonStyles.cardCopy}>Add the first challenge here so the league has something concrete to compete around this week.</Text>
+              </SurfaceCard>
+            )}
+          </View>
 
           <SectionHeader title="Recent activity" />
           <ActivityFeed

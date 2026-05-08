@@ -1,5 +1,5 @@
 import { router } from 'expo-router';
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Text, View } from 'react-native';
 
 import { AppScreen } from '@/components/AppScreen';
@@ -98,12 +98,15 @@ export default function HomeScreen() {
     setActiveRestoreMomentKey(restoreMomentKey);
   }, [restoreMomentKey]);
 
+  const groupMap = useMemo(() => new Map(groups.map((group) => [group.id, group.name])), [groups]);
+  const activeLeagueHabits = habits.filter((habit) => habit.groupId);
+
   if (!profile) {
     return <LoadingScreen message="Preparing your dashboard..." />;
   }
 
   const todayKey = formatFriendlyDate(new Date(), 'key');
-  const completedToday = habits.filter((habit) => habit.checkIns.includes(todayKey)).length;
+  const completedToday = activeLeagueHabits.filter((habit) => habit.checkIns.includes(todayKey)).length;
   const leaderboardNotice = pickTopLeaderboardNotice(
     groupDetails.map((details) => getLeaderboardNotice(details.leaderboard, profile.uid, details.group.name))
   );
@@ -149,18 +152,16 @@ export default function HomeScreen() {
     setGroupDetails(nextDetails);
 
     if (!wasCheckedInToday) {
-      const activityGroups = nextDetails.filter((details) => details.group.memberIds.includes(profile.uid));
-      await Promise.all(
-        activityGroups.map((details) =>
-          recordActivity({
-            type: 'check_in',
-            groupId: details.group.id,
-            groupName: details.group.name,
-            habitId: habit.id,
-            habitTitle: habit.title,
-          })
-        )
-      );
+      const habitGroup = nextDetails.find((details) => details.group.id === habit.groupId);
+      if (habitGroup) {
+        await recordActivity({
+          type: 'check_in',
+          groupId: habitGroup.group.id,
+          groupName: habitGroup.group.name,
+          habitId: habit.id,
+          habitTitle: habit.title,
+        });
+      }
 
       const feedback = getRankFeedback(beforeRanks, buildRankSnapshots(nextDetails, profile.uid));
       setRankFeedback(feedback);
@@ -207,7 +208,7 @@ export default function HomeScreen() {
       <PageHeader
         eyebrow="Dashboard"
         title={`Hi, ${profile.name.split(' ')[0]}.`}
-        subtitle={`${completedToday} of ${habits.length} habits checked in today. ${getCurrentWeekLabel()}.`}
+        subtitle={`${completedToday} league check-ins across ${activeLeagueHabits.length} active challenges. ${getCurrentWeekLabel()}.`}
       />
 
       {rankFeedback ? (
@@ -257,18 +258,29 @@ export default function HomeScreen() {
       ) : null}
 
       <View style={commonStyles.actionRowTight}>
-        <PrimaryButton label="Create habit" onPress={() => router.push('/(app)/habits/new')} />
-        <PrimaryButton label="Create group" onPress={() => router.push('/(app)/groups/new')} variant="secondary" />
+        <PrimaryButton label="Join a league" onPress={() => router.push('/(app)/groups/join')} />
+        <PrimaryButton label="Create league" onPress={() => router.push('/(app)/groups/new')} variant="secondary" />
+      </View>
+      <View style={commonStyles.actionRowTight}>
+        <PrimaryButton label="Add group challenge" onPress={() => router.push('/(app)/habits/new')} variant="secondary" />
       </View>
 
-      <SectionHeader title="Today's habits" action={refreshing ? <Text style={commonStyles.mutedText}>Syncing...</Text> : undefined} />
+      <SectionHeader title="Today's league check-ins" action={refreshing ? <Text style={commonStyles.mutedText}>Syncing...</Text> : undefined} />
       <View style={commonStyles.compactSection}>
-        {habits.length ? (
-          habits.map((habit) => <HabitCard key={habit.id} habit={habit} onToggle={() => handleToggleHabitCheckIn(habit)} />)
+        {activeLeagueHabits.length ? (
+          activeLeagueHabits.map((habit) => (
+            <HabitCard
+              key={habit.id}
+              actionLabel="Check in for league"
+              habit={habit}
+              helperText={`${groupMap.get(habit.groupId) ?? 'League challenge'} / ${habit.category}`}
+              onToggle={() => handleToggleHabitCheckIn(habit)}
+            />
+          ))
         ) : (
           <SurfaceCard>
-            <Text style={commonStyles.cardTitle}>No habits yet</Text>
-            <Text style={commonStyles.cardCopy}>Add one habit and the dashboard will start feeling useful right away.</Text>
+            <Text style={commonStyles.cardTitle}>No league challenges yet</Text>
+            <Text style={commonStyles.cardCopy}>Join or create a league, then add a challenge so your check-ins start moving the leaderboard.</Text>
           </SurfaceCard>
         )}
       </View>
@@ -280,7 +292,10 @@ export default function HomeScreen() {
             const foundIndex = details.leaderboard.findIndex((entry) => entry.userId === profile.uid);
             const rank = foundIndex === -1 ? null : foundIndex + 1;
             const visibilityLabel = details.group.visibility === 'public' ? 'Public' : 'Private';
-            const metadata = rank ? `#${rank} this week / ${visibilityLabel}` : `Leader: ${details.leaderboard[0]?.name ?? 'Nobody yet'} / ${visibilityLabel}`;
+            const topChallenge = details.habits[0]?.title;
+            const metadata = rank
+              ? `#${rank} this week / ${visibilityLabel}${topChallenge ? ` / ${topChallenge}` : ''}`
+              : `Leader: ${details.leaderboard[0]?.name ?? 'Nobody yet'} / ${visibilityLabel}`;
 
             return (
               <PressableCard

@@ -1,8 +1,9 @@
-import { router } from 'expo-router';
-import { useState } from 'react';
+import { router, useLocalSearchParams } from 'expo-router';
+import { useMemo, useState } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 
 import { AppScreen } from '@/components/AppScreen';
+import { PageHeader } from '@/components/PageHeader';
 import { PrimaryButton } from '@/components/PrimaryButton';
 import { SurfaceCard } from '@/components/SurfaceCard';
 import { TextField } from '@/components/TextField';
@@ -13,14 +14,19 @@ import { getDefaultHabitTemplate, HABIT_TEMPLATES, HabitTemplate } from '@/lib/h
 import { createCommonStyles } from '@/styles/commonStyles';
 
 export default function CreateHabitScreen() {
-  const { busy, createHabit } = useApp();
+  const { busy, createHabit, groups } = useApp();
+  const { groupId: routeGroupId } = useLocalSearchParams<{ groupId?: string }>();
   const { theme } = useThemePreferences();
   const commonStyles = createCommonStyles(theme.colors);
   const defaultTemplate = getDefaultHabitTemplate();
+  const availableGroups = groups;
+  const fallbackGroupId = routeGroupId && groups.some((group) => group.id === routeGroupId) ? routeGroupId : groups[0]?.id ?? '';
   const [selectedTemplateId, setSelectedTemplateId] = useState(defaultTemplate.id);
+  const [selectedGroupId, setSelectedGroupId] = useState(fallbackGroupId);
   const [title, setTitle] = useState(defaultTemplate.title);
   const [emoji, setEmoji] = useState(defaultTemplate.emoji);
   const [category, setCategory] = useState(defaultTemplate.category);
+  const selectedGroup = useMemo(() => groups.find((group) => group.id === selectedGroupId) ?? null, [groups, selectedGroupId]);
 
   function applyTemplate(template: HabitTemplate) {
     setSelectedTemplateId(template.id);
@@ -30,20 +36,70 @@ export default function CreateHabitScreen() {
   }
 
   async function handleCreate() {
-    const result = await createHabit({ title, emoji, category });
+    const result = await createHabit({ groupId: selectedGroupId, title, emoji, category });
     if (result.ok) {
-      router.replace('/(app)/(tabs)/dashboard');
+      router.replace(selectedGroupId ? `/(app)/groups/${selectedGroupId}` : '/(app)/(tabs)/groups');
     }
   }
 
+  if (!availableGroups.length) {
+    return (
+      <AppScreen scrollable contentContainerStyle={commonStyles.pageStack}>
+        <PageHeader
+          eyebrow="League challenge"
+          title="Join a league before adding challenges"
+          subtitle="Habit League works best when every challenge belongs to a live competition."
+        />
+        <SurfaceCard>
+          <Text style={commonStyles.cardTitle}>No leagues yet</Text>
+          <Text style={commonStyles.cardCopy}>Create a league or join one first, then add the challenge your group will compete around.</Text>
+          <View style={commonStyles.actionRowTight}>
+            <PrimaryButton label="Create league" onPress={() => router.push('/(app)/groups/new')} />
+            <PrimaryButton label="Join league" onPress={() => router.push('/(app)/groups/join')} variant="secondary" />
+          </View>
+        </SurfaceCard>
+      </AppScreen>
+    );
+  }
+
   return (
-    <AppScreen scrollable>
-      <Text style={commonStyles.eyebrow}>Create habit</Text>
-      <Text style={commonStyles.pageTitle}>Add one habit to track daily</Text>
-      <Text style={commonStyles.pageCopy}>Start from a proven template or customize it before saving.</Text>
+    <AppScreen scrollable contentContainerStyle={commonStyles.pageStack}>
+      <PageHeader
+        eyebrow="League challenge"
+        title="Add a challenge for your league"
+        subtitle="Choose the league first, then launch a repeatable check-in challenge that counts toward competition."
+      />
 
       <SurfaceCard>
-        <Text style={commonStyles.cardTitle}>Popular templates</Text>
+        <Text style={commonStyles.cardTitle}>Choose the league</Text>
+        <View style={styles.groupGrid}>
+          {availableGroups.map((group) => {
+            const selected = group.id === selectedGroupId;
+            return (
+              <Pressable
+                key={group.id}
+                accessibilityRole="button"
+                accessibilityState={{ selected }}
+                onPress={() => setSelectedGroupId(group.id)}
+                style={[
+                  styles.groupCard,
+                  {
+                    backgroundColor: selected ? theme.colors.surfaceRaised : theme.colors.surfaceAlt,
+                    borderColor: selected ? theme.colors.primary : theme.colors.border,
+                  },
+                ]}
+              >
+                <Text style={commonStyles.settingTitle}>{group.name}</Text>
+                <Text style={commonStyles.smallMuted}>{group.visibility === 'public' ? 'Public league' : 'Private league'}</Text>
+              </Pressable>
+            );
+          })}
+        </View>
+      </SurfaceCard>
+
+      <SurfaceCard>
+        <Text style={commonStyles.cardTitle}>Challenge templates</Text>
+        <Text style={commonStyles.cardCopy}>Start with a proven routine, then adapt it for your league.</Text>
         <View style={styles.templateGrid}>
           {HABIT_TEMPLATES.map((template) => {
             const selected = template.id === selectedTemplateId;
@@ -72,17 +128,29 @@ export default function CreateHabitScreen() {
       </SurfaceCard>
 
       <SurfaceCard>
-        <Text style={commonStyles.cardTitle}>Customize habit</Text>
-        <TextField label="Habit name" value={title} onChangeText={setTitle} placeholder="Morning walk" />
+        <Text style={commonStyles.cardTitle}>Customize challenge</Text>
+        <TextField label="Challenge name" value={title} onChangeText={setTitle} placeholder="Morning walk" />
         <TextField label="Short label" value={emoji} onChangeText={setEmoji} placeholder="Fit" />
         <TextField label="Category" value={category} onChangeText={setCategory} placeholder="Health" />
-        <PrimaryButton label={busy ? 'Creating...' : 'Create habit'} onPress={handleCreate} disabled={busy} />
+        <Text style={commonStyles.smallMuted}>
+          {selectedGroup ? `This will count toward ${selectedGroup.name}.` : 'Pick a league above to continue.'}
+        </Text>
+        <PrimaryButton label={busy ? 'Adding...' : 'Add league challenge'} onPress={handleCreate} disabled={busy || !selectedGroupId} />
       </SurfaceCard>
     </AppScreen>
   );
 }
 
 const styles = StyleSheet.create({
+  groupGrid: {
+    gap: spacing.sm,
+  },
+  groupCard: {
+    borderRadius: 18,
+    borderWidth: 1,
+    padding: spacing.md,
+    gap: spacing.xs,
+  },
   templateGrid: {
     gap: spacing.sm,
   },

@@ -154,8 +154,9 @@ export async function loadUserBundle(uid: string): Promise<AppBundle | null> {
 
     const profile = normalizeProfile(profileSnapshot.data() as Profile);
     const habitsSnapshot = await getDocs(query(collection(db, 'habits'), where('userId', '==', uid)));
+    const defaultGroupId = profile.groupIds[0] ?? '';
     const habits = habitsSnapshot.docs
-      .map((entry) => normalizeHabit(entry.data() as Habit))
+      .map((entry) => normalizeHabit(entry.data() as Habit, defaultGroupId))
       .filter((habit): habit is Habit => Boolean(habit))
       .sort((left, right) => right.createdAt.localeCompare(left.createdAt));
     const groups = await Promise.all(
@@ -178,8 +179,9 @@ export async function loadUserBundle(uid: string): Promise<AppBundle | null> {
     return null;
   }
 
+  const defaultGroupId = profile.groupIds[0] ?? '';
   const habits = Object.values(store.habits)
-    .map((habit) => normalizeHabit(habit))
+    .map((habit) => normalizeHabit(habit, defaultGroupId))
     .filter((habit): habit is Habit => habit !== null && habit.userId === uid)
     .sort((left, right) => right.createdAt.localeCompare(left.createdAt));
   const groups = (profile.groupIds ?? [])
@@ -414,10 +416,11 @@ export async function declineFriendRequest(uid: string, requesterId: string) {
   return { ok: true, message: 'Request declined.' };
 }
 
-export async function createHabit(uid: string, input: { title: string; emoji: string; category: string }) {
+export async function createHabit(uid: string, input: { groupId: string; title: string; emoji: string; category: string }) {
   const habit: Habit = {
     id: createId('habit'),
     userId: uid,
+    groupId: input.groupId,
     title: input.title.trim(),
     emoji: input.emoji.trim() || '🔥',
     category: input.category.trim() || 'General',
@@ -862,18 +865,24 @@ export async function getGroupDetails(groupId: string): Promise<GroupDetails | n
         return normalizeProfile(snapshot.data() as Profile);
       })
     );
+    const memberFallbackGroupIds = new Map(members.map((member) => [member.uid, member.groupIds[0] ?? '']));
     const habits = (
       await Promise.all(
         group.memberIds.map(async (uid) => {
           const snapshot = await getDocs(query(collection(db, 'habits'), where('userId', '==', uid)));
-          return snapshot.docs.map((entry) => normalizeHabit(entry.data() as Habit)).filter((habit): habit is Habit => Boolean(habit));
+          return snapshot.docs
+            .map((entry) => normalizeHabit(entry.data() as Habit, memberFallbackGroupIds.get(uid) ?? ''))
+            .filter((habit): habit is Habit => Boolean(habit));
         })
       )
-    ).flat();
+    )
+      .flat()
+      .filter((habit) => habit.groupId === group.id);
 
     return {
       group,
       members,
+      habits,
       leaderboard: buildLeaderboard(members, habits),
       previousWeekLeaderboard: buildLeaderboard(members, habits, getPreviousWeekKeys()),
     };
@@ -886,12 +895,14 @@ export async function getGroupDetails(groupId: string): Promise<GroupDetails | n
   }
 
   const members = group.memberIds.map((uid) => normalizeProfile(store.profiles[uid])).filter(Boolean);
+  const memberFallbackGroupIds = new Map(members.map((member) => [member.uid, member.groupIds[0] ?? '']));
   const habits = Object.values(store.habits)
-    .map((habit) => normalizeHabit(habit))
-    .filter((habit): habit is Habit => habit !== null && group.memberIds.includes(habit.userId));
+    .map((habit) => normalizeHabit(habit, memberFallbackGroupIds.get(habit?.userId ?? '') ?? ''))
+    .filter((habit): habit is Habit => habit !== null && group.memberIds.includes(habit.userId) && habit.groupId === group.id);
   return {
     group,
     members,
+    habits,
     leaderboard: buildLeaderboard(members, habits),
     previousWeekLeaderboard: buildLeaderboard(members, habits, getPreviousWeekKeys()),
   };
@@ -1007,13 +1018,14 @@ function normalizeGroup(group?: Group | null): Group | null {
   };
 }
 
-function normalizeHabit(habit?: Habit | null): Habit | null {
+function normalizeHabit(habit?: Habit | null, fallbackGroupId = ''): Habit | null {
   if (!habit) {
     return null;
   }
 
   return {
     ...habit,
+    groupId: habit.groupId || fallbackGroupId,
     emoji: habit.emoji || '🔥',
     category: habit.category || 'General',
     checkIns: [...new Set(habit.checkIns || [])].sort(),
@@ -1278,6 +1290,7 @@ function seedDemoStore(): DemoStore {
       [habitId]: {
         id: habitId,
         userId: demoUid,
+        groupId,
         title: 'Morning walk',
         emoji: '🚶',
         category: 'Health',
@@ -1289,6 +1302,7 @@ function seedDemoStore(): DemoStore {
       [friendHabitId]: {
         id: friendHabitId,
         userId: friendUid,
+        groupId,
         title: 'Drink water',
         emoji: '💧',
         category: 'Wellness',
@@ -1300,6 +1314,7 @@ function seedDemoStore(): DemoStore {
       [runnerHabitId]: {
         id: runnerHabitId,
         userId: runnerUid,
+        groupId: publicFitnessGroupId,
         title: 'Workout',
         emoji: 'Fit',
         category: 'Fitness',
@@ -1311,6 +1326,7 @@ function seedDemoStore(): DemoStore {
       [readerHabitId]: {
         id: readerHabitId,
         userId: readerUid,
+        groupId: publicFocusGroupId,
         title: 'Read 10 pages',
         emoji: 'R',
         category: 'Learning',

@@ -54,14 +54,14 @@ export default function GroupsTabScreen() {
       <PageHeader
         eyebrow="Groups"
         title="Your leagues"
-        subtitle={`Track ${groups.length} groups and ${totalMembers} visible members without losing sight of the weekly race.`}
+        subtitle={`Track ${groups.length} leagues, ${totalMembers} visible members, and the challenges driving this week's standings.`}
       />
 
       {warning ? <LeaderboardNoticeCard title={warning.title} message={warning.message} /> : null}
 
       <View style={commonStyles.actionRowTight}>
-        <PrimaryButton label="Create group" onPress={() => router.push('/(app)/groups/new')} />
-        <PrimaryButton label="Join group" onPress={() => router.push('/(app)/groups/join')} variant="secondary" />
+        <PrimaryButton label="Create league" onPress={() => router.push('/(app)/groups/new')} />
+        <PrimaryButton label="Join league" onPress={() => router.push('/(app)/groups/join')} variant="secondary" />
       </View>
 
       <SectionHeader title="Your groups" />
@@ -72,8 +72,9 @@ export default function GroupsTabScreen() {
             const rank = foundIndex === -1 ? details.members.length : foundIndex + 1;
             const memberLabel = details.members.length === 1 ? '1 member' : `${details.members.length} members`;
             const visibilityLabel = details.group.visibility === 'public' ? 'Public' : 'Private';
+            const challengeLabel = details.habits[0]?.title ? `Challenge: ${details.habits[0].title}` : 'Add the first group challenge';
             const statusLine = `#${rank} this week / ${memberLabel}`;
-            const secondaryLine = details.group.stakesEnabled && details.group.stakesText ? `${visibilityLabel} / Stake active` : visibilityLabel;
+            const secondaryLine = details.group.stakesEnabled && details.group.stakesText ? `${visibilityLabel} / Stakes live` : visibilityLabel;
 
             return (
               <PressableCard
@@ -90,15 +91,16 @@ export default function GroupsTabScreen() {
                   </View>
                   <JoinCodeChip code={details.group.joinCode} />
                 </View>
-                {details.group.description ? <Text style={commonStyles.cardCopy}>{details.group.description}</Text> : null}
+                <Text style={commonStyles.cardCopy}>{challengeLabel}</Text>
+                {details.group.description ? <Text style={commonStyles.smallMuted}>{details.group.description}</Text> : null}
                 <Text style={commonStyles.listRowSubtitle}>{secondaryLine}</Text>
               </PressableCard>
             );
           })
         ) : (
           <SurfaceCard>
-            <Text style={commonStyles.cardTitle}>No groups yet</Text>
-            <Text style={commonStyles.cardCopy}>Create a group or join one with a code to start comparing progress.</Text>
+            <Text style={commonStyles.cardTitle}>No leagues yet</Text>
+            <Text style={commonStyles.cardCopy}>Create or join a league to start competing around shared challenges instead of tracking alone.</Text>
           </SurfaceCard>
         )}
       </View>
