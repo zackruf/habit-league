@@ -1,52 +1,262 @@
 import { StyleSheet } from 'react-native';
 
-import { palette, spacing } from '@/constants/theme';
+import { AppColors, radius, spacing } from '@/constants/theme';
 
-export const authStyles = StyleSheet.create({
-  screenContent: {
-    justifyContent: 'center',
-    gap: spacing.xl,
-  },
-  hero: {
-    gap: spacing.sm,
-  },
-  kicker: {
-    color: palette.primary,
-    fontSize: 13,
-    fontWeight: '700',
-    textTransform: 'uppercase',
-    letterSpacing: 1,
-  },
-  title: {
-    color: palette.text,
-    fontSize: 38,
-    fontWeight: '800',
-  },
-  subtitle: {
-    color: palette.muted,
-    fontSize: 16,
-    lineHeight: 24,
-  },
-  cardTitle: {
-    color: palette.text,
-    fontSize: 24,
-    fontWeight: '700',
-  },
-  cardCopy: {
-    color: palette.muted,
-    fontSize: 15,
-    lineHeight: 22,
-  },
-  errorText: {
-    color: palette.danger,
-    fontWeight: '600',
-  },
-  inlineNote: {
-    color: palette.muted,
-    textAlign: 'center',
-  },
-  inlineLink: {
-    color: palette.primary,
-    fontWeight: '700',
-  },
-});
+export function createAuthStyles(colors: AppColors) {
+  return StyleSheet.create({
+    screenContent: {
+      justifyContent: 'space-between',
+      gap: spacing.lg,
+      paddingTop: spacing.md,
+    },
+    hero: {
+      minHeight: 320,
+      borderRadius: radius.xl,
+      padding: spacing.lg,
+      overflow: 'hidden',
+      justifyContent: 'space-between',
+      backgroundColor: colors.heroPrimary,
+      borderWidth: 1,
+      borderColor: colors.currentUserBorder,
+    },
+    heroGlow: {
+      position: 'absolute',
+      width: 220,
+      height: 220,
+      borderRadius: 110,
+      right: -72,
+      top: -58,
+      backgroundColor: colors.primary,
+      opacity: 0.18,
+    },
+    heroOrb: {
+      position: 'absolute',
+      width: 150,
+      height: 150,
+      borderRadius: 75,
+      left: -54,
+      bottom: -42,
+      backgroundColor: colors.accent,
+      opacity: 0.13,
+    },
+    brandRow: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'space-between',
+      gap: spacing.md,
+    },
+    logoMark: {
+      width: 46,
+      height: 46,
+      borderRadius: 16,
+      alignItems: 'center',
+      justifyContent: 'center',
+      backgroundColor: colors.primary,
+      shadowColor: colors.primary,
+      shadowOffset: { width: 0, height: 8 },
+      shadowOpacity: 0.22,
+      shadowRadius: 18,
+      elevation: 3,
+    },
+    logoText: {
+      color: colors.primaryText,
+      fontSize: 20,
+      fontWeight: '900',
+      letterSpacing: -1,
+    },
+    statusPill: {
+      borderRadius: 999,
+      paddingHorizontal: 12,
+      paddingVertical: 8,
+      backgroundColor: colors.surface,
+      borderWidth: 1,
+      borderColor: colors.border,
+    },
+    statusText: {
+      color: colors.primary,
+      fontSize: 12,
+      fontWeight: '800',
+      letterSpacing: 0.5,
+      textTransform: 'uppercase',
+    },
+    heroTextBlock: {
+      gap: spacing.sm,
+    },
+    kicker: {
+      color: colors.primary,
+      fontSize: 13,
+      fontWeight: '800',
+      textTransform: 'uppercase',
+      letterSpacing: 1,
+    },
+    title: {
+      color: colors.text,
+      fontSize: 44,
+      fontWeight: '900',
+      letterSpacing: -1.4,
+      lineHeight: 48,
+    },
+    subtitle: {
+      color: colors.muted,
+      fontSize: 16,
+      lineHeight: 24,
+    },
+    previewCard: {
+      borderRadius: radius.lg,
+      padding: spacing.md,
+      gap: spacing.sm,
+      backgroundColor: colors.surface,
+      borderWidth: 1,
+      borderColor: colors.border,
+      shadowColor: colors.shadow,
+      shadowOffset: { width: 0, height: 14 },
+      shadowOpacity: 0.08,
+      shadowRadius: 24,
+      elevation: 3,
+    },
+    previewHeader: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'space-between',
+      gap: spacing.md,
+    },
+    previewTitle: {
+      color: colors.text,
+      fontSize: 15,
+      fontWeight: '800',
+    },
+    previewMeta: {
+      color: colors.muted,
+      fontSize: 12,
+      fontWeight: '600',
+    },
+    rankBadge: {
+      minWidth: 54,
+      minHeight: 54,
+      borderRadius: 18,
+      alignItems: 'center',
+      justifyContent: 'center',
+      backgroundColor: colors.badgeBackground,
+    },
+    rankText: {
+      color: colors.badgeText,
+      fontSize: 20,
+      fontWeight: '900',
+    },
+    progressTrack: {
+      height: 8,
+      borderRadius: 99,
+      backgroundColor: colors.surfaceAlt,
+      overflow: 'hidden',
+    },
+    progressFill: {
+      width: '72%',
+      height: '100%',
+      borderRadius: 99,
+      backgroundColor: colors.primary,
+    },
+    proofRow: {
+      flexDirection: 'row',
+      justifyContent: 'space-between',
+      gap: spacing.sm,
+    },
+    proofPill: {
+      flex: 1,
+      borderRadius: 999,
+      paddingVertical: 8,
+      paddingHorizontal: 10,
+      backgroundColor: colors.surfaceAlt,
+      alignItems: 'center',
+    },
+    proofText: {
+      color: colors.text,
+      fontSize: 12,
+      fontWeight: '700',
+    },
+    formCard: {
+      padding: spacing.lg,
+      gap: spacing.md,
+      borderRadius: radius.xl,
+    },
+    formHeader: {
+      gap: spacing.xs,
+      marginBottom: spacing.xs,
+    },
+    cardTitle: {
+      color: colors.text,
+      fontSize: 24,
+      fontWeight: '800',
+      letterSpacing: -0.4,
+    },
+    cardCopy: {
+      color: colors.muted,
+      fontSize: 15,
+      lineHeight: 22,
+    },
+    trustRow: {
+      flexDirection: 'row',
+      flexWrap: 'wrap',
+      gap: spacing.sm,
+    },
+    trustChip: {
+      borderRadius: 999,
+      paddingHorizontal: 12,
+      paddingVertical: 8,
+      backgroundColor: colors.surfaceAlt,
+      borderWidth: 1,
+      borderColor: colors.border,
+    },
+    trustText: {
+      color: colors.muted,
+      fontSize: 12,
+      fontWeight: '700',
+    },
+    dividerRow: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: spacing.md,
+    },
+    divider: {
+      flex: 1,
+      height: 1,
+      backgroundColor: colors.border,
+    },
+    dividerText: {
+      color: colors.muted,
+      fontSize: 12,
+      fontWeight: '700',
+      textTransform: 'uppercase',
+      letterSpacing: 0.8,
+    },
+    errorText: {
+      color: colors.danger,
+      fontWeight: '600',
+    },
+    inlineNote: {
+      color: colors.muted,
+      textAlign: 'center',
+    },
+    inlineLink: {
+      color: colors.primary,
+      fontWeight: '700',
+    },
+    demoHint: {
+      borderRadius: radius.md,
+      padding: spacing.md,
+      gap: spacing.xs,
+      backgroundColor: colors.surfaceAlt,
+      borderWidth: 1,
+      borderColor: colors.border,
+    },
+    demoHintTitle: {
+      color: colors.text,
+      fontSize: 13,
+      fontWeight: '800',
+    },
+    demoHintCopy: {
+      color: colors.muted,
+      fontSize: 13,
+      lineHeight: 18,
+    },
+  });
+}

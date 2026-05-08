@@ -2,21 +2,50 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { createContext, PropsWithChildren, ReactNode, useCallback, useContext, useEffect, useMemo, useState } from 'react';
 
 import {
+  addActivityShoutout as addActivityShoutoutRequest,
+  acceptFriendRequest as acceptFriendRequestRequest,
   createGroup as createGroupRequest,
-  createHabit as createHabitRequest,
+  createLeagueChallenge as createHabitRequest,
+  declineFriendRequest as declineFriendRequestRequest,
   getGroupDetails,
   initializeUserProfile,
   joinGroup as joinGroupRequest,
+  joinPublicGroup as joinPublicGroupRequest,
+  listPublicGroups as listPublicGroupsRequest,
+  loadActivityFeed as loadActivityFeedRequest,
+  loadGroupMessages as loadGroupMessagesRequest,
+  loadIncomingFriendRequests as loadIncomingFriendRequestsRequest,
+  recordActivity as recordActivityRequest,
+  sendFriendRequest as sendFriendRequestRequest,
   loadUserBundle,
   restoreSession,
+  restoreHabitStreak as restoreHabitStreakRequest,
   saveProfile as saveProfileRequest,
+  sendGroupMessage as sendGroupMessageRequest,
+  searchUsers as searchUsersRequest,
   signIn as signInRequest,
   signOut as signOutRequest,
   signUp as signUpRequest,
   toggleHabitCheckIn as toggleHabitCheckInRequest,
+  updateLeagueChallengeLifecycle as updateLeagueChallengeLifecycleRequest,
+  updateGroup as updateGroupRequest,
   usingFirebaseBackend,
 } from '@/lib/data';
-import { AppBundle, GroupDetails, Habit, Profile, SessionUser } from '@/types/models';
+import { consumeRestoreStreak } from '@/lib/shop';
+import {
+  ActivityInput,
+  ActivityItem,
+  ActivityShoutoutType,
+  AppBundle,
+  FriendRequestProfile,
+  GroupDetails,
+  GroupMessage,
+  GroupSettingsInput,
+  Habit,
+  Profile,
+  SessionUser,
+  UserSearchResult,
+} from '@/types/models';
 
 type ActionResult = {
   ok: boolean;
@@ -34,17 +63,33 @@ type AppContextValue = {
   usingFirebase: boolean;
   session: SessionUser | null;
   profile: Profile | null;
+  shopInventory: Profile['shopInventory'] | null;
   habits: Habit[];
   groups: AppBundle['groups'];
   signIn: (email: string, password: string) => Promise<ActionResult>;
   signUp: (name: string, email: string, password: string) => Promise<ActionResult>;
   signOut: () => Promise<void>;
   saveProfile: (patch: Partial<Profile>) => Promise<ActionResult>;
-  createHabit: (input: { title: string; emoji: string; category: string }) => Promise<ActionResult>;
+  createHabit: (input: { groupId: string; title: string; emoji: string; category: string; description?: string; frequency?: string }) => Promise<ActionResult>;
+  updateLeagueChallengeLifecycle: (challengeId: string, action: 'archive' | 'complete' | 'reactivate') => Promise<ActionResult>;
   toggleHabitCheckIn: (habitId: string) => Promise<void>;
-  createGroup: (name: string, description: string) => Promise<GroupActionResult>;
+  restoreHabitStreak: (habitId: string) => Promise<ActionResult>;
+  createGroup: (input: GroupSettingsInput) => Promise<GroupActionResult>;
+  updateGroup: (groupId: string, input: GroupSettingsInput) => Promise<ActionResult>;
   joinGroup: (joinCode: string) => Promise<GroupActionResult>;
+  joinPublicGroup: (groupId: string) => Promise<GroupActionResult>;
+  listPublicGroups: () => Promise<AppBundle['groups']>;
+  searchUsers: (searchTerm: string) => Promise<UserSearchResult[]>;
+  sendFriendRequest: (userId: string) => Promise<ActionResult>;
+  getIncomingFriendRequests: () => Promise<FriendRequestProfile[]>;
+  acceptFriendRequest: (userId: string) => Promise<ActionResult>;
+  declineFriendRequest: (userId: string) => Promise<ActionResult>;
   getGroupDetails: (groupId: string) => Promise<GroupDetails | null>;
+  getGroupMessages: (groupId: string) => Promise<GroupMessage[]>;
+  sendGroupMessage: (groupId: string, text: string) => Promise<ActionResult>;
+  getActivityFeed: (groupId?: string) => Promise<ActivityItem[]>;
+  recordActivity: (input: Omit<ActivityInput, 'actorId' | 'actorName'>) => Promise<void>;
+  addActivityShoutout: (activityId: string, shoutoutType: ActivityShoutoutType) => Promise<ActionResult>;
 };
 
 const AppContext = createContext<AppContextValue | undefined>(undefined);
@@ -153,20 +198,27 @@ export function AppProvider({ children, fallback }: PropsWithChildren<{ fallback
   );
 
   const createHabit = useCallback(
-    async (input: { title: string; emoji: string; category: string }) => {
+    async (input: { groupId: string; title: string; emoji: string; category: string; description?: string; frequency?: string }) => {
       if (!session) {
         return { ok: false, message: 'No active session.' };
       }
 
+      if (!input.groupId.trim()) {
+        return { ok: false, message: 'Choose a league before adding a challenge.' };
+      }
       if (!input.title.trim()) {
-        return { ok: false, message: 'Please enter a habit name.' };
+        return { ok: false, message: 'Please enter a challenge name.' };
       }
 
       setBusy(true);
-      await createHabitRequest(session.uid, input);
+      const challengeId = await createHabitRequest(session.uid, input);
+      if (!challengeId) {
+        setBusy(false);
+        return { ok: false, message: 'That league could not be found.' };
+      }
       await refreshUserData(session);
       setBusy(false);
-      return { ok: true, message: 'Habit created.' };
+      return { ok: true, message: 'League challenge added.' };
     },
     [refreshUserData, session]
   );
@@ -183,21 +235,86 @@ export function AppProvider({ children, fallback }: PropsWithChildren<{ fallback
     [refreshUserData, session]
   );
 
+  const restoreHabitStreak = useCallback(
+    async (habitId: string) => {
+      if (!session || !profile) {
+        return { ok: false, message: 'No active session.' };
+      }
+      if (profile.shopInventory.streakRestoreCredits < 1) {
+        return { ok: false, message: 'Add a restore from the Shop before using it.' };
+      }
+
+      setBusy(true);
+      const result = await restoreHabitStreakRequest(session.uid, habitId);
+      if (result.ok) {
+        const nextInventory = consumeRestoreStreak(profile.shopInventory);
+        await saveProfileRequest(session.uid, { shopInventory: nextInventory });
+        await refreshUserData(session);
+      }
+      setBusy(false);
+      return result;
+    },
+    [profile, refreshUserData, session]
+  );
+
   const createGroup = useCallback(
-    async (name: string, description: string) => {
+    async (input: GroupSettingsInput) => {
       if (!session) {
         return { ok: false, message: 'No active session.' };
       }
 
-      if (!name.trim()) {
+      if (!input.name.trim()) {
         return { ok: false, message: 'Please enter a group name.' };
+      }
+      if (input.stakesEnabled && !input.stakesText.trim()) {
+        return { ok: false, message: 'Add a stakes message or turn Stakes Mode off.' };
+      }
+      if (input.memberLimit && input.memberLimit < 2) {
+        return { ok: false, message: 'Member limit should be at least 2.' };
       }
 
       setBusy(true);
-      const groupId = await createGroupRequest(session.uid, name.trim(), description.trim());
+      const groupId = await createGroupRequest(session.uid, {
+        ...input,
+        name: input.name.trim(),
+        description: input.description.trim(),
+        stakesText: input.stakesText.trim(),
+      });
       await refreshUserData(session);
       setBusy(false);
       return { ok: true, message: 'Group created.', groupId };
+    },
+    [refreshUserData, session]
+  );
+
+  const updateGroup = useCallback(
+    async (groupId: string, input: GroupSettingsInput) => {
+      if (!session) {
+        return { ok: false, message: 'No active session.' };
+      }
+
+      if (!input.name.trim()) {
+        return { ok: false, message: 'Please enter a group name.' };
+      }
+      if (input.stakesEnabled && !input.stakesText.trim()) {
+        return { ok: false, message: 'Add a stakes message or turn Stakes Mode off.' };
+      }
+      if (input.memberLimit && input.memberLimit < 2) {
+        return { ok: false, message: 'Member limit should be at least 2.' };
+      }
+
+      setBusy(true);
+      const result = await updateGroupRequest(session.uid, groupId, {
+        ...input,
+        name: input.name.trim(),
+        description: input.description.trim(),
+        stakesText: input.stakesText.trim(),
+      });
+      if (result.ok) {
+        await refreshUserData(session);
+      }
+      setBusy(false);
+      return result;
     },
     [refreshUserData, session]
   );
@@ -219,6 +336,166 @@ export function AppProvider({ children, fallback }: PropsWithChildren<{ fallback
     [refreshUserData, session]
   );
 
+  const updateLeagueChallengeLifecycle = useCallback(
+    async (challengeId: string, action: 'archive' | 'complete' | 'reactivate') => {
+      if (!session) {
+        return { ok: false, message: 'No active session.' };
+      }
+
+      setBusy(true);
+      const result = await updateLeagueChallengeLifecycleRequest(session.uid, challengeId, action);
+      if (result.ok) {
+        await refreshUserData(session);
+      }
+      setBusy(false);
+      return result;
+    },
+    [refreshUserData, session]
+  );
+
+  const joinPublicGroup = useCallback(
+    async (groupId: string) => {
+      if (!session) {
+        return { ok: false, message: 'No active session.' };
+      }
+
+      setBusy(true);
+      const result = await joinPublicGroupRequest(session.uid, groupId);
+      if (result.ok) {
+        await refreshUserData(session);
+      }
+      setBusy(false);
+      return result;
+    },
+    [refreshUserData, session]
+  );
+
+  const listPublicGroups = useCallback(async () => listPublicGroupsRequest(session?.uid), [session?.uid]);
+
+  const searchUsers = useCallback(
+    async (searchTerm: string) => {
+      if (!session) {
+        return [];
+      }
+
+      return searchUsersRequest(session.uid, searchTerm);
+    },
+    [session]
+  );
+
+  const sendFriendRequest = useCallback(
+    async (userId: string) => {
+      if (!session) {
+        return { ok: false, message: 'No active session.' };
+      }
+
+      setBusy(true);
+      const result = await sendFriendRequestRequest(session.uid, userId);
+      if (result.ok) {
+        await refreshUserData(session);
+      }
+      setBusy(false);
+      return result;
+    },
+    [refreshUserData, session]
+  );
+
+  const getIncomingFriendRequests = useCallback(async () => {
+    if (!session) {
+      return [];
+    }
+
+    return loadIncomingFriendRequestsRequest(session.uid);
+  }, [session]);
+
+  const acceptFriendRequest = useCallback(
+    async (userId: string) => {
+      if (!session) {
+        return { ok: false, message: 'No active session.' };
+      }
+
+      setBusy(true);
+      const result = await acceptFriendRequestRequest(session.uid, userId);
+      if (result.ok) {
+        await refreshUserData(session);
+      }
+      setBusy(false);
+      return result;
+    },
+    [refreshUserData, session]
+  );
+
+  const declineFriendRequest = useCallback(
+    async (userId: string) => {
+      if (!session) {
+        return { ok: false, message: 'No active session.' };
+      }
+
+      setBusy(true);
+      const result = await declineFriendRequestRequest(session.uid, userId);
+      if (result.ok) {
+        await refreshUserData(session);
+      }
+      setBusy(false);
+      return result;
+    },
+    [refreshUserData, session]
+  );
+
+  const getGroupMessages = useCallback(async (groupId: string) => loadGroupMessagesRequest(groupId), []);
+
+  const sendGroupMessage = useCallback(
+    async (groupId: string, text: string) => {
+      if (!profile) {
+        return { ok: false, message: 'No active profile.' };
+      }
+      if (!text.trim()) {
+        return { ok: false, message: 'Write a message first.' };
+      }
+
+      await sendGroupMessageRequest(groupId, profile, text);
+      return { ok: true, message: 'Message sent.' };
+    },
+    [profile]
+  );
+
+  const getActivityFeed = useCallback(
+    async (groupId?: string) => {
+      if (!session) {
+        return [];
+      }
+
+      return loadActivityFeedRequest(session.uid, groupId);
+    },
+    [session]
+  );
+
+  const recordActivity = useCallback(
+    async (input: Omit<ActivityInput, 'actorId' | 'actorName'>) => {
+      if (!profile) {
+        return;
+      }
+
+      await recordActivityRequest({
+        ...input,
+        actorId: profile.uid,
+        actorName: profile.name,
+      });
+    },
+    [profile]
+  );
+
+  const addActivityShoutout = useCallback(
+    async (activityId: string, shoutoutType: ActivityShoutoutType) => {
+      if (!session) {
+        return { ok: false, message: 'No active session.' };
+      }
+
+      return addActivityShoutoutRequest(session.uid, activityId, shoutoutType);
+    },
+    [session]
+  );
+
   const value = useMemo<AppContextValue>(
     () => ({
       authReady,
@@ -227,6 +504,7 @@ export function AppProvider({ children, fallback }: PropsWithChildren<{ fallback
       usingFirebase: usingFirebaseBackend,
       session,
       profile,
+      shopInventory: profile?.shopInventory ?? null,
       habits,
       groups,
       signIn,
@@ -234,12 +512,59 @@ export function AppProvider({ children, fallback }: PropsWithChildren<{ fallback
       signOut,
       saveProfile,
       createHabit,
+      updateLeagueChallengeLifecycle,
       toggleHabitCheckIn,
+      restoreHabitStreak,
       createGroup,
+      updateGroup,
       joinGroup,
+      joinPublicGroup,
+      listPublicGroups,
+      searchUsers,
+      sendFriendRequest,
+      getIncomingFriendRequests,
+      acceptFriendRequest,
+      declineFriendRequest,
       getGroupDetails,
+      getGroupMessages,
+      sendGroupMessage,
+      getActivityFeed,
+      recordActivity,
+      addActivityShoutout,
     }),
-    [authReady, busy, refreshing, session, profile, habits, groups, signIn, signUp, signOut, saveProfile, createHabit, toggleHabitCheckIn, createGroup, joinGroup]
+    [
+      authReady,
+      busy,
+      refreshing,
+      session,
+      profile,
+      profile?.shopInventory,
+      habits,
+      groups,
+      signIn,
+      signUp,
+      signOut,
+      saveProfile,
+      createHabit,
+      updateLeagueChallengeLifecycle,
+      toggleHabitCheckIn,
+      restoreHabitStreak,
+      createGroup,
+      updateGroup,
+      joinGroup,
+      joinPublicGroup,
+      listPublicGroups,
+      searchUsers,
+      sendFriendRequest,
+      getIncomingFriendRequests,
+      acceptFriendRequest,
+      declineFriendRequest,
+      getGroupMessages,
+      sendGroupMessage,
+      getActivityFeed,
+      recordActivity,
+      addActivityShoutout,
+    ]
   );
 
   if (!authReady && fallback) {

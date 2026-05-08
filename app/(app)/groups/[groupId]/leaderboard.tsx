@@ -6,12 +6,15 @@ import { AppScreen } from '@/components/AppScreen';
 import { LoadingScreen } from '@/components/LoadingScreen';
 import { SurfaceCard } from '@/components/SurfaceCard';
 import { useApp } from '@/context/AppProvider';
-import { commonStyles } from '@/styles/commonStyles';
+import { useThemePreferences } from '@/context/ThemeProvider';
+import { createCommonStyles } from '@/styles/commonStyles';
 import { GroupDetails } from '@/types/models';
 
 export default function LeaderboardScreen() {
   const { groupId } = useLocalSearchParams<{ groupId: string }>();
   const { getGroupDetails } = useApp();
+  const { theme } = useThemePreferences();
+  const commonStyles = createCommonStyles(theme.colors);
   const [details, setDetails] = useState<GroupDetails | null>(null);
 
   useEffect(() => {

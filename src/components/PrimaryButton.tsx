@@ -1,6 +1,7 @@
 import { Pressable, StyleSheet, Text } from 'react-native';
 
-import { palette, radius, spacing } from '@/constants/theme';
+import { radius, spacing } from '@/constants/theme';
+import { useThemePreferences } from '@/context/ThemeProvider';
 
 type PrimaryButtonProps = {
   label: string;
@@ -10,15 +11,40 @@ type PrimaryButtonProps = {
 };
 
 export function PrimaryButton({ label, onPress, disabled, variant = 'primary' }: PrimaryButtonProps) {
+  const { theme } = useThemePreferences();
+
   return (
     <Pressable
       disabled={disabled}
       onPress={onPress}
       style={({ pressed }) => [
         styles.base,
-        variant === 'primary' ? styles.primary : null,
-        variant === 'secondary' ? styles.secondary : null,
-        variant === 'ghost' ? styles.ghost : null,
+        variant === 'primary'
+          ? [
+              styles.primary,
+              {
+                backgroundColor: pressed && !disabled ? theme.colors.primaryPressed : theme.colors.primary,
+                shadowColor: theme.colors.primary,
+              },
+            ]
+          : null,
+        variant === 'secondary'
+          ? [
+              styles.secondary,
+              {
+                backgroundColor: pressed && !disabled ? theme.colors.surfaceRaised : theme.colors.surface,
+                borderColor: theme.colors.border,
+              },
+            ]
+          : null,
+        variant === 'ghost'
+          ? [
+              styles.ghost,
+              {
+                borderColor: pressed && !disabled ? theme.colors.primary : theme.colors.border,
+              },
+            ]
+          : null,
         pressed && !disabled ? styles.pressed : null,
         disabled ? styles.disabled : null,
       ]}
@@ -26,9 +52,9 @@ export function PrimaryButton({ label, onPress, disabled, variant = 'primary' }:
       <Text
         style={[
           styles.label,
-          variant === 'primary' ? styles.primaryLabel : null,
-          variant === 'secondary' ? styles.secondaryLabel : null,
-          variant === 'ghost' ? styles.ghostLabel : null,
+          variant === 'primary' ? [styles.primaryLabel, { color: theme.colors.primaryText }] : null,
+          variant === 'secondary' ? [styles.secondaryLabel, { color: theme.colors.text }] : null,
+          variant === 'ghost' ? [styles.ghostLabel, { color: theme.colors.text }] : null,
         ]}
       >
         {label}
@@ -46,18 +72,20 @@ const styles = StyleSheet.create({
     paddingHorizontal: spacing.lg,
   },
   primary: {
-    backgroundColor: palette.primary,
+    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.22,
+    shadowRadius: 14,
+    elevation: 2,
   },
   secondary: {
-    backgroundColor: palette.surfaceAlt,
+    borderWidth: 1,
   },
   ghost: {
     backgroundColor: 'transparent',
     borderWidth: 1,
-    borderColor: palette.border,
   },
   pressed: {
-    opacity: 0.9,
+    opacity: 0.92,
     transform: [{ scale: 0.99 }],
   },
   disabled: {
@@ -67,13 +95,7 @@ const styles = StyleSheet.create({
     fontSize: 15,
     fontWeight: '700',
   },
-  primaryLabel: {
-    color: palette.surface,
-  },
-  secondaryLabel: {
-    color: palette.text,
-  },
-  ghostLabel: {
-    color: palette.text,
-  },
+  primaryLabel: {},
+  secondaryLabel: {},
+  ghostLabel: {},
 });

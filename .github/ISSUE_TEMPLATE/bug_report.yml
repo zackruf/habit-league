@@ -1,0 +1,43 @@
+name: Bug report
+description: Report a product or engineering issue
+title: "[Bug] "
+labels:
+  - bug
+body:
+  - type: textarea
+    id: what_happened
+    attributes:
+      label: What happened?
+      description: Describe the bug clearly.
+    validations:
+      required: true
+  - type: textarea
+    id: expected_behavior
+    attributes:
+      label: Expected behavior
+      description: What should have happened instead?
+    validations:
+      required: true
+  - type: textarea
+    id: steps_to_reproduce
+    attributes:
+      label: Steps to reproduce
+      description: List the steps needed to reproduce the issue.
+    validations:
+      required: true
+  - type: dropdown
+    id: platform
+    attributes:
+      label: Platform
+      options:
+        - Android
+        - iOS
+        - Web
+        - Other
+    validations:
+      required: true
+  - type: textarea
+    id: screenshots_logs
+    attributes:
+      label: Screenshots / logs
+      description: Add screenshots, console output, or crash details if available.

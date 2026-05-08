@@ -7,10 +7,13 @@ import { PrimaryButton } from '@/components/PrimaryButton';
 import { SurfaceCard } from '@/components/SurfaceCard';
 import { TextField } from '@/components/TextField';
 import { useApp } from '@/context/AppProvider';
-import { authStyles } from '@/styles/authStyles';
+import { useThemePreferences } from '@/context/ThemeProvider';
+import { createAuthStyles } from '@/styles/authStyles';
 
 export default function SignUpScreen() {
   const { authReady, busy, session, signUp } = useApp();
+  const { theme } = useThemePreferences();
+  const authStyles = createAuthStyles(theme.colors);
   const [name, setName] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -31,18 +34,87 @@ export default function SignUpScreen() {
   return (
     <AppScreen scrollable contentContainerStyle={authStyles.screenContent}>
       <View style={authStyles.hero}>
-        <Text style={authStyles.kicker}>Start your first streak</Text>
-        <Text style={authStyles.title}>Create your account</Text>
-        <Text style={authStyles.subtitle}>
-          Keep the setup light, add a habit, and invite your first group in a couple of minutes.
-        </Text>
+        <View style={authStyles.heroGlow} />
+        <View style={authStyles.heroOrb} />
+
+        <View style={authStyles.brandRow}>
+          <View style={authStyles.logoMark}>
+            <Text style={authStyles.logoText}>HL</Text>
+          </View>
+          <View style={authStyles.statusPill}>
+            <Text style={authStyles.statusText}>New season</Text>
+          </View>
+        </View>
+
+        <View style={authStyles.heroTextBlock}>
+          <Text style={authStyles.kicker}>Start your first streak</Text>
+          <Text style={authStyles.title}>Build a habit people can see.</Text>
+          <Text style={authStyles.subtitle}>
+            Set one goal, invite your circle, and let a little friendly pressure do the heavy lifting.
+          </Text>
+        </View>
+
+        <View style={authStyles.previewCard}>
+          <View style={authStyles.previewHeader}>
+            <View>
+              <Text style={authStyles.previewTitle}>Your first league</Text>
+              <Text style={authStyles.previewMeta}>Create, check in, compete</Text>
+            </View>
+            <View style={authStyles.rankBadge}>
+              <Text style={authStyles.rankText}>7d</Text>
+            </View>
+          </View>
+          <View style={authStyles.progressTrack}>
+            <View style={authStyles.progressFill} />
+          </View>
+          <View style={authStyles.proofRow}>
+            <View style={authStyles.proofPill}>
+              <Text style={authStyles.proofText}>Easy setup</Text>
+            </View>
+            <View style={authStyles.proofPill}>
+              <Text style={authStyles.proofText}>Accountable</Text>
+            </View>
+            <View style={authStyles.proofPill}>
+              <Text style={authStyles.proofText}>Motivating</Text>
+            </View>
+          </View>
+        </View>
       </View>
 
-      <SurfaceCard>
-        <Text style={authStyles.cardTitle}>Join HabitLeague</Text>
-        <TextField label="Display name" value={name} onChangeText={setName} />
-        <TextField label="Email" value={email} onChangeText={setEmail} autoCapitalize="none" keyboardType="email-address" />
-        <TextField label="Password" value={password} onChangeText={setPassword} secureTextEntry />
+      <SurfaceCard style={authStyles.formCard}>
+        <View style={authStyles.formHeader}>
+          <Text style={authStyles.cardTitle}>Create your account</Text>
+          <Text style={authStyles.cardCopy}>A cleaner way to stay consistent with the people who keep you honest.</Text>
+        </View>
+
+        <View style={authStyles.trustRow}>
+          <View style={authStyles.trustChip}>
+            <Text style={authStyles.trustText}>2 minute setup</Text>
+          </View>
+          <View style={authStyles.trustChip}>
+            <Text style={authStyles.trustText}>Invite friends</Text>
+          </View>
+          <View style={authStyles.trustChip}>
+            <Text style={authStyles.trustText}>Track streaks</Text>
+          </View>
+        </View>
+
+        <View style={authStyles.dividerRow}>
+          <View style={authStyles.divider} />
+          <Text style={authStyles.dividerText}>Join</Text>
+          <View style={authStyles.divider} />
+        </View>
+
+        <TextField label="Display name" value={name} onChangeText={setName} placeholder="Zack" />
+        <TextField
+          label="Email"
+          value={email}
+          onChangeText={setEmail}
+          autoCapitalize="none"
+          keyboardType="email-address"
+          placeholder="you@example.com"
+        />
+        <TextField label="Password" value={password} onChangeText={setPassword} secureTextEntry placeholder="Create a password" />
 
         {error ? <Text style={authStyles.errorText}>{error}</Text> : null}
 
