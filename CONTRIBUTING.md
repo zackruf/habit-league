@@ -1,6 +1,6 @@
 # Contributing
 
-Habit League is proprietary software. This repository is shared only with invited collaborators and authorized partners.
+Rivl is proprietary software. This repository is shared only with invited collaborators and authorized partners.
 
 ## Before You Contribute
 

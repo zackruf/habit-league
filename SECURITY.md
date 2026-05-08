@@ -2,7 +2,7 @@
 
 ## Status
 
-Habit League is an actively developed proprietary project. Security issues should be reported privately to the project owner and should not be disclosed publicly before a fix is available.
+Rivl is an actively developed proprietary project. Security issues should be reported privately to the project owner and should not be disclosed publicly before a fix is available.
 
 ## Reporting
 

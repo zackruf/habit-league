@@ -9,11 +9,11 @@ The current MVP includes:
 - shared league challenges
 - per-user challenge participation records
 - daily check-ins
-- weekly leaderboards
-- group chat
+- weekly rankings
+- league chat
 - activity feed and shoutouts
 - friend requests and discovery
-- streak restore and shop foundations
+- streak restore and boosts foundations
 - challenge lifecycle basics
 
 ## Near-Term Priorities
@@ -27,7 +27,7 @@ The current MVP includes:
 
 ## Medium-Term Priorities
 
-- shared challenge templates and fast challenge setup
+- shared challenge templates and faster challenge setup
 - friend and group invite flows
 - public league discovery improvements
 - stronger recap and re-engagement surfaces
@@ -37,7 +37,7 @@ The current MVP includes:
 ## Future / Advanced Features
 
 - richer social identity and profile previews
-- improved group administration
+- improved league administration
 - deeper monetization and entitlements
 - more advanced challenge rotation flows
 - analytics, monitoring, and release observability

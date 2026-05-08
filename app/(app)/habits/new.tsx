@@ -51,7 +51,7 @@ export default function CreateHabitScreen() {
         <PageHeader
           eyebrow="League challenge"
           title="Join a league before adding challenges"
-          subtitle="Habit League works best when every challenge belongs to a live competition."
+          subtitle="Rivl works best when every challenge belongs to a live league competition."
         />
         <SurfaceCard>
           <Text style={commonStyles.cardTitle}>No leagues yet</Text>

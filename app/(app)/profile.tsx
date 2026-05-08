@@ -47,7 +47,7 @@ export default function ProfileScreen() {
 
   const initials = useMemo(() => {
     if (!profile?.name) {
-      return 'HL';
+      return 'RV';
     }
 
     return profile.name
@@ -129,7 +129,7 @@ export default function ProfileScreen() {
         <SectionHeader title="Preferences" />
         <View style={commonStyles.settingLabelWrap}>
           <Text style={commonStyles.settingTitle}>Theme</Text>
-          <Text style={commonStyles.settingSubtitle}>Choose how Habit League should look on this device.</Text>
+          <Text style={commonStyles.settingSubtitle}>Choose how Rivl should look on this device.</Text>
         </View>
         <View style={commonStyles.segmentedRow}>
           {(['light', 'dark', 'system'] as ThemeMode[]).map((mode) => {

@@ -39,7 +39,7 @@ export default function SignUpScreen() {
 
         <View style={authStyles.brandRow}>
           <View style={authStyles.logoMark}>
-            <Text style={authStyles.logoText}>HL</Text>
+            <Text style={authStyles.logoText}>R</Text>
           </View>
           <View style={authStyles.statusPill}>
             <Text style={authStyles.statusText}>New season</Text>
@@ -47,10 +47,10 @@ export default function SignUpScreen() {
         </View>
 
         <View style={authStyles.heroTextBlock}>
-          <Text style={authStyles.kicker}>Start your first streak</Text>
-          <Text style={authStyles.title}>Build a habit people can see.</Text>
+          <Text style={authStyles.kicker}>Rivl</Text>
+          <Text style={authStyles.title}>Show up. Move up.</Text>
           <Text style={authStyles.subtitle}>
-            Set one goal, invite your circle, and let a little friendly pressure do the heavy lifting.
+            Join a league, compete in shared challenges, and let daily check-ins and group pressure keep the momentum real.
           </Text>
         </View>
 
@@ -58,7 +58,7 @@ export default function SignUpScreen() {
           <View style={authStyles.previewHeader}>
             <View>
               <Text style={authStyles.previewTitle}>Your first league</Text>
-              <Text style={authStyles.previewMeta}>Create, check in, compete</Text>
+              <Text style={authStyles.previewMeta}>Start a league. Check in. Climb.</Text>
             </View>
             <View style={authStyles.rankBadge}>
               <Text style={authStyles.rankText}>7d</Text>
@@ -75,7 +75,7 @@ export default function SignUpScreen() {
               <Text style={authStyles.proofText}>Accountable</Text>
             </View>
             <View style={authStyles.proofPill}>
-              <Text style={authStyles.proofText}>Motivating</Text>
+              <Text style={authStyles.proofText}>Competitive</Text>
             </View>
           </View>
         </View>
@@ -84,7 +84,7 @@ export default function SignUpScreen() {
       <SurfaceCard style={authStyles.formCard}>
         <View style={authStyles.formHeader}>
           <Text style={authStyles.cardTitle}>Create your account</Text>
-          <Text style={authStyles.cardCopy}>A cleaner way to stay consistent with the people who keep you honest.</Text>
+          <Text style={authStyles.cardCopy}>Create your Rivl account and bring your consistency into a live group challenge.</Text>
         </View>
 
         <View style={authStyles.trustRow}>
@@ -95,7 +95,7 @@ export default function SignUpScreen() {
             <Text style={authStyles.trustText}>Invite friends</Text>
           </View>
           <View style={authStyles.trustChip}>
-            <Text style={authStyles.trustText}>Track streaks</Text>
+            <Text style={authStyles.trustText}>Move up</Text>
           </View>
         </View>
 

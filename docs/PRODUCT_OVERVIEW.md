@@ -2,22 +2,24 @@
 
 ## Purpose
 
-Habit League exists to help people stay consistent by making habit-building social, visible, and competitive. The app is designed to turn routine follow-through into a weekly group game instead of a private self-improvement chore.
+Rivl exists to help people stay consistent by making daily follow-through social, visible, and competitive. The app is designed to turn routine discipline into a shared weekly contest instead of a private self-improvement checklist.
 
 ## Problem
 
-Most habit tools are solitary. They help users log activity, but they do not create enough social accountability, weekly urgency, or emotional stakes to keep people engaged over time.
+Most habit apps are built around solo tracking. They can log activity, but they often fail to create enough pressure, visibility, or weekly momentum to keep users engaged.
 
 Common failure points:
 
-- habits feel private and easy to ignore
-- motivation fades after initial setup
-- there is no weekly pressure or visible consequence
-- friends are often bolted on instead of central to the product
+- progress is private and easy to ignore
+- there is no strong group accountability
+- weekly urgency is weak or missing
+- social features feel secondary instead of central
 
 ## Solution
 
-Habit League is a group-first habit competition app built around:
+Rivl is a group-first challenge app where friends compete in shared league challenges, check in daily, and push each other to move up the rankings.
+
+The product centers on:
 
 - leagues
 - shared challenges
@@ -25,73 +27,71 @@ Habit League is a group-first habit competition app built around:
 - weekly leaderboards
 - group chat
 - activity visibility
+- shoutouts
 - streak and restore mechanics
-
-The core idea is simple: users do not just track habits, they show up for their league.
 
 ## Target User
 
 Primary target users:
 
 - friends who want lightweight accountability
-- small groups built around fitness, focus, learning, or wellness routines
-- users who respond better to social pressure than private reminders
-- competitive but casual users who want consistency without a heavy productivity tool
+- small groups focused on fitness, focus, learning, or wellness
+- users who respond better to shared pressure than private reminders
+- competitive but casual users who want consistency to feel social
 
 ## Differentiation
 
-Habit League differentiates itself by focusing on:
+Rivl differentiates itself by focusing on:
 
 - group-first product structure
-- shared league challenges instead of isolated personal logs
-- weekly competition instead of endless generic streak tracking
-- integrated accountability loops through chat, feed, shoutouts, and leaderboard movement
-- monetization tied to emotionally relevant moments, not generic utility upsells
+- shared league challenges instead of isolated personal tracking
+- weekly competition instead of endless generic streak logging
+- integrated accountability through chat, feed, shoutouts, and ranking movement
+- monetization tied to emotionally relevant moments instead of generic productivity upsells
 
 ## Core Loop
 
 1. Join or create a league
 2. Start or join a shared challenge
 3. Check in daily
-4. Move up or down the leaderboard
-5. See activity, shoutouts, and league pressure
+4. Move up or down the rankings
+5. See activity, shoutouts, and group pressure
 6. Return before the week resets
-7. Recover lost momentum through streak restore and future purchase loops when appropriate
+7. Recover lost momentum through streak restore and future boosts where appropriate
 
 ## Monetization Strategy
 
 Current monetization direction is intentionally light but structured:
 
 - streak restore foundations
-- shop / boosts foundations
+- boosts / shop foundations
 - RevenueCat-ready native purchase architecture
 
-Future monetization should stay connected to accountability and competition, not generic productivity tooling.
-
-Examples:
-
-- restore credits
-- streak protection tools
-- premium league-management or social features
+Future monetization should stay aligned with group accountability and competition rather than generic self-improvement utilities.
 
 ## Why Development Should Continue
 
-The product has strong strategic reasons to continue:
+Rivl has strong reasons to keep moving:
 
-- the group-first positioning is clearer and more differentiated than a generic habit tracker
-- the current architecture already supports social and competitive loops
-- retention levers are improving as league structure becomes more central
-- monetization can be layered in later without changing the core loop
+- the group-first positioning is sharper than a generic tracker
+- the social and competitive loops are already taking shape
+- retention can improve as leagues become more central and alive
+- monetization can layer in later without changing the core product identity
 
 ## Current Product Direction
 
-Habit League is now firmly positioned as a group-first habit competition app.
+Rivl is not for tracking habits alone.
 
-Current direction:
+Rivl is for showing up with your group, competing in shared challenges, and moving up together.
 
-- leagues are the main product unit
-- challenges are shared at the league level
-- check-ins are participation records tied to shared challenges
-- leaderboards, chat, and feed reinforce weekly accountability
+The product should continue moving toward:
 
-The product should continue moving toward stronger league identity, smoother challenge lifecycle management, better onboarding into competition, and cleaner monetization at emotionally relevant moments.
+- stronger league identity
+- cleaner challenge lifecycle management
+- smoother onboarding into competition
+- better social pressure loops
+- monetization at emotionally relevant moments
+
+## Brand Caution
+
+The `Rivl` name should still receive final trademark and marketplace availability review before public launch. Current repository branding reflects product direction, not final legal clearance.

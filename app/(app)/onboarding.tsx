@@ -105,7 +105,7 @@ export default function OnboardingScreen() {
     <AppScreen scrollable>
       <Text style={commonStyles.eyebrow}>Onboarding</Text>
       <Text style={commonStyles.pageTitle}>Get into your first league</Text>
-      <Text style={commonStyles.pageCopy}>Pick a challenge direction, then join or create a league so your first check-in lands inside competition.</Text>
+      <Text style={commonStyles.pageCopy}>Pick a challenge direction, then join or create a league so your first Rivl check-in lands inside real competition.</Text>
 
       <SurfaceCard>
         <Text style={commonStyles.cardTitle}>How others will see you</Text>

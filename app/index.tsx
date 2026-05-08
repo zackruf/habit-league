@@ -7,7 +7,7 @@ export default function IndexScreen() {
   const { authReady, profile, session } = useApp();
 
   if (!authReady) {
-    return <LoadingScreen message="Loading HabitLeague..." />;
+    return <LoadingScreen message="Loading Rivl..." />;
   }
 
   if (!session) {

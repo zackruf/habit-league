@@ -1,9 +1,10 @@
 # Changelog
 
-All notable changes to Habit League should be documented in this file.
+All notable changes to Rivl should be documented in this file.
 
 ## Unreleased
 
+- Rivl rebrand
 - Repository professionalization
 - Proprietary licensing
 - Expanded documentation set

@@ -2,7 +2,7 @@
 
 ## Overview
 
-Habit League is a React Native + Expo application using Expo Router for navigation and Firebase for backend services when environment configuration is available. When Firebase is unavailable, the app falls back to a seeded AsyncStorage-backed demo mode.
+Rivl is a React Native + Expo application using Expo Router for navigation and Firebase for backend services when environment configuration is available. When Firebase is unavailable, the app falls back to a seeded AsyncStorage-backed demo mode.
 
 The codebase is intentionally beginner-friendly and organized around a few clear layers:
 
@@ -45,10 +45,10 @@ Responsibilities:
   - league creation/joining
   - shared challenge creation
   - challenge check-ins
+  - challenge lifecycle actions
   - group chat
   - activity feed access
   - friend request actions
-  - lifecycle actions for league challenges
 
 ### Purchase / Theme providers
 
@@ -71,7 +71,7 @@ The app uses a “normalize first” approach so older or partially missing data
 
 ## Shared League Challenge Model
 
-Habit League now uses a two-layer challenge structure:
+Rivl uses a two-layer challenge structure:
 
 ### Shared challenge
 
@@ -106,12 +106,12 @@ Why this is useful:
 
 - streaks stay user-specific
 - restore logic stays simple
-- leaderboard aggregation can still happen at the league level
+- ranking aggregation can still happen at the league level
 - shared challenge membership is represented without duplicating challenge definitions
 
-## Leaderboards
+## Rankings
 
-Leaderboards are calculated from challenge participation records inside a league.
+Rankings are calculated from challenge participation records inside a league.
 
 Current logic:
 

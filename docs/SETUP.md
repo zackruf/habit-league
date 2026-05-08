@@ -18,6 +18,8 @@ Recommended local path:
 
 `C:\dev\HabitLeague`
 
+The repository folder name is intentionally unchanged for now.
+
 ## Install Dependencies
 
 Use PowerShell and prefer `npm.cmd` on Windows:
@@ -76,7 +78,7 @@ Before launching:
 
 - start the Android emulator
 - confirm `adb` can see the device
-- use the app’s configured Android package name: `com.zackruf.habitleague`
+- note that the current Android package name remains `com.zackruf.habitleague`
 
 ## Development Build Notes
 
@@ -113,7 +115,8 @@ This repository is already structured to support that work later without forcing
 
 ### Android package name
 
-- ensure `app.json` contains `android.package: com.zackruf.habitleague`
+- `app.json` still contains `android.package: com.zackruf.habitleague`
+- that identifier was intentionally left unchanged to avoid build, signing, and store linkage churn during the rebrand
 
 ### Windows PowerShell and npm
 
@@ -127,3 +130,9 @@ Run:
 npx.cmd tsc --noEmit
 npx.cmd expo export --platform android --clear
 ```
+
+## Brand Note
+
+The app is now branded as `Rivl`.
+
+The `Rivl` name should still receive final trademark and marketplace availability review before public launch.

@@ -84,9 +84,10 @@ export async function signIn(email: string, password: string) {
   }
 
   const store = await readDemoStore();
-  const user = Object.values(store.users).find((entry) => entry.email.toLowerCase() === email.toLowerCase());
+  const normalizedEmail = normalizeDemoEmailAlias(email);
+  const user = Object.values(store.users).find((entry) => normalizeDemoEmailAlias(entry.email) === normalizedEmail);
   if (!user || user.password !== password) {
-    return { ok: false, message: 'Use demo@habitleague.app / password123 or create a new account.' };
+    return { ok: false, message: 'Use demo@rivl.app / password123 or create a new account.' };
   }
 
   store.currentUserId = user.uid;
@@ -1588,15 +1589,15 @@ function seedDemoStore(): DemoStore {
   return {
     ...blankStore,
     users: {
-      [demoUid]: { uid: demoUid, email: 'demo@habitleague.app', password: 'password123' },
-      [friendUid]: { uid: friendUid, email: 'friend@habitleague.app', password: 'password123' },
-      [runnerUid]: { uid: runnerUid, email: 'runner@habitleague.app', password: 'password123' },
-      [readerUid]: { uid: readerUid, email: 'reader@habitleague.app', password: 'password123' },
+      [demoUid]: { uid: demoUid, email: 'demo@rivl.app', password: 'password123' },
+      [friendUid]: { uid: friendUid, email: 'friend@rivl.app', password: 'password123' },
+      [runnerUid]: { uid: runnerUid, email: 'runner@rivl.app', password: 'password123' },
+      [readerUid]: { uid: readerUid, email: 'reader@rivl.app', password: 'password123' },
     },
     profiles: {
       [demoUid]: {
         uid: demoUid,
-        email: 'demo@habitleague.app',
+        email: 'demo@rivl.app',
         name: 'Demo Captain',
         username: 'demo-captain',
         bio: 'Trying to stay consistent one day at a time.',
@@ -1613,7 +1614,7 @@ function seedDemoStore(): DemoStore {
       },
       [friendUid]: {
         uid: friendUid,
-        email: 'friend@habitleague.app',
+        email: 'friend@rivl.app',
         name: 'Jamie',
         username: 'jamie',
         bio: 'Morning runner and water tracker.',
@@ -1627,7 +1628,7 @@ function seedDemoStore(): DemoStore {
       },
       [runnerUid]: {
         uid: runnerUid,
-        email: 'runner@habitleague.app',
+        email: 'runner@rivl.app',
         name: 'Avery',
         username: 'avery-runs',
         bio: 'Trying to stay ready for a 10K.',
@@ -1641,7 +1642,7 @@ function seedDemoStore(): DemoStore {
       },
       [readerUid]: {
         uid: readerUid,
-        email: 'reader@habitleague.app',
+        email: 'reader@rivl.app',
         name: 'Mika',
         username: 'mika-reads',
         bio: 'Reading before screens.',
@@ -2029,6 +2030,14 @@ function createId(prefix: string) {
 
 function createJoinCode() {
   return Math.random().toString(36).slice(2, 8).toUpperCase();
+}
+
+function normalizeDemoEmailAlias(email: string) {
+  const normalized = email.trim().toLowerCase();
+  if (normalized.endsWith('@rivl.app')) {
+    return normalized.replace('@rivl.app', '@habitleague.app');
+  }
+  return normalized;
 }
 
 function createUsername(name: string, email: string) {

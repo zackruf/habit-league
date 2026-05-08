@@ -39,6 +39,7 @@
 - privacy policy needed before production release
 - terms of service needed before production release
 - confirm proprietary licensing posture is reflected in repo and contracts
+- complete final trademark / app store availability review for the `Rivl` name
 
 ## Payment / IAP Readiness
 

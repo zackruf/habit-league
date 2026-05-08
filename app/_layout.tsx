@@ -11,7 +11,7 @@ export default function RootLayout() {
   return (
     <ThemeProvider>
       <SafeAreaProvider>
-        <AppProvider fallback={<LoadingScreen message="Loading HabitLeague..." />}>
+        <AppProvider fallback={<LoadingScreen message="Loading Rivl..." />}>
           <PurchaseProvider>
             <RootNavigator />
           </PurchaseProvider>

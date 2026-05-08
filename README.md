@@ -1,6 +1,8 @@
-# Habit League
+# Rivl
 
-Group-first habit competition built around leagues, shared challenges, and social accountability.
+Show up. Move up.
+
+Group-first challenge app where friends compete in shared league challenges, check in daily, and push each other to move up the rankings.
 
 ## Repository Status
 
@@ -12,15 +14,14 @@ This repository is not open source. Access is limited to invited collaborators a
 
 ## Product Overview
 
-Habit League is a mobile app designed to make consistency social. Instead of treating habits as isolated solo tasks, the product centers on leagues, shared challenges, weekly leaderboards, chat, lightweight social pressure, and streak-based accountability.
+Rivl is a group-first challenge app built around leagues, shared challenges, social accountability, and weekly rankings. Instead of treating consistency as a private solo task, Rivl turns daily follow-through into a shared competition with visible movement, lightweight pressure, and clear weekly stakes.
 
-The current product direction is intentionally group-first:
+Core idea:
 
-- Join or create a league
-- Compete through shared challenges
-- Check in for your league
-- Track weekly movement on leaderboards
-- Use chat, activity, and shoutouts to keep momentum visible
+- users do not track habits alone
+- users join leagues
+- leagues compete through shared challenges
+- daily check-ins move members up or down the rankings
 
 ## Current MVP Scope
 
@@ -53,25 +54,28 @@ The current MVP includes:
 - AsyncStorage
 - RevenueCat-ready purchase foundation via `react-native-purchases`
 
-## Product Direction
+## Current Product Direction
 
-Habit League is no longer positioned as an individual habit tracker with optional social features. The app is being built as a group-first habit competition product centered on:
+Rivl is not positioned as an individual habit tracker with optional social features.
 
-- Leagues
-- Shared challenges
-- Weekly standings
-- Social accountability
-- Momentum and retention loops
+Rivl is a group-first challenge app focused on:
+
+- leagues
+- shared challenges
+- daily check-ins
+- weekly rankings
+- group accountability
+- social momentum
 
 Current retained systems include:
 
-- Shared league challenges
-- Leaderboards
-- Group chat
-- Activity feed
-- Shoutouts
-- Friend requests
-- Streak restore and shop foundations
+- shared league challenges
+- leaderboards
+- group chat
+- activity feed
+- shoutouts
+- friend requests
+- streak restore and shop foundations
 
 ## Project Structure
 
@@ -177,6 +181,12 @@ Key points:
 
 See [docs/SETUP.md](docs/SETUP.md) and [docs/RELEASE_CHECKLIST.md](docs/RELEASE_CHECKLIST.md) for operational details.
 
+## Brand Note
+
+The product brand is now `Rivl`.
+
+Final trademark, app store, and public-market availability review for the `Rivl` name should still be completed before launch. This repository should not be treated as proof that brand clearance is finalized.
+
 ## Proprietary Notice
 
-This repository contains proprietary source code, documentation, product materials, and branding related to Habit League. Access to the repository does not grant any right to copy, reuse, redistribute, commercialize, sublicense, or publish project materials without prior written permission from the owner.
+This repository contains proprietary source code, documentation, product materials, and branding related to Rivl. Access to the repository does not grant any right to copy, reuse, redistribute, commercialize, sublicense, or publish project materials without prior written permission from the owner.
