@@ -26,6 +26,8 @@ export default function CreateHabitScreen() {
   const [title, setTitle] = useState(defaultTemplate.title);
   const [emoji, setEmoji] = useState(defaultTemplate.emoji);
   const [category, setCategory] = useState(defaultTemplate.category);
+  const [description, setDescription] = useState(defaultTemplate.description);
+  const [frequency, setFrequency] = useState('Daily');
   const selectedGroup = useMemo(() => groups.find((group) => group.id === selectedGroupId) ?? null, [groups, selectedGroupId]);
 
   function applyTemplate(template: HabitTemplate) {
@@ -33,10 +35,11 @@ export default function CreateHabitScreen() {
     setTitle(template.title);
     setEmoji(template.emoji);
     setCategory(template.category);
+    setDescription(template.description);
   }
 
   async function handleCreate() {
-    const result = await createHabit({ groupId: selectedGroupId, title, emoji, category });
+    const result = await createHabit({ groupId: selectedGroupId, title, emoji, category, description, frequency });
     if (result.ok) {
       router.replace(selectedGroupId ? `/(app)/groups/${selectedGroupId}` : '/(app)/(tabs)/groups');
     }
@@ -132,6 +135,14 @@ export default function CreateHabitScreen() {
         <TextField label="Challenge name" value={title} onChangeText={setTitle} placeholder="Morning walk" />
         <TextField label="Short label" value={emoji} onChangeText={setEmoji} placeholder="Fit" />
         <TextField label="Category" value={category} onChangeText={setCategory} placeholder="Health" />
+        <TextField
+          label="Challenge details"
+          value={description}
+          onChangeText={setDescription}
+          placeholder="What counts as a successful check-in for this league?"
+          multiline
+        />
+        <TextField label="Frequency" value={frequency} onChangeText={setFrequency} placeholder="Daily" />
         <Text style={commonStyles.smallMuted}>
           {selectedGroup ? `This will count toward ${selectedGroup.name}.` : 'Pick a league above to continue.'}
         </Text>

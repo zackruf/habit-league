@@ -33,6 +33,7 @@ import {
   GroupMessage,
   GroupSettingsInput,
   Habit,
+  LeagueChallenge,
   LeaderboardEntry,
   Profile,
   SessionUser,
@@ -47,6 +48,7 @@ const blankStore: DemoStore = {
   currentUserId: null,
   users: {},
   profiles: {},
+  challenges: {},
   habits: {},
   groups: {},
   groupMessages: {},
@@ -416,28 +418,41 @@ export async function declineFriendRequest(uid: string, requesterId: string) {
   return { ok: true, message: 'Request declined.' };
 }
 
-export async function createHabit(uid: string, input: { groupId: string; title: string; emoji: string; category: string }) {
-  const habit: Habit = {
-    id: createId('habit'),
-    userId: uid,
-    groupId: input.groupId,
-    title: input.title.trim(),
-    emoji: input.emoji.trim() || '🔥',
-    category: input.category.trim() || 'General',
-    createdAt: new Date().toISOString(),
-    checkIns: [],
-    restoreUsedForDate: null,
-    restoreUsedAt: null,
-  };
+export async function createHabit(
+  uid: string,
+  input: { groupId: string; title: string; emoji: string; category: string; description?: string; frequency?: string }
+) {
+  return createLeagueChallenge(uid, input);
+}
+
+export async function createLeagueChallenge(
+  uid: string,
+  input: { groupId: string; title: string; emoji: string; category: string; description?: string; frequency?: string }
+) {
+  const challenge = buildLeagueChallenge(uid, input);
 
   if (usingFirebaseBackend && firestore) {
-    await setDoc(doc(firestore, 'habits', habit.id), habit);
-    return;
+    const groupSnapshot = await getDoc(doc(firestore, 'groups', input.groupId));
+    const group = normalizeGroup(groupSnapshot.data() as Group);
+    if (!group) {
+      return null;
+    }
+
+    await setDoc(doc(firestore, 'challenges', challenge.id), challenge);
+    await createChallengeParticipationsForMembers(group.memberIds, challenge);
+    return challenge.id;
   }
 
   const store = await readDemoStore();
-  store.habits[habit.id] = habit;
+  const group = normalizeGroup(store.groups[input.groupId]);
+  if (!group) {
+    return null;
+  }
+
+  store.challenges[challenge.id] = challenge;
+  createDemoParticipationsForMembers(store, group.memberIds, challenge);
   await writeDemoStore(store);
+  return challenge.id;
 }
 
 export async function toggleHabitCheckIn(uid: string, habitId: string) {
@@ -753,6 +768,7 @@ export async function joinGroup(uid: string, joinCode: string) {
     const profile = normalizeProfile(profileSnapshot.data() as Profile);
     await updateDoc(doc(firestore, 'groups', group.id), { memberIds: arrayUnion(uid) });
     await updateDoc(doc(firestore, 'profiles', uid), { groupIds: arrayUnion(group.id) });
+    await ensureMemberParticipationsForGroup(uid, group.id);
     await recordActivity({
       type: 'league_join',
       actorId: uid,
@@ -777,6 +793,7 @@ export async function joinGroup(uid: string, joinCode: string) {
 
   store.groups[group.id] = { ...group, memberIds: [...new Set([...group.memberIds, uid])] };
   store.profiles[uid].groupIds = [...new Set([...(store.profiles[uid].groupIds ?? []), group.id])];
+  ensureDemoMemberParticipationsForGroup(store, uid, group.id);
   store.activities = [
     buildActivity({
       type: 'league_join',
@@ -811,6 +828,7 @@ export async function joinPublicGroup(uid: string, groupId: string) {
     const profile = normalizeProfile(profileSnapshot.data() as Profile);
     await updateDoc(groupRef, { memberIds: arrayUnion(uid) });
     await updateDoc(doc(firestore, 'profiles', uid), { groupIds: arrayUnion(group.id) });
+    await ensureMemberParticipationsForGroup(uid, group.id);
     await recordActivity({
       type: 'league_join',
       actorId: uid,
@@ -832,6 +850,7 @@ export async function joinPublicGroup(uid: string, groupId: string) {
 
   store.groups[group.id] = { ...group, memberIds: [...new Set([...group.memberIds, uid])] };
   store.profiles[uid].groupIds = [...new Set([...(store.profiles[uid].groupIds ?? []), group.id])];
+  ensureDemoMemberParticipationsForGroup(store, uid, group.id);
   store.activities = [
     buildActivity({
       type: 'league_join',
@@ -865,26 +884,25 @@ export async function getGroupDetails(groupId: string): Promise<GroupDetails | n
         return normalizeProfile(snapshot.data() as Profile);
       })
     );
-    const memberFallbackGroupIds = new Map(members.map((member) => [member.uid, member.groupIds[0] ?? '']));
-    const habits = (
-      await Promise.all(
-        group.memberIds.map(async (uid) => {
-          const snapshot = await getDocs(query(collection(db, 'habits'), where('userId', '==', uid)));
-          return snapshot.docs
-            .map((entry) => normalizeHabit(entry.data() as Habit, memberFallbackGroupIds.get(uid) ?? ''))
-            .filter((habit): habit is Habit => Boolean(habit));
-        })
-      )
-    )
-      .flat()
-      .filter((habit) => habit.groupId === group.id);
+    const [challengeSnapshot, participationSnapshot] = await Promise.all([
+      getDocs(query(collection(db, 'challenges'), where('groupId', '==', group.id))),
+      getDocs(query(collection(db, 'habits'), where('groupId', '==', group.id))),
+    ]);
+    const challenges = challengeSnapshot.docs
+      .map((entry) => normalizeChallenge(entry.data() as LeagueChallenge))
+      .filter((challenge): challenge is LeagueChallenge => Boolean(challenge));
+    const participations = participationSnapshot.docs
+      .map((entry) => normalizeHabit(entry.data() as Habit, group.id))
+      .filter((habit): habit is Habit => Boolean(habit));
+    const mergedChallenges = mergeLegacyChallenges(challenges, participations, group.id);
 
     return {
       group,
       members,
-      habits,
-      leaderboard: buildLeaderboard(members, habits),
-      previousWeekLeaderboard: buildLeaderboard(members, habits, getPreviousWeekKeys()),
+      challenges: mergedChallenges,
+      challengeParticipations: participations,
+      leaderboard: buildLeaderboard(members, participations),
+      previousWeekLeaderboard: buildLeaderboard(members, participations, getPreviousWeekKeys()),
     };
   }
 
@@ -895,16 +913,21 @@ export async function getGroupDetails(groupId: string): Promise<GroupDetails | n
   }
 
   const members = group.memberIds.map((uid) => normalizeProfile(store.profiles[uid])).filter(Boolean);
-  const memberFallbackGroupIds = new Map(members.map((member) => [member.uid, member.groupIds[0] ?? '']));
-  const habits = Object.values(store.habits)
-    .map((habit) => normalizeHabit(habit, memberFallbackGroupIds.get(habit?.userId ?? '') ?? ''))
+  const challenges = Object.values(store.challenges)
+    .map((challenge) => normalizeChallenge(challenge))
+    .filter((challenge): challenge is LeagueChallenge => Boolean(challenge))
+    .filter((challenge) => challenge.groupId === group.id);
+  const participations = Object.values(store.habits)
+    .map((habit) => normalizeHabit(habit, group.id))
     .filter((habit): habit is Habit => habit !== null && group.memberIds.includes(habit.userId) && habit.groupId === group.id);
+  const mergedChallenges = mergeLegacyChallenges(challenges, participations, group.id);
   return {
     group,
     members,
-    habits,
-    leaderboard: buildLeaderboard(members, habits),
-    previousWeekLeaderboard: buildLeaderboard(members, habits, getPreviousWeekKeys()),
+    challenges: mergedChallenges,
+    challengeParticipations: participations,
+    leaderboard: buildLeaderboard(members, participations),
+    previousWeekLeaderboard: buildLeaderboard(members, participations, getPreviousWeekKeys()),
   };
 }
 
@@ -1018,6 +1041,19 @@ function normalizeGroup(group?: Group | null): Group | null {
   };
 }
 
+function normalizeChallenge(challenge?: LeagueChallenge | null): LeagueChallenge | null {
+  if (!challenge) {
+    return null;
+  }
+
+  return {
+    ...challenge,
+    description: challenge.description || '',
+    frequency: challenge.frequency || 'Daily',
+    active: challenge.active ?? true,
+  };
+}
+
 function normalizeHabit(habit?: Habit | null, fallbackGroupId = ''): Habit | null {
   if (!habit) {
     return null;
@@ -1026,6 +1062,7 @@ function normalizeHabit(habit?: Habit | null, fallbackGroupId = ''): Habit | nul
   return {
     ...habit,
     groupId: habit.groupId || fallbackGroupId,
+    challengeId: habit.challengeId || habit.id,
     emoji: habit.emoji || '🔥',
     category: habit.category || 'General',
     checkIns: [...new Set(habit.checkIns || [])].sort(),
@@ -1081,6 +1118,133 @@ function buildMessage(groupId: string, sender: Profile, text: string): GroupMess
   };
 }
 
+function buildLeagueChallenge(
+  uid: string,
+  input: { groupId: string; title: string; emoji: string; category: string; description?: string; frequency?: string }
+): LeagueChallenge {
+  return {
+    id: createId('challenge'),
+    groupId: input.groupId,
+    title: input.title.trim(),
+    emoji: input.emoji.trim() || 'Fit',
+    category: input.category.trim() || 'General',
+    description: input.description?.trim() || '',
+    frequency: input.frequency?.trim() || 'Daily',
+    createdBy: uid,
+    createdAt: new Date().toISOString(),
+    active: true,
+  };
+}
+
+function buildChallengeParticipation(challenge: LeagueChallenge, userId: string): Habit {
+  return {
+    id: createId('habit'),
+    userId,
+    groupId: challenge.groupId,
+    challengeId: challenge.id,
+    title: challenge.title,
+    emoji: challenge.emoji,
+    category: challenge.category,
+    createdAt: challenge.createdAt,
+    checkIns: [],
+    restoreUsedForDate: null,
+    restoreUsedAt: null,
+  };
+}
+
+async function createChallengeParticipationsForMembers(memberIds: string[], challenge: LeagueChallenge) {
+  const db = firestore;
+  if (!db) {
+    return;
+  }
+
+  const existingParticipations = await getDocs(query(collection(db, 'habits'), where('groupId', '==', challenge.groupId)));
+  const existingKeys = new Set(
+    existingParticipations.docs
+      .map((entry) => normalizeHabit(entry.data() as Habit, challenge.groupId))
+      .filter((entry): entry is Habit => Boolean(entry))
+      .map((entry) => `${entry.challengeId}:${entry.userId}`)
+  );
+
+  await Promise.all(
+    memberIds.map(async (memberId) => {
+      const key = `${challenge.id}:${memberId}`;
+      if (existingKeys.has(key)) {
+        return;
+      }
+
+      const participation = buildChallengeParticipation(challenge, memberId);
+      await setDoc(doc(db, 'habits', participation.id), participation);
+    })
+  );
+}
+
+function createDemoParticipationsForMembers(store: DemoStore, memberIds: string[], challenge: LeagueChallenge) {
+  const existingKeys = new Set(
+    Object.values(store.habits)
+      .map((entry) => normalizeHabit(entry, challenge.groupId))
+      .filter((entry): entry is Habit => Boolean(entry))
+      .map((entry) => `${entry.challengeId}:${entry.userId}`)
+  );
+
+  memberIds.forEach((memberId) => {
+    const key = `${challenge.id}:${memberId}`;
+    if (existingKeys.has(key)) {
+      return;
+    }
+
+    const participation = buildChallengeParticipation(challenge, memberId);
+    store.habits[participation.id] = participation;
+  });
+}
+
+async function ensureMemberParticipationsForGroup(uid: string, groupId: string) {
+  if (!firestore) {
+    return;
+  }
+
+  const challengeSnapshot = await getDocs(query(collection(firestore, 'challenges'), where('groupId', '==', groupId)));
+  const challenges = challengeSnapshot.docs
+    .map((entry) => normalizeChallenge(entry.data() as LeagueChallenge))
+    .filter((entry): entry is LeagueChallenge => Boolean(entry));
+
+  await Promise.all(challenges.map((challenge) => createChallengeParticipationsForMembers([uid], challenge)));
+}
+
+function ensureDemoMemberParticipationsForGroup(store: DemoStore, uid: string, groupId: string) {
+  const challenges = Object.values(store.challenges)
+    .map((challenge) => normalizeChallenge(challenge))
+    .filter((challenge): challenge is LeagueChallenge => Boolean(challenge))
+    .filter((challenge) => challenge.groupId === groupId);
+
+  challenges.forEach((challenge) => createDemoParticipationsForMembers(store, [uid], challenge));
+}
+
+function mergeLegacyChallenges(challenges: LeagueChallenge[], participations: Habit[], groupId: string) {
+  const challengeMap = new Map(challenges.map((challenge) => [challenge.id, challenge]));
+
+  participations.forEach((participation) => {
+    if (challengeMap.has(participation.challengeId)) {
+      return;
+    }
+
+    challengeMap.set(participation.challengeId, {
+      id: participation.challengeId,
+      groupId,
+      title: participation.title,
+      emoji: participation.emoji,
+      category: participation.category,
+      description: '',
+      frequency: 'Daily',
+      createdBy: participation.userId,
+      createdAt: participation.createdAt,
+      active: true,
+    });
+  });
+
+  return Array.from(challengeMap.values()).sort((left, right) => right.createdAt.localeCompare(left.createdAt));
+}
+
 function buildActivity(input: ActivityInput): ActivityItem {
   const groupName = input.groupName ?? null;
   const habitTitle = input.habitTitle ?? null;
@@ -1107,7 +1271,7 @@ function buildActivitySummary(input: ActivityInput) {
   const actor = input.actorName || 'Someone';
 
   if (input.type === 'check_in') {
-    return `${actor} checked in ${input.habitTitle || 'a habit'}`;
+    return `${actor} checked in ${input.habitTitle || 'a challenge'}${input.groupName ? ` in ${input.groupName}` : ''}`;
   }
 
   if (input.type === 'rank_movement') {
@@ -1164,6 +1328,7 @@ function buildLeaderboard(members: Profile[], habits: Habit[], weekKeysInput = g
   return members
     .map((member) => {
       const memberHabits = habits.filter((habit) => habit.userId === member.uid);
+      const uniqueChallenges = new Set(memberHabits.map((habit) => habit.challengeId));
       return {
         userId: member.uid,
         name: member.name,
@@ -1171,7 +1336,7 @@ function buildLeaderboard(members: Profile[], habits: Habit[], weekKeysInput = g
           (total, habit) => total + habit.checkIns.filter((entry) => weekKeys.has(entry)).length,
           0
         ),
-        completedHabits: memberHabits.length,
+        completedHabits: uniqueChallenges.size,
       };
     })
     .sort((left, right) => right.weeklyCheckIns - left.weeklyCheckIns);
@@ -1187,6 +1352,7 @@ async function readDemoStore(): Promise<DemoStore> {
       ...parsed,
       users: { ...seeded.users, ...(parsed.users || {}) },
       profiles: { ...seeded.profiles, ...(parsed.profiles || {}) },
+      challenges: { ...seeded.challenges, ...(parsed.challenges || {}) },
       habits: { ...seeded.habits, ...(parsed.habits || {}) },
       groups: { ...seeded.groups, ...(parsed.groups || {}) },
       groupMessages: { ...seeded.groupMessages, ...(parsed.groupMessages || {}) },
@@ -1211,10 +1377,16 @@ function seedDemoStore(): DemoStore {
   const groupId = 'group-demo';
   const publicFitnessGroupId = 'group-public-fitness';
   const publicFocusGroupId = 'group-public-focus';
-  const habitId = 'habit-demo';
-  const friendHabitId = 'habit-friend';
-  const runnerHabitId = 'habit-runner';
-  const readerHabitId = 'habit-reader';
+  const walkChallengeId = 'challenge-starter-walk';
+  const waterChallengeId = 'challenge-starter-water';
+  const workoutChallengeId = 'challenge-public-workout';
+  const readingChallengeId = 'challenge-public-reading';
+  const demoWalkParticipationId = 'habit-demo-walk';
+  const friendWalkParticipationId = 'habit-friend-walk';
+  const demoWaterParticipationId = 'habit-demo-water';
+  const friendWaterParticipationId = 'habit-friend-water';
+  const runnerHabitId = 'habit-runner-workout';
+  const readerHabitId = 'habit-reader-reading';
   const recentKeys = getRecentDateKeys(4);
 
   return {
@@ -1286,11 +1458,62 @@ function seedDemoStore(): DemoStore {
         shopInventory: getDefaultShopInventory(),
       },
     },
+    challenges: {
+      [walkChallengeId]: {
+        id: walkChallengeId,
+        groupId,
+        title: 'Morning walk',
+        emoji: 'Walk',
+        category: 'Health',
+        description: 'Get outside early and bank a quick win for the league.',
+        frequency: 'Daily',
+        createdBy: demoUid,
+        createdAt: new Date().toISOString(),
+        active: true,
+      },
+      [waterChallengeId]: {
+        id: waterChallengeId,
+        groupId,
+        title: 'Drink water',
+        emoji: 'Water',
+        category: 'Wellness',
+        description: 'Stay hydrated and help your league stack consistent check-ins.',
+        frequency: 'Daily',
+        createdBy: friendUid,
+        createdAt: new Date().toISOString(),
+        active: true,
+      },
+      [workoutChallengeId]: {
+        id: workoutChallengeId,
+        groupId: publicFitnessGroupId,
+        title: 'Workout',
+        emoji: 'Fit',
+        category: 'Fitness',
+        description: 'Any real workout counts. Show up and log it.',
+        frequency: 'Daily',
+        createdBy: runnerUid,
+        createdAt: new Date().toISOString(),
+        active: true,
+      },
+      [readingChallengeId]: {
+        id: readingChallengeId,
+        groupId: publicFocusGroupId,
+        title: 'Read 10 pages',
+        emoji: 'Read',
+        category: 'Learning',
+        description: 'Trade ten minutes of scrolling for ten pages of progress.',
+        frequency: 'Daily',
+        createdBy: readerUid,
+        createdAt: new Date().toISOString(),
+        active: true,
+      },
+    },
     habits: {
-      [habitId]: {
-        id: habitId,
+      [demoWalkParticipationId]: {
+        id: demoWalkParticipationId,
         userId: demoUid,
         groupId,
+        challengeId: walkChallengeId,
         title: 'Morning walk',
         emoji: '🚶',
         category: 'Health',
@@ -1299,10 +1522,37 @@ function seedDemoStore(): DemoStore {
         restoreUsedForDate: null,
         restoreUsedAt: null,
       },
-      [friendHabitId]: {
-        id: friendHabitId,
+      [friendWalkParticipationId]: {
+        id: friendWalkParticipationId,
         userId: friendUid,
         groupId,
+        challengeId: walkChallengeId,
+        title: 'Morning walk',
+        emoji: 'Walk',
+        category: 'Health',
+        createdAt: new Date().toISOString(),
+        checkIns: recentKeys.slice(1, 4),
+        restoreUsedForDate: null,
+        restoreUsedAt: null,
+      },
+      [demoWaterParticipationId]: {
+        id: demoWaterParticipationId,
+        userId: demoUid,
+        groupId,
+        challengeId: waterChallengeId,
+        title: 'Drink water',
+        emoji: 'Water',
+        category: 'Wellness',
+        createdAt: new Date().toISOString(),
+        checkIns: recentKeys.slice(0, 2),
+        restoreUsedForDate: null,
+        restoreUsedAt: null,
+      },
+      [friendWaterParticipationId]: {
+        id: friendWaterParticipationId,
+        userId: friendUid,
+        groupId,
+        challengeId: waterChallengeId,
         title: 'Drink water',
         emoji: '💧',
         category: 'Wellness',
@@ -1315,6 +1565,7 @@ function seedDemoStore(): DemoStore {
         id: runnerHabitId,
         userId: runnerUid,
         groupId: publicFitnessGroupId,
+        challengeId: workoutChallengeId,
         title: 'Workout',
         emoji: 'Fit',
         category: 'Fitness',
@@ -1327,6 +1578,7 @@ function seedDemoStore(): DemoStore {
         id: readerHabitId,
         userId: readerUid,
         groupId: publicFocusGroupId,
+        challengeId: readingChallengeId,
         title: 'Read 10 pages',
         emoji: 'R',
         category: 'Learning',
@@ -1340,7 +1592,7 @@ function seedDemoStore(): DemoStore {
       [groupId]: {
         id: groupId,
         name: 'Starter League',
-        description: 'A seeded demo group so the leaderboard has life on first launch.',
+        description: 'A seeded demo league with shared challenges so competition feels alive on first launch.',
         ownerId: demoUid,
         memberIds: [demoUid, friendUid],
         joinCode: 'START1',
@@ -1431,11 +1683,11 @@ function seedDemoStore(): DemoStore {
         actorName: 'Jamie',
         groupId,
         groupName: 'Starter League',
-        habitId: friendHabitId,
+        habitId: friendWaterParticipationId,
         habitTitle: 'Drink water',
         targetUserId: null,
         targetUserName: null,
-        summary: 'Jamie checked in Drink water',
+        summary: 'Jamie checked in Drink water in Starter League',
         createdAt: new Date(Date.now() - 1000 * 60 * 35).toISOString(),
         shoutouts: {
           ...getEmptyShoutouts(),
@@ -1449,7 +1701,7 @@ function seedDemoStore(): DemoStore {
         actorName: 'Demo Captain',
         groupId,
         groupName: 'Starter League',
-        habitId,
+        habitId: demoWalkParticipationId,
         habitTitle: 'Morning walk',
         targetUserId: null,
         targetUserName: null,

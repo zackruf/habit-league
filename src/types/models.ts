@@ -32,6 +32,7 @@ export type Habit = {
   id: string;
   userId: string;
   groupId: string;
+  challengeId: string;
   title: string;
   emoji: string;
   category: string;
@@ -57,6 +58,19 @@ export type HabitStreakStatus = {
   justBroken: boolean;
   lastCompletedDate: string | null;
   restoreEligibility: HabitRestoreEligibility;
+};
+
+export type LeagueChallenge = {
+  id: string;
+  groupId: string;
+  title: string;
+  emoji: string;
+  category: string;
+  description: string;
+  frequency: string;
+  createdBy: string;
+  createdAt: string;
+  active: boolean;
 };
 
 export type Group = {
@@ -145,7 +159,8 @@ export type LeaderboardEntry = {
 export type GroupDetails = {
   group: Group;
   members: Profile[];
-  habits: Habit[];
+  challenges: LeagueChallenge[];
+  challengeParticipations: Habit[];
   leaderboard: LeaderboardEntry[];
   previousWeekLeaderboard: LeaderboardEntry[];
 };
@@ -171,6 +186,7 @@ export type DemoStore = {
   currentUserId: string | null;
   users: Record<string, { uid: string; email: string; password: string }>;
   profiles: Record<string, Profile>;
+  challenges: Record<string, LeagueChallenge>;
   habits: Record<string, Habit>;
   groups: Record<string, Group>;
   groupMessages: Record<string, GroupMessage[]>;

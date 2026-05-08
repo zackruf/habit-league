@@ -14,14 +14,15 @@ import { SectionHeader } from '@/components/SectionHeader';
 import { SurfaceCard } from '@/components/SurfaceCard';
 import { useApp } from '@/context/AppProvider';
 import { useThemePreferences } from '@/context/ThemeProvider';
+import { formatFriendlyDate } from '@/lib/date';
 import { getLeaderboardNotice } from '@/lib/leaderboard';
 import { createCommonStyles } from '@/styles/commonStyles';
-import { ActivityItem, ActivityShoutoutType, GroupDetails } from '@/types/models';
+import { ActivityItem, ActivityShoutoutType, GroupDetails, LeagueChallenge } from '@/types/models';
 import { spacing } from '@/constants/theme';
 
 export default function GroupScreen() {
   const { groupId } = useLocalSearchParams<{ groupId: string }>();
-  const { addActivityShoutout, getActivityFeed, getGroupDetails, session } = useApp();
+  const { addActivityShoutout, getActivityFeed, getGroupDetails, recordActivity, session, toggleHabitCheckIn } = useApp();
   const { theme } = useThemePreferences();
   const commonStyles = createCommonStyles(theme.colors);
   const [details, setDetails] = useState<GroupDetails | null>(null);
@@ -62,6 +63,7 @@ export default function GroupScreen() {
 
   const leaderboardNotice = session ? getLeaderboardNotice(details.leaderboard, session.uid) : null;
   const isOwner = session?.uid === details.group.ownerId;
+  const todayKey = formatFriendlyDate(new Date(), 'key');
 
   async function handleShoutout(activityId: string, shoutoutType: ActivityShoutoutType) {
     if (!details) {
@@ -70,6 +72,56 @@ export default function GroupScreen() {
 
     await addActivityShoutout(activityId, shoutoutType);
     setActivities(await getActivityFeed(details.group.id));
+  }
+
+  async function handleChallengeCheckIn(challenge: LeagueChallenge) {
+    if (!details || !session) {
+      return;
+    }
+
+    const participation = details.challengeParticipations.find(
+      (entry) => entry.challengeId === challenge.id && entry.userId === session.uid
+    );
+    if (!participation) {
+      return;
+    }
+
+    const beforeRank = getRank(details.leaderboard, session.uid);
+    const wasCheckedInToday = participation.checkIns.includes(todayKey);
+
+    await toggleHabitCheckIn(participation.id);
+
+    const nextDetails = await getGroupDetails(details.group.id);
+    if (!nextDetails) {
+      return;
+    }
+
+    setDetails(nextDetails);
+
+    if (!wasCheckedInToday) {
+      await recordActivity({
+        type: 'check_in',
+        groupId: nextDetails.group.id,
+        groupName: nextDetails.group.name,
+        habitId: participation.id,
+        habitTitle: challenge.title,
+      });
+
+      const afterRank = getRank(nextDetails.leaderboard, session.uid);
+      if (beforeRank && afterRank && afterRank < beforeRank) {
+        await recordActivity({
+          type: 'rank_movement',
+          groupId: nextDetails.group.id,
+          groupName: nextDetails.group.name,
+          habitId: participation.id,
+          habitTitle: challenge.title,
+          spotsMoved: beforeRank - afterRank,
+          rank: afterRank,
+        });
+      }
+    }
+
+    setActivities(await getActivityFeed(nextDetails.group.id));
   }
 
   return (
@@ -117,19 +169,44 @@ export default function GroupScreen() {
 
           <SectionHeader title="League challenges" />
           <View style={commonStyles.compactSection}>
-            {details.habits.length ? (
-              details.habits.map((habit) => {
-                const owner = details.members.find((member) => member.uid === habit.userId);
+            {details.challenges.length ? (
+              details.challenges.map((challenge) => {
+                const userParticipation = session
+                  ? details.challengeParticipations.find(
+                      (entry) => entry.challengeId === challenge.id && entry.userId === session.uid
+                    )
+                  : null;
+                const checkedToday = Boolean(userParticipation?.checkIns.includes(todayKey));
+                const checkedInCount = details.challengeParticipations.filter(
+                  (entry) => entry.challengeId === challenge.id && entry.checkIns.includes(todayKey)
+                ).length;
+                const participantsLabel = checkedInCount === 1 ? '1 check-in today' : `${checkedInCount} check-ins today`;
                 return (
-                  <SurfaceCard key={habit.id}>
+                  <SurfaceCard key={challenge.id}>
                     <View style={commonStyles.rowBetween}>
                       <View style={commonStyles.cardCopyBlock}>
                         <Text style={commonStyles.cardTitle}>
-                          {habit.emoji} {habit.title}
+                          {challenge.emoji} {challenge.title}
                         </Text>
-                        <Text style={commonStyles.cardCopy}>{owner?.name ?? 'League member'} / {habit.category}</Text>
+                        <Text style={commonStyles.cardCopy}>
+                          {challenge.frequency} / {challenge.category}
+                        </Text>
+                        <Text style={commonStyles.smallMuted}>
+                          {challenge.description || 'Shared challenge for this league.'}
+                        </Text>
+                        <Text style={commonStyles.smallMuted}>
+                          {checkedToday ? 'You checked in today.' : 'Ready for today.'} / {participantsLabel}
+                        </Text>
                       </View>
-                      <Text style={commonStyles.listValue}>{habit.checkIns.length}</Text>
+                      {userParticipation ? (
+                        <PrimaryButton
+                          label={checkedToday ? 'Checked in' : 'Check in'}
+                          onPress={() => handleChallengeCheckIn(challenge)}
+                          variant={checkedToday ? 'secondary' : 'primary'}
+                        />
+                      ) : (
+                        <Text style={commonStyles.smallMuted}>Joins automatically</Text>
+                      )}
                     </View>
                   </SurfaceCard>
                 );
@@ -183,6 +260,11 @@ export default function GroupScreen() {
       )}
     </AppScreen>
   );
+}
+
+function getRank(leaderboard: GroupDetails['leaderboard'], userId: string) {
+  const index = leaderboard.findIndex((entry) => entry.userId === userId);
+  return index === -1 ? null : index + 1;
 }
 
 const styles = StyleSheet.create({

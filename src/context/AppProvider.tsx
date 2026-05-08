@@ -5,7 +5,7 @@ import {
   addActivityShoutout as addActivityShoutoutRequest,
   acceptFriendRequest as acceptFriendRequestRequest,
   createGroup as createGroupRequest,
-  createHabit as createHabitRequest,
+  createLeagueChallenge as createHabitRequest,
   declineFriendRequest as declineFriendRequestRequest,
   getGroupDetails,
   initializeUserProfile,
@@ -69,7 +69,7 @@ type AppContextValue = {
   signUp: (name: string, email: string, password: string) => Promise<ActionResult>;
   signOut: () => Promise<void>;
   saveProfile: (patch: Partial<Profile>) => Promise<ActionResult>;
-  createHabit: (input: { groupId: string; title: string; emoji: string; category: string }) => Promise<ActionResult>;
+  createHabit: (input: { groupId: string; title: string; emoji: string; category: string; description?: string; frequency?: string }) => Promise<ActionResult>;
   toggleHabitCheckIn: (habitId: string) => Promise<void>;
   restoreHabitStreak: (habitId: string) => Promise<ActionResult>;
   createGroup: (input: GroupSettingsInput) => Promise<GroupActionResult>;
@@ -196,7 +196,7 @@ export function AppProvider({ children, fallback }: PropsWithChildren<{ fallback
   );
 
   const createHabit = useCallback(
-    async (input: { groupId: string; title: string; emoji: string; category: string }) => {
+    async (input: { groupId: string; title: string; emoji: string; category: string; description?: string; frequency?: string }) => {
       if (!session) {
         return { ok: false, message: 'No active session.' };
       }
@@ -209,7 +209,11 @@ export function AppProvider({ children, fallback }: PropsWithChildren<{ fallback
       }
 
       setBusy(true);
-      await createHabitRequest(session.uid, input);
+      const challengeId = await createHabitRequest(session.uid, input);
+      if (!challengeId) {
+        setBusy(false);
+        return { ok: false, message: 'That league could not be found.' };
+      }
       await refreshUserData(session);
       setBusy(false);
       return { ok: true, message: 'League challenge added.' };

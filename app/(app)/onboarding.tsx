@@ -115,8 +115,8 @@ export default function OnboardingScreen() {
       </SurfaceCard>
 
       <SurfaceCard>
-        <Text style={commonStyles.cardTitle}>Choose your first league challenge</Text>
-        <Text style={commonStyles.cardCopy}>Templates reduce blank-page friction and give your league a challenge to rally around immediately.</Text>
+        <Text style={commonStyles.cardTitle}>Choose your first shared challenge</Text>
+        <Text style={commonStyles.cardCopy}>Templates reduce blank-page friction and give your league one challenge everyone can start checking into right away.</Text>
         <View style={styles.templateGrid}>
           {HABIT_TEMPLATES.slice(0, 4).map((template) => {
             const selected = template.id === selectedTemplateId;

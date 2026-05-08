@@ -208,7 +208,7 @@ export default function HomeScreen() {
       <PageHeader
         eyebrow="Dashboard"
         title={`Hi, ${profile.name.split(' ')[0]}.`}
-        subtitle={`${completedToday} league check-ins across ${activeLeagueHabits.length} active challenges. ${getCurrentWeekLabel()}.`}
+        subtitle={`${completedToday} league check-ins across ${activeLeagueHabits.length} shared challenges. ${getCurrentWeekLabel()}.`}
       />
 
       {rankFeedback ? (
@@ -273,7 +273,7 @@ export default function HomeScreen() {
               key={habit.id}
               actionLabel="Check in for league"
               habit={habit}
-              helperText={`${groupMap.get(habit.groupId) ?? 'League challenge'} / ${habit.category}`}
+              helperText={`${groupMap.get(habit.groupId) ?? 'League'} / Shared challenge / ${habit.category}`}
               onToggle={() => handleToggleHabitCheckIn(habit)}
             />
           ))
@@ -292,7 +292,7 @@ export default function HomeScreen() {
             const foundIndex = details.leaderboard.findIndex((entry) => entry.userId === profile.uid);
             const rank = foundIndex === -1 ? null : foundIndex + 1;
             const visibilityLabel = details.group.visibility === 'public' ? 'Public' : 'Private';
-            const topChallenge = details.habits[0]?.title;
+            const topChallenge = details.challenges[0]?.title;
             const metadata = rank
               ? `#${rank} this week / ${visibilityLabel}${topChallenge ? ` / ${topChallenge}` : ''}`
               : `Leader: ${details.leaderboard[0]?.name ?? 'Nobody yet'} / ${visibilityLabel}`;
