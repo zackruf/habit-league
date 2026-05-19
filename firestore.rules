@@ -79,6 +79,38 @@ service cloud.firestore {
         );
     }
 
+    match /courses/{courseId} {
+      allow read: if isSignedIn()
+        && groupExists(resource.data.groupId)
+        && (
+          groupDoc(resource.data.groupId).data.discoverable == true
+          || isGroupMember(resource.data.groupId)
+        );
+      allow create: if isSignedIn() && isGroupMember(request.resource.data.groupId);
+      allow update: if isSignedIn()
+        && (
+          isGroupOwner(resource.data.groupId)
+          || resource.data.createdBy == request.auth.uid
+        );
+    }
+
+    match /rounds/{roundId} {
+      allow read: if isSignedIn()
+        && groupExists(resource.data.groupId)
+        && (
+          groupDoc(resource.data.groupId).data.discoverable == true
+          || isGroupMember(resource.data.groupId)
+        );
+      allow create: if isSignedIn()
+        && request.resource.data.userId == request.auth.uid
+        && isGroupMember(request.resource.data.groupId);
+      allow update: if isSignedIn()
+        && (
+          resource.data.userId == request.auth.uid
+          || isGroupOwner(resource.data.groupId)
+        );
+    }
+
     match /habits/{habitId} {
       allow read: if isSignedIn()
         && (

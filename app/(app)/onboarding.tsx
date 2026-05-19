@@ -104,8 +104,8 @@ export default function OnboardingScreen() {
   return (
     <AppScreen scrollable>
       <Text style={commonStyles.eyebrow}>Onboarding</Text>
-      <Text style={commonStyles.pageTitle}>Get into your first league</Text>
-      <Text style={commonStyles.pageCopy}>Pick a challenge direction, then join or create a league so your first Rivl check-in lands inside real competition.</Text>
+      <Text style={commonStyles.pageTitle}>Get into your first golf group</Text>
+      <Text style={commonStyles.pageCopy}>Pick a golf format, then join or create a group so your first Rivl score lands inside real competition.</Text>
 
       <SurfaceCard>
         <Text style={commonStyles.cardTitle}>How others will see you</Text>
@@ -115,8 +115,8 @@ export default function OnboardingScreen() {
       </SurfaceCard>
 
       <SurfaceCard>
-        <Text style={commonStyles.cardTitle}>Choose your first shared challenge</Text>
-        <Text style={commonStyles.cardCopy}>Templates reduce blank-page friction and give your league one challenge everyone can start checking into right away.</Text>
+        <Text style={commonStyles.cardTitle}>Choose your first golf format</Text>
+        <Text style={commonStyles.cardCopy}>These templates help new groups start with a clear golf competition format instead of a blank page.</Text>
         <View style={styles.templateGrid}>
           {HABIT_TEMPLATES.slice(0, 4).map((template) => {
             const selected = template.id === selectedTemplateId;
@@ -145,8 +145,8 @@ export default function OnboardingScreen() {
       </SurfaceCard>
 
       <SurfaceCard>
-        <Text style={commonStyles.cardTitle}>Join a public starter league</Text>
-        <Text style={commonStyles.cardCopy}>No invite needed. Start with a live league now, or branch into your own setup below.</Text>
+        <Text style={commonStyles.cardTitle}>Join a public starter group</Text>
+        <Text style={commonStyles.cardCopy}>No invite needed. Start with a live golf group now, or branch into your own setup below.</Text>
         {publicGroups.length ? (
           publicGroups.slice(0, 3).map((group) => {
             const selected = group.id === selectedGroupId;
@@ -181,11 +181,11 @@ export default function OnboardingScreen() {
         )}
         {error ? <Text style={commonStyles.errorText}>{error}</Text> : null}
         <View style={commonStyles.actionRowTight}>
-          <PrimaryButton label={busy ? 'Saving...' : 'Join league and continue'} onPress={handleSave} disabled={busy} />
+          <PrimaryButton label={busy ? 'Saving...' : 'Join group and continue'} onPress={handleSave} disabled={busy} />
         </View>
         <View style={commonStyles.actionRowTight}>
           <PrimaryButton label="Use invite code" onPress={handleUseInviteCode} variant="secondary" disabled={busy} />
-          <PrimaryButton label="Create a league" onPress={handleCreateLeague} variant="secondary" disabled={busy} />
+          <PrimaryButton label="Create a group" onPress={handleCreateLeague} variant="secondary" disabled={busy} />
         </View>
       </SurfaceCard>
     </AppScreen>

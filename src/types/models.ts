@@ -28,6 +28,33 @@ export type ShopInventory = {
   premiumPlaceholderOwned: boolean;
 };
 
+export type GameMode = 'stroke' | 'scramble';
+
+export type Course = {
+  id: string;
+  groupId: string;
+  name: string;
+  location: string;
+  teeName: string;
+  par: number;
+  createdBy: string;
+  createdAt: string;
+};
+
+export type Round = {
+  id: string;
+  groupId: string;
+  courseId: string;
+  userId: string;
+  playerName: string;
+  score: number;
+  gameMode: GameMode;
+  playedOn: string;
+  notes: string;
+  photoUrls: string[];
+  createdAt: string;
+};
+
 export type Habit = {
   id: string;
   userId: string;
@@ -158,6 +185,8 @@ export type AppBundle = {
   profile: Profile;
   habits: Habit[];
   groups: Group[];
+  courses: Course[];
+  rounds: Round[];
 };
 
 export type LeaderboardEntry = {
@@ -172,8 +201,18 @@ export type GroupDetails = {
   members: Profile[];
   challenges: LeagueChallenge[];
   challengeParticipations: Habit[];
+  courses: Course[];
+  rounds: Round[];
   leaderboard: LeaderboardEntry[];
   previousWeekLeaderboard: LeaderboardEntry[];
+};
+
+export type CourseLeaderboardEntry = {
+  userId: string;
+  name: string;
+  bestScore: number;
+  lastScore: number;
+  roundsPlayed: number;
 };
 
 export type UserSearchResult = {
@@ -199,6 +238,8 @@ export type DemoStore = {
   profiles: Record<string, Profile>;
   challenges: Record<string, LeagueChallenge>;
   habits: Record<string, Habit>;
+  courses: Record<string, Course>;
+  rounds: Record<string, Round>;
   groups: Record<string, Group>;
   groupMessages: Record<string, GroupMessage[]>;
   activities: ActivityItem[];

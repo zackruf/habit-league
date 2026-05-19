@@ -15,6 +15,7 @@ import { SurfaceCard } from '@/components/SurfaceCard';
 import { useApp } from '@/context/AppProvider';
 import { useThemePreferences } from '@/context/ThemeProvider';
 import { formatFriendlyDate, getCurrentWeekKeys, getDaysUntilDateKey, getPreviousWeekKeys } from '@/lib/date';
+import { buildCourseLeaderboard, getPersonalBest } from '@/lib/golf';
 import { getLeaderboardNotice } from '@/lib/leaderboard';
 import { createCommonStyles } from '@/styles/commonStyles';
 import { ActivityItem, ActivityShoutoutType, GroupDetails, LeagueChallenge } from '@/types/models';
@@ -156,9 +157,9 @@ export default function GroupScreen() {
     <AppScreen contentContainerStyle={styles.screenContent} disableBottomPadding>
       <View style={commonStyles.pageStack}>
         <PageHeader
-          eyebrow="League"
+          eyebrow="Golf group"
           title={details.group.name}
-          subtitle={details.group.description || 'A focused accountability group built around showing up each week.'}
+          subtitle={details.group.description || 'A golf group built around logged rounds, leaderboard pressure, and better scores over time.'}
         />
 
         {leaderboardNotice ? <LeaderboardNoticeCard title={leaderboardNotice.title} message={leaderboardNotice.message} /> : null}
@@ -192,10 +193,47 @@ export default function GroupScreen() {
           <GroupSummaryCard group={details.group} memberCount={details.members.length} onEdit={isOwner ? () => router.push(`/(app)/groups/${details.group.id}/edit`) : undefined} />
 
           <View style={commonStyles.actionRowTight}>
-            <PrimaryButton label="Add challenge" onPress={() => router.push(`/(app)/habits/new?groupId=${details.group.id}`)} variant="secondary" />
+            <PrimaryButton label="Add course" onPress={() => router.push('/(app)/courses/new')} variant="secondary" />
+            <PrimaryButton label="Log round" onPress={() => router.push(`/(app)/rounds/new?groupId=${details.group.id}`)} variant="secondary" />
           </View>
 
-          <SectionHeader title="Active challenges" />
+          <SectionHeader title="Courses" />
+          <View style={commonStyles.compactSection}>
+            {details.courses.length ? (
+              details.courses.map((course) => {
+                const leaderboard = buildCourseLeaderboard(course.id, details.rounds, details.members);
+                const personalBest = session ? getPersonalBest(course.id, session.uid, details.rounds) : null;
+                const leader = leaderboard[0];
+
+                return (
+                  <SurfaceCard key={course.id}>
+                    <View style={commonStyles.rowBetween}>
+                      <View style={commonStyles.cardCopyBlock}>
+                        <Text style={commonStyles.cardTitle}>{course.name}</Text>
+                        <Text style={commonStyles.cardCopy}>
+                          {course.location} / Par {course.par} / {course.teeName}
+                        </Text>
+                        <Text style={commonStyles.smallMuted}>
+                          {leader ? `Course leader: ${leader.name} / Best ${leader.bestScore}` : 'Log the first round to establish the course leaderboard.'}
+                        </Text>
+                        <Text style={commonStyles.smallMuted}>
+                          {personalBest ? `Your personal best: ${personalBest}` : 'No personal best logged yet.'}
+                        </Text>
+                      </View>
+                      <PrimaryButton label="Log round" onPress={() => router.push(`/(app)/rounds/new?groupId=${details.group.id}&courseId=${course.id}`)} variant="secondary" />
+                    </View>
+                  </SurfaceCard>
+                );
+              })
+            ) : (
+              <SurfaceCard>
+                <Text style={commonStyles.cardTitle}>No courses yet</Text>
+                <Text style={commonStyles.cardCopy}>Add the first course so this group can start comparing real scores instead of just activity.</Text>
+              </SurfaceCard>
+            )}
+          </View>
+
+          <SectionHeader title="Legacy competition tracking" />
           <View style={commonStyles.compactSection}>
             {activeChallenges.length ? (
               activeChallenges.map((challenge) => {
@@ -223,7 +261,7 @@ export default function GroupScreen() {
                           {challenge.frequency} / {challenge.category}
                         </Text>
                         <Text style={commonStyles.smallMuted}>
-                          {challenge.description || 'Shared challenge for this league.'}
+                          {challenge.description || 'Older shared challenge data kept live during the golf pivot.'}
                         </Text>
                         <Text style={commonStyles.smallMuted}>
                           {checkedToday ? 'You checked in today.' : 'Ready for today.'} / {participantsLabel}
@@ -262,11 +300,11 @@ export default function GroupScreen() {
               })
             ) : (
               <SurfaceCard>
-                <Text style={commonStyles.cardTitle}>No active challenges right now</Text>
-                <Text style={commonStyles.cardCopy}>Keep the league moving by starting the next shared challenge for everyone.</Text>
+                <Text style={commonStyles.cardTitle}>No legacy challenge tracking right now</Text>
+                <Text style={commonStyles.cardCopy}>That is okay. Rivl is shifting toward courses, rounds, and scoreboards first.</Text>
                 {isOwner ? (
                   <View style={commonStyles.actionRowTight}>
-                    <PrimaryButton label="Start the next challenge" onPress={() => router.push(`/(app)/habits/new?groupId=${details.group.id}`)} />
+                    <PrimaryButton label="Add legacy tracker" onPress={() => router.push(`/(app)/habits/new?groupId=${details.group.id}`)} />
                   </View>
                 ) : null}
               </SurfaceCard>
@@ -311,9 +349,9 @@ export default function GroupScreen() {
           {isOwner && pastChallenges.length ? (
             <SurfaceCard>
               <Text style={commonStyles.cardTitle}>Keep the league moving</Text>
-              <Text style={commonStyles.cardCopy}>Wrap one challenge, then start the next one before the league loses momentum.</Text>
+              <Text style={commonStyles.cardCopy}>Wrap one competition, then add the next course or legacy tracker before the group loses momentum.</Text>
               <View style={commonStyles.actionRowTight}>
-                <PrimaryButton label="Start the next challenge" onPress={() => router.push(`/(app)/habits/new?groupId=${details.group.id}`)} />
+                <PrimaryButton label="Add legacy tracker" onPress={() => router.push(`/(app)/habits/new?groupId=${details.group.id}`)} />
               </View>
             </SurfaceCard>
           ) : null}
@@ -337,7 +375,7 @@ export default function GroupScreen() {
                   </Text>
                   <Text style={commonStyles.statValue}>{entry.weeklyCheckIns}</Text>
                 </View>
-                <Text style={commonStyles.cardCopy}>{entry.weeklyCheckIns} check-ins this week</Text>
+                <Text style={commonStyles.cardCopy}>{entry.weeklyCheckIns} tracked updates this week</Text>
               </SurfaceCard>
             ))}
           </View>

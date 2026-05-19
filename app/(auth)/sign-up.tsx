@@ -50,7 +50,7 @@ export default function SignUpScreen() {
           <Text style={authStyles.kicker}>Rivl</Text>
           <Text style={authStyles.title}>Show up. Move up.</Text>
           <Text style={authStyles.subtitle}>
-            Join a league, compete in shared challenges, and let daily check-ins and group pressure keep the momentum real.
+            Join a golf group, post real scores, and let friendly pressure move everyone up the course leaderboard.
           </Text>
         </View>
 
@@ -58,7 +58,7 @@ export default function SignUpScreen() {
           <View style={authStyles.previewHeader}>
             <View>
               <Text style={authStyles.previewTitle}>Your first league</Text>
-              <Text style={authStyles.previewMeta}>Start a league. Check in. Climb.</Text>
+              <Text style={authStyles.previewMeta}>Pick a course. Log a round. Climb.</Text>
             </View>
             <View style={authStyles.rankBadge}>
               <Text style={authStyles.rankText}>7d</Text>
@@ -84,7 +84,7 @@ export default function SignUpScreen() {
       <SurfaceCard style={authStyles.formCard}>
         <View style={authStyles.formHeader}>
           <Text style={authStyles.cardTitle}>Create your account</Text>
-          <Text style={authStyles.cardCopy}>Create your Rivl account and bring your consistency into a live group challenge.</Text>
+          <Text style={authStyles.cardCopy}>Create your Rivl account and bring your golf scores into a live group competition.</Text>
         </View>
 
         <View style={authStyles.trustRow}>

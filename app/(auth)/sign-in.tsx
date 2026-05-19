@@ -57,7 +57,7 @@ export default function SignInScreen() {
           <View style={authStyles.previewHeader}>
             <View>
               <Text style={authStyles.previewTitle}>Starter League</Text>
-              <Text style={authStyles.previewMeta}>4 habits checked in today</Text>
+              <Text style={authStyles.previewMeta}>4 rounds posted this week</Text>
             </View>
             <View style={authStyles.rankBadge}>
               <Text style={authStyles.rankText}>#2</Text>
@@ -86,7 +86,7 @@ export default function SignInScreen() {
           <Text style={authStyles.cardCopy}>
             {usingFirebase
               ? 'Sign in to keep your leagues, challenge streaks, and weekly rank moving.'
-              : 'Demo mode is on, so you can explore the app instantly.'}
+              : 'Demo mode is on, so you can explore groups, courses, and scoreboards instantly.'}
           </Text>
         </View>
 
@@ -111,7 +111,7 @@ export default function SignInScreen() {
         {!usingFirebase ? (
           <View style={authStyles.demoHint}>
             <Text style={authStyles.demoHintTitle}>Demo account ready</Text>
-            <Text style={authStyles.demoHintCopy}>Use the prefilled Rivl demo login to explore leagues, rankings, and shared challenges instantly.</Text>
+            <Text style={authStyles.demoHintCopy}>Use the prefilled Rivl demo login to explore golf groups, course leaderboards, and logged rounds instantly.</Text>
           </View>
         ) : null}
 

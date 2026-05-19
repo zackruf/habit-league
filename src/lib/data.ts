@@ -26,8 +26,10 @@ import {
   ActivityShoutoutType,
   ActivityShoutouts,
   AppBundle,
+  Course,
   DemoStore,
   FriendRequestProfile,
+  GameMode,
   Group,
   GroupDetails,
   GroupMessage,
@@ -37,6 +39,7 @@ import {
   LeagueChallengeStatus,
   LeaderboardEntry,
   Profile,
+  Round,
   SessionUser,
   UserSearchResult,
 } from '@/types/models';
@@ -51,6 +54,8 @@ const blankStore: DemoStore = {
   profiles: {},
   challenges: {},
   habits: {},
+  courses: {},
+  rounds: {},
   groups: {},
   groupMessages: {},
   activities: [],
@@ -169,11 +174,18 @@ export async function loadUserBundle(uid: string): Promise<AppBundle | null> {
         return snapshot.exists() ? normalizeGroup(snapshot.data() as Group) : null;
       })
     );
+    const groupIds = (groups.filter(Boolean) as Group[]).map((group) => group.id);
+    const [courses, rounds] = await Promise.all([
+      loadCoursesForGroups(groupIds),
+      loadRoundsForGroups(groupIds),
+    ]);
 
     return {
       profile,
       habits,
       groups: groups.filter(Boolean) as Group[],
+      courses,
+      rounds,
     };
   }
 
@@ -191,11 +203,22 @@ export async function loadUserBundle(uid: string): Promise<AppBundle | null> {
   const groups = (profile.groupIds ?? [])
     .map((groupId) => normalizeGroup(store.groups[groupId]))
     .filter((group): group is Group => Boolean(group));
+  const groupIds = groups.map((group) => group.id);
+  const courses = Object.values(store.courses)
+    .map((course) => normalizeCourse(course))
+    .filter((course): course is Course => course !== null && groupIds.includes(course.groupId))
+    .sort((left, right) => left.name.localeCompare(right.name));
+  const rounds = Object.values(store.rounds)
+    .map((round) => normalizeRound(round))
+    .filter((round): round is Round => round !== null && groupIds.includes(round.groupId))
+    .sort((left, right) => right.playedOn.localeCompare(left.playedOn) || right.createdAt.localeCompare(left.createdAt));
 
   return {
     profile,
     habits,
     groups,
+    courses,
+    rounds,
   };
 }
 
@@ -642,6 +665,49 @@ export async function createGroup(uid: string, input: GroupSettingsInput) {
   return group.id;
 }
 
+export async function createCourse(
+  uid: string,
+  input: { groupId: string; name: string; location: string; teeName: string; par: number }
+) {
+  const course = buildCourse(uid, input);
+
+  if (usingFirebaseBackend && firestore) {
+    await setDoc(doc(firestore, 'courses', course.id), course);
+    return course.id;
+  }
+
+  const store = await readDemoStore();
+  store.courses[course.id] = course;
+  await writeDemoStore(store);
+  return course.id;
+}
+
+export async function logRound(
+  uid: string,
+  input: { groupId: string; courseId: string; score: number; gameMode: GameMode; playedOn: string; notes?: string }
+) {
+  const storeRound = buildRound(uid, input);
+
+  if (usingFirebaseBackend && firestore) {
+    const profileSnapshot = await getDoc(doc(firestore, 'profiles', uid));
+    const profile = normalizeProfile(profileSnapshot.data() as Profile);
+    await setDoc(doc(firestore, 'rounds', storeRound.id), {
+      ...storeRound,
+      playerName: profile.name,
+    });
+    return storeRound.id;
+  }
+
+  const store = await readDemoStore();
+  const profile = normalizeProfile(store.profiles[uid]);
+  store.rounds[storeRound.id] = {
+    ...storeRound,
+    playerName: profile?.name ?? 'Player',
+  };
+  await writeDemoStore(store);
+  return storeRound.id;
+}
+
 export async function updateGroup(uid: string, groupId: string, input: GroupSettingsInput) {
   if (usingFirebaseBackend && firestore) {
     const groupRef = doc(firestore, 'groups', groupId);
@@ -1000,12 +1066,18 @@ export async function getGroupDetails(groupId: string): Promise<GroupDetails | n
         .map((entry) => normalizeHabit(entry.data() as Habit, group.id))
         .filter((habit): habit is Habit => Boolean(habit));
       const mergedChallenges = mergeLegacyChallenges(challenges, participations, group.id);
+      const [courses, rounds] = await Promise.all([
+        loadCoursesForGroups([group.id]),
+        loadRoundsForGroups([group.id]),
+      ]);
 
       return {
         group,
         members,
         challenges: mergedChallenges,
         challengeParticipations: participations,
+        courses,
+        rounds,
         leaderboard: buildLeaderboard(members, participations),
         previousWeekLeaderboard: buildLeaderboard(members, participations, getPreviousWeekKeys()),
       };
@@ -1031,12 +1103,22 @@ export async function getGroupDetails(groupId: string): Promise<GroupDetails | n
   const participations = Object.values(store.habits)
     .map((habit) => normalizeHabit(habit, group.id))
     .filter((habit): habit is Habit => habit !== null && group.memberIds.includes(habit.userId) && habit.groupId === group.id);
+  const courses = Object.values(store.courses)
+    .map((course) => normalizeCourse(course))
+    .filter((course): course is Course => course !== null && course.groupId === group.id)
+    .sort((left, right) => left.name.localeCompare(right.name));
+  const rounds = Object.values(store.rounds)
+    .map((round) => normalizeRound(round))
+    .filter((round): round is Round => round !== null && round.groupId === group.id)
+    .sort((left, right) => right.playedOn.localeCompare(left.playedOn) || right.createdAt.localeCompare(left.createdAt));
   const mergedChallenges = mergeLegacyChallenges(challenges, participations, group.id);
   return {
     group,
     members,
     challenges: mergedChallenges,
     challengeParticipations: participations,
+    courses,
+    rounds,
     leaderboard: buildLeaderboard(members, participations),
     previousWeekLeaderboard: buildLeaderboard(members, participations, getPreviousWeekKeys()),
   };
@@ -1082,6 +1164,93 @@ function buildFriendRequestProfile(profile: Profile): FriendRequestProfile {
     name: profile.name,
     username: profile.username,
     bio: profile.bio,
+  };
+}
+
+async function loadCoursesForGroups(groupIds: string[]) {
+  if (!usingFirebaseBackend || !firestore || !groupIds.length) {
+    return [];
+  }
+
+  const db = firestore;
+  const snapshots = await Promise.all(groupIds.map((groupId) => getDocs(query(collection(db, 'courses'), where('groupId', '==', groupId)))));
+  return snapshots
+    .flatMap((snapshot) => snapshot.docs)
+    .map((entry) => normalizeCourse(entry.data() as Course))
+    .filter((course): course is Course => Boolean(course))
+    .sort((left, right) => left.name.localeCompare(right.name));
+}
+
+async function loadRoundsForGroups(groupIds: string[]) {
+  if (!usingFirebaseBackend || !firestore || !groupIds.length) {
+    return [];
+  }
+
+  const db = firestore;
+  const snapshots = await Promise.all(groupIds.map((groupId) => getDocs(query(collection(db, 'rounds'), where('groupId', '==', groupId), limit(50)))));
+  return snapshots
+    .flatMap((snapshot) => snapshot.docs)
+    .map((entry) => normalizeRound(entry.data() as Round))
+    .filter((round): round is Round => Boolean(round))
+    .sort((left, right) => right.playedOn.localeCompare(left.playedOn) || right.createdAt.localeCompare(left.createdAt));
+}
+
+function buildCourse(uid: string, input: { groupId: string; name: string; location: string; teeName: string; par: number }): Course {
+  return {
+    id: createId('course'),
+    groupId: input.groupId,
+    name: input.name.trim(),
+    location: input.location.trim(),
+    teeName: input.teeName.trim() || 'Default tees',
+    par: input.par,
+    createdBy: uid,
+    createdAt: new Date().toISOString(),
+  };
+}
+
+function buildRound(
+  uid: string,
+  input: { groupId: string; courseId: string; score: number; gameMode: GameMode; playedOn: string; notes?: string }
+): Round {
+  return {
+    id: createId('round'),
+    groupId: input.groupId,
+    courseId: input.courseId,
+    userId: uid,
+    playerName: '',
+    score: input.score,
+    gameMode: input.gameMode,
+    playedOn: input.playedOn,
+    notes: input.notes?.trim() ?? '',
+    photoUrls: [],
+    createdAt: new Date().toISOString(),
+  };
+}
+
+function normalizeCourse(course?: Course | null) {
+  if (!course?.id || !course.groupId || !course.name) {
+    return null;
+  }
+
+  return {
+    ...course,
+    location: course.location ?? '',
+    teeName: course.teeName ?? 'Default tees',
+    par: Number(course.par) || 72,
+  };
+}
+
+function normalizeRound(round?: Round | null) {
+  if (!round?.id || !round.groupId || !round.courseId || !round.userId) {
+    return null;
+  }
+
+  return {
+    ...round,
+    playerName: round.playerName ?? 'Player',
+    score: Number(round.score) || 0,
+    notes: round.notes ?? '',
+    photoUrls: round.photoUrls ?? [],
   };
 }
 
@@ -1588,6 +1757,8 @@ async function readDemoStore(): Promise<DemoStore> {
       profiles: { ...seeded.profiles, ...(parsed.profiles || {}) },
       challenges: { ...seeded.challenges, ...(parsed.challenges || {}) },
       habits: { ...seeded.habits, ...(parsed.habits || {}) },
+      courses: { ...seeded.courses, ...(parsed.courses || {}) },
+      rounds: { ...seeded.rounds, ...(parsed.rounds || {}) },
       groups: { ...seeded.groups, ...(parsed.groups || {}) },
       groupMessages: { ...seeded.groupMessages, ...(parsed.groupMessages || {}) },
       activities: [...(parsed.activities || []), ...seeded.activities.filter((seededActivity) => !(parsed.activities || []).some((entry) => entry.id === seededActivity.id))],
@@ -1611,6 +1782,9 @@ function seedDemoStore(): DemoStore {
   const groupId = 'group-demo';
   const publicFitnessGroupId = 'group-public-fitness';
   const publicFocusGroupId = 'group-public-focus';
+  const starterCourseId = 'course-starter-municipal';
+  const hillsCourseId = 'course-starter-hills';
+  const publicCourseId = 'course-public-dunes';
   const walkChallengeId = 'challenge-starter-walk';
   const waterChallengeId = 'challenge-starter-water';
   const journalChallengeId = 'challenge-starter-journal';
@@ -1627,6 +1801,7 @@ function seedDemoStore(): DemoStore {
   const recentKeys = getRecentDateKeys(4);
   const currentWeekKeys = getCurrentWeekKeys();
   const previousWeekKeys = getPreviousWeekKeys();
+  const todayKey = getCurrentDateKey();
 
   return {
     ...blankStore,
@@ -1642,7 +1817,7 @@ function seedDemoStore(): DemoStore {
         email: 'demo@rivl.app',
         name: 'Demo Captain',
         username: 'demo-captain',
-        bio: 'Trying to stay consistent one day at a time.',
+        bio: 'Keeping one regular foursome active every week.',
         weeklyGoal: 5,
         onboardingCompleted: true,
         groupIds: [groupId],
@@ -1659,7 +1834,7 @@ function seedDemoStore(): DemoStore {
         email: 'friend@rivl.app',
         name: 'Jamie',
         username: 'jamie',
-        bio: 'Morning runner and water tracker.',
+        bio: 'Always chasing a lower score at the muni.',
         weeklyGoal: 6,
         onboardingCompleted: true,
         groupIds: [groupId],
@@ -1673,7 +1848,7 @@ function seedDemoStore(): DemoStore {
         email: 'runner@rivl.app',
         name: 'Avery',
         username: 'avery-runs',
-        bio: 'Trying to stay ready for a 10K.',
+        bio: 'Weekend golfer trying to beat 80.',
         weeklyGoal: 5,
         onboardingCompleted: true,
         groupIds: [publicFitnessGroupId],
@@ -1687,7 +1862,7 @@ function seedDemoStore(): DemoStore {
         email: 'reader@rivl.app',
         name: 'Mika',
         username: 'mika-reads',
-        bio: 'Reading before screens.',
+        bio: 'Nine holes after work whenever possible.',
         weeklyGoal: 4,
         onboardingCompleted: true,
         groupIds: [publicFocusGroupId],
@@ -1701,10 +1876,10 @@ function seedDemoStore(): DemoStore {
       [walkChallengeId]: {
         id: walkChallengeId,
         groupId,
-        title: 'Morning walk',
-        emoji: 'Walk',
-        category: 'Health',
-        description: 'Get outside early and bank a quick win for the league.',
+        title: 'Practice round',
+        emoji: '18',
+        category: 'Golf',
+        description: 'Use the older tracker to keep one practice round visible for the group.',
         frequency: 'Daily',
         createdBy: demoUid,
         createdAt: new Date().toISOString(),
@@ -1721,10 +1896,10 @@ function seedDemoStore(): DemoStore {
       [waterChallengeId]: {
         id: waterChallengeId,
         groupId,
-        title: 'Drink water',
-        emoji: 'Water',
-        category: 'Wellness',
-        description: 'Stay hydrated and help your league stack consistent check-ins.',
+        title: 'Short game reps',
+        emoji: 'SG',
+        category: 'Golf',
+        description: 'A simple stand-in tracker for chipping and putting reps.',
         frequency: 'Daily',
         createdBy: friendUid,
         createdAt: new Date().toISOString(),
@@ -1741,10 +1916,10 @@ function seedDemoStore(): DemoStore {
       [journalChallengeId]: {
         id: journalChallengeId,
         groupId,
-        title: 'Night journal',
-        emoji: 'Write',
-        category: 'Reflection',
-        description: 'Close the day with a short journal entry and keep the streak of honesty going.',
+        title: 'Weekend scramble',
+        emoji: '2v2',
+        category: 'Golf',
+        description: 'A previous competition format kept around as demo history.',
         frequency: 'Daily',
         createdBy: demoUid,
         createdAt: new Date(Date.now() - 1000 * 60 * 60 * 24 * 8).toISOString(),
@@ -1761,10 +1936,10 @@ function seedDemoStore(): DemoStore {
       [workoutChallengeId]: {
         id: workoutChallengeId,
         groupId: publicFitnessGroupId,
-        title: 'Workout',
-        emoji: 'Fit',
-        category: 'Fitness',
-        description: 'Any real workout counts. Show up and log it.',
+        title: 'Range session',
+        emoji: 'RS',
+        category: 'Golf',
+        description: 'A lightweight tracker for range work between rounds.',
         frequency: 'Daily',
         createdBy: runnerUid,
         createdAt: new Date().toISOString(),
@@ -1781,10 +1956,10 @@ function seedDemoStore(): DemoStore {
       [readingChallengeId]: {
         id: readingChallengeId,
         groupId: publicFocusGroupId,
-        title: 'Read 10 pages',
-        emoji: 'Read',
-        category: 'Learning',
-        description: 'Trade ten minutes of scrolling for ten pages of progress.',
+        title: 'Nine-hole loop',
+        emoji: '9',
+        category: 'Golf',
+        description: 'A compact format for groups that squeeze in quick rounds.',
         frequency: 'Daily',
         createdBy: readerUid,
         createdAt: new Date().toISOString(),
@@ -1805,7 +1980,7 @@ function seedDemoStore(): DemoStore {
         userId: demoUid,
         groupId,
         challengeId: walkChallengeId,
-        title: 'Morning walk',
+        title: 'Practice round',
         emoji: '🚶',
         category: 'Health',
         createdAt: new Date().toISOString(),
@@ -1818,7 +1993,7 @@ function seedDemoStore(): DemoStore {
         userId: friendUid,
         groupId,
         challengeId: walkChallengeId,
-        title: 'Morning walk',
+        title: 'Practice round',
         emoji: 'Walk',
         category: 'Health',
         createdAt: new Date().toISOString(),
@@ -1831,7 +2006,7 @@ function seedDemoStore(): DemoStore {
         userId: demoUid,
         groupId,
         challengeId: waterChallengeId,
-        title: 'Drink water',
+        title: 'Short game reps',
         emoji: 'Water',
         category: 'Wellness',
         createdAt: new Date().toISOString(),
@@ -1844,7 +2019,7 @@ function seedDemoStore(): DemoStore {
         userId: friendUid,
         groupId,
         challengeId: waterChallengeId,
-        title: 'Drink water',
+        title: 'Short game reps',
         emoji: '💧',
         category: 'Wellness',
         createdAt: new Date().toISOString(),
@@ -1857,7 +2032,7 @@ function seedDemoStore(): DemoStore {
         userId: demoUid,
         groupId,
         challengeId: journalChallengeId,
-        title: 'Night journal',
+        title: 'Weekend scramble',
         emoji: 'Write',
         category: 'Reflection',
         createdAt: new Date(Date.now() - 1000 * 60 * 60 * 24 * 8).toISOString(),
@@ -1870,7 +2045,7 @@ function seedDemoStore(): DemoStore {
         userId: friendUid,
         groupId,
         challengeId: journalChallengeId,
-        title: 'Night journal',
+        title: 'Weekend scramble',
         emoji: 'Write',
         category: 'Reflection',
         createdAt: new Date(Date.now() - 1000 * 60 * 60 * 24 * 8).toISOString(),
@@ -1883,7 +2058,7 @@ function seedDemoStore(): DemoStore {
         userId: runnerUid,
         groupId: publicFitnessGroupId,
         challengeId: workoutChallengeId,
-        title: 'Workout',
+        title: 'Range session',
         emoji: 'Fit',
         category: 'Fitness',
         createdAt: new Date().toISOString(),
@@ -1896,7 +2071,7 @@ function seedDemoStore(): DemoStore {
         userId: readerUid,
         groupId: publicFocusGroupId,
         challengeId: readingChallengeId,
-        title: 'Read 10 pages',
+        title: 'Nine-hole loop',
         emoji: 'R',
         category: 'Learning',
         createdAt: new Date().toISOString(),
@@ -1905,11 +2080,97 @@ function seedDemoStore(): DemoStore {
         restoreUsedAt: null,
       },
     },
+    courses: {
+      [starterCourseId]: {
+        id: starterCourseId,
+        groupId,
+        name: 'Riverview Municipal',
+        location: 'Hartford, CT',
+        teeName: 'Blue tees',
+        par: 72,
+        createdBy: demoUid,
+        createdAt: new Date().toISOString(),
+      },
+      [hillsCourseId]: {
+        id: hillsCourseId,
+        groupId,
+        name: 'Pine Hills',
+        location: 'Springfield, MA',
+        teeName: 'White tees',
+        par: 70,
+        createdBy: friendUid,
+        createdAt: new Date().toISOString(),
+      },
+      [publicCourseId]: {
+        id: publicCourseId,
+        groupId: publicFitnessGroupId,
+        name: 'Harbor Dunes',
+        location: 'Newport, RI',
+        teeName: 'Member tees',
+        par: 72,
+        createdBy: runnerUid,
+        createdAt: new Date().toISOString(),
+      },
+    },
+    rounds: {
+      'round-demo-1': {
+        id: 'round-demo-1',
+        groupId,
+        courseId: starterCourseId,
+        userId: demoUid,
+        playerName: 'Demo Captain',
+        score: 86,
+        gameMode: 'stroke',
+        playedOn: todayKey,
+        notes: 'Steady back nine.',
+        photoUrls: [],
+        createdAt: new Date(Date.now() - 1000 * 60 * 50).toISOString(),
+      },
+      'round-demo-2': {
+        id: 'round-demo-2',
+        groupId,
+        courseId: starterCourseId,
+        userId: friendUid,
+        playerName: 'Jamie',
+        score: 83,
+        gameMode: 'stroke',
+        playedOn: todayKey,
+        notes: 'Best putting day this month.',
+        photoUrls: [],
+        createdAt: new Date(Date.now() - 1000 * 60 * 80).toISOString(),
+      },
+      'round-demo-3': {
+        id: 'round-demo-3',
+        groupId,
+        courseId: hillsCourseId,
+        userId: demoUid,
+        playerName: 'Demo Captain',
+        score: 78,
+        gameMode: 'scramble',
+        playedOn: previousWeekKeys[previousWeekKeys.length - 1],
+        notes: 'Fun scramble finish.',
+        photoUrls: [],
+        createdAt: new Date(Date.now() - 1000 * 60 * 60 * 24 * 3).toISOString(),
+      },
+      'round-public-1': {
+        id: 'round-public-1',
+        groupId: publicFitnessGroupId,
+        courseId: publicCourseId,
+        userId: runnerUid,
+        playerName: 'Avery',
+        score: 81,
+        gameMode: 'stroke',
+        playedOn: todayKey,
+        notes: 'Windy front nine.',
+        photoUrls: [],
+        createdAt: new Date(Date.now() - 1000 * 60 * 30).toISOString(),
+      },
+    },
     groups: {
       [groupId]: {
         id: groupId,
-        name: 'Starter League',
-        description: 'A seeded demo league with shared challenges so competition feels alive on first launch.',
+        name: 'Starter Foursome',
+        description: 'A seeded demo golf group with shared courses, rounds, chat, and score pressure from the first launch.',
         ownerId: demoUid,
         memberIds: [demoUid, friendUid],
         joinCode: 'START1',
@@ -1923,8 +2184,8 @@ function seedDemoStore(): DemoStore {
       },
       [publicFitnessGroupId]: {
         id: publicFitnessGroupId,
-        name: 'Morning Movers',
-        description: 'A public starter league for walking, workouts, and small daily fitness wins.',
+        name: 'Morning Tee Time',
+        description: 'A public starter golf group for players who want one dependable weekly round.',
         ownerId: runnerUid,
         memberIds: [runnerUid],
         joinCode: 'MOVE10',
@@ -1938,8 +2199,8 @@ function seedDemoStore(): DemoStore {
       },
       [publicFocusGroupId]: {
         id: publicFocusGroupId,
-        name: 'Focus Circle',
-        description: 'A calm public league for reading, planning, and screen-free routines.',
+        name: 'Twilight Nine',
+        description: 'A public golf group for quick evening rounds and score tracking.',
         ownerId: readerUid,
         memberIds: [readerUid],
         joinCode: 'FOCUS1',
@@ -1959,7 +2220,7 @@ function seedDemoStore(): DemoStore {
           groupId,
           senderId: friendUid,
           senderName: 'Jamie',
-          text: 'Morning walk is done. I am not buying coffee this week.',
+          text: 'Carded an 83 at Riverview. No chance I am losing this week.',
           createdAt: new Date(Date.now() - 1000 * 60 * 90).toISOString(),
         },
         {
@@ -1967,7 +2228,7 @@ function seedDemoStore(): DemoStore {
           groupId,
           senderId: demoUid,
           senderName: 'Demo Captain',
-          text: 'I am catching up tonight. Keep the pressure on.',
+          text: 'Logging mine tonight. Keep the pressure on.',
           createdAt: new Date(Date.now() - 1000 * 60 * 30).toISOString(),
         },
       ],
@@ -1977,7 +2238,7 @@ function seedDemoStore(): DemoStore {
           groupId: publicFitnessGroupId,
           senderId: runnerUid,
           senderName: 'Avery',
-          text: 'Welcome. Small check-ins count here, just do not disappear.',
+          text: 'Welcome. Log real scores and keep the group honest.',
           createdAt: new Date(Date.now() - 1000 * 60 * 55).toISOString(),
         },
       ],
@@ -1987,7 +2248,7 @@ function seedDemoStore(): DemoStore {
           groupId: publicFocusGroupId,
           senderId: readerUid,
           senderName: 'Mika',
-          text: 'Fresh week, fresh pages. Jump in when you are ready.',
+          text: 'Fresh week, fresh scorecard. Jump in when you are ready.',
           createdAt: new Date(Date.now() - 1000 * 60 * 70).toISOString(),
         },
       ],
@@ -1999,12 +2260,12 @@ function seedDemoStore(): DemoStore {
         actorId: friendUid,
         actorName: 'Jamie',
         groupId,
-        groupName: 'Starter League',
+        groupName: 'Starter Foursome',
         habitId: friendWaterParticipationId,
-        habitTitle: 'Drink water',
+        habitTitle: 'Short game reps',
         targetUserId: null,
         targetUserName: null,
-        summary: 'Jamie checked in Drink water in Starter League',
+        summary: 'Jamie logged practice work in Starter Foursome',
         createdAt: new Date(Date.now() - 1000 * 60 * 35).toISOString(),
         shoutouts: {
           ...getEmptyShoutouts(),
@@ -2017,12 +2278,12 @@ function seedDemoStore(): DemoStore {
         actorId: demoUid,
         actorName: 'Demo Captain',
         groupId,
-        groupName: 'Starter League',
+        groupName: 'Starter Foursome',
         habitId: demoWalkParticipationId,
-        habitTitle: 'Morning walk',
+        habitTitle: 'Practice round',
         targetUserId: null,
         targetUserName: null,
-        summary: 'Demo Captain moved up 1 spot in Starter League',
+        summary: 'Demo Captain moved up 1 spot in Starter Foursome',
         createdAt: new Date(Date.now() - 1000 * 60 * 80).toISOString(),
         shoutouts: getEmptyShoutouts(),
       },
@@ -2032,12 +2293,12 @@ function seedDemoStore(): DemoStore {
         actorId: runnerUid,
         actorName: 'Avery',
         groupId: publicFitnessGroupId,
-        groupName: 'Morning Movers',
+        groupName: 'Morning Tee Time',
         habitId: null,
         habitTitle: null,
         targetUserId: null,
         targetUserName: null,
-        summary: 'Avery joined Morning Movers',
+        summary: 'Avery joined Morning Tee Time',
         createdAt: new Date(Date.now() - 1000 * 60 * 140).toISOString(),
         shoutouts: getEmptyShoutouts(),
       },
@@ -2052,7 +2313,7 @@ function seedWelcomeMessages(group: Group, senderName: string, senderId: string)
       groupId: group.id,
       senderId,
       senderName,
-      text: `Welcome to ${group.name}. Use the chat to keep the challenge active each week.`,
+      text: `Welcome to ${group.name}. Use the chat to plan rounds, share photos, and keep the scores honest each week.`,
       createdAt: new Date().toISOString(),
     },
   ];

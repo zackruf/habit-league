@@ -47,7 +47,7 @@ type WeeklyRecap = {
 };
 
 export default function HomeScreen() {
-  const { getGroupDetails, groups, habits, profile, recordActivity, refreshing, restoreHabitStreak, shopInventory, toggleHabitCheckIn } = useApp();
+  const { courses, getGroupDetails, groups, habits, profile, recordActivity, refreshing, restoreHabitStreak, rounds, shopInventory, toggleHabitCheckIn } = useApp();
   const { theme } = useThemePreferences();
   const commonStyles = createCommonStyles(theme.colors);
   const [groupDetails, setGroupDetails] = useState<GroupDetails[]>([]);
@@ -214,7 +214,7 @@ export default function HomeScreen() {
       <PageHeader
         eyebrow="Dashboard"
         title={`Hi, ${profile.name.split(' ')[0]}.`}
-        subtitle={`${completedToday} league check-ins across ${activeLeagueHabits.length} shared challenges. ${getCurrentWeekLabel()}.`}
+        subtitle={`${rounds.length} logged rounds, ${courses.length} tracked courses, and ${completedToday} active competition check-ins. ${getCurrentWeekLabel()}.`}
       />
 
       {rankFeedback ? (
@@ -273,14 +273,15 @@ export default function HomeScreen() {
       ) : null}
 
       <View style={commonStyles.actionRowTight}>
-        <PrimaryButton label="Join a league" onPress={() => router.push('/(app)/groups/join')} />
-        <PrimaryButton label="Create league" onPress={() => router.push('/(app)/groups/new')} variant="secondary" />
+        <PrimaryButton label="Join golf group" onPress={() => router.push('/(app)/groups/join')} />
+        <PrimaryButton label="Create golf group" onPress={() => router.push('/(app)/groups/new')} variant="secondary" />
       </View>
       <View style={commonStyles.actionRowTight}>
-        <PrimaryButton label="Add group challenge" onPress={() => router.push('/(app)/habits/new')} variant="secondary" />
+        <PrimaryButton label="Add course" onPress={() => router.push('/(app)/courses/new')} variant="secondary" />
+        <PrimaryButton label="Log round" onPress={() => router.push('/(app)/rounds/new')} variant="secondary" />
       </View>
 
-      <SectionHeader title="Today's league check-ins" action={refreshing ? <Text style={commonStyles.mutedText}>Syncing...</Text> : undefined} />
+      <SectionHeader title="Legacy competition tracking" action={refreshing ? <Text style={commonStyles.mutedText}>Syncing...</Text> : undefined} />
       <View style={commonStyles.compactSection}>
         {activeLeagueHabits.length ? (
           activeLeagueHabits.map((habit) => (
@@ -294,13 +295,13 @@ export default function HomeScreen() {
           ))
         ) : (
           <SurfaceCard>
-            <Text style={commonStyles.cardTitle}>No league challenges yet</Text>
-            <Text style={commonStyles.cardCopy}>Join or create a league, then add a challenge so your check-ins start moving the leaderboard.</Text>
+            <Text style={commonStyles.cardTitle}>No competition tracking yet</Text>
+            <Text style={commonStyles.cardCopy}>Add a course and log rounds first. The older challenge tracker is still here while Rivl pivots fully into golf.</Text>
           </SurfaceCard>
         )}
       </View>
 
-      <SectionHeader title="This week" />
+      <SectionHeader title="Golf groups this week" />
       <View style={commonStyles.compactSection}>
         {groupDetails.length ? (
           groupDetails.map((details) => {
@@ -334,8 +335,8 @@ export default function HomeScreen() {
           })
         ) : (
           <SurfaceCard>
-            <Text style={commonStyles.cardTitle}>No competitive activity yet</Text>
-            <Text style={commonStyles.cardCopy}>Create or join a group to see weekly movement here.</Text>
+            <Text style={commonStyles.cardTitle}>No golf group activity yet</Text>
+            <Text style={commonStyles.cardCopy}>Create or join a golf group to see weekly movement here.</Text>
           </SurfaceCard>
         )}
       </View>
@@ -349,7 +350,7 @@ function getDashboardHabitHelper(habit: Habit, challenge: LeagueChallenge | unde
     return `${groupName} / Final push / ${habit.category}`;
   }
 
-  return `${groupName} / Shared challenge / ${habit.category}`;
+  return `${groupName} / Legacy challenge tracker / ${habit.category}`;
 }
 
 function isChallengeEndingSoon(challenge: LeagueChallenge) {

@@ -4,6 +4,7 @@ import { createContext, PropsWithChildren, ReactNode, useCallback, useContext, u
 import {
   addActivityShoutout as addActivityShoutoutRequest,
   acceptFriendRequest as acceptFriendRequestRequest,
+  createCourse as createCourseRequest,
   createGroup as createGroupRequest,
   createLeagueChallenge as createHabitRequest,
   declineFriendRequest as declineFriendRequestRequest,
@@ -15,6 +16,7 @@ import {
   loadActivityFeed as loadActivityFeedRequest,
   loadGroupMessages as loadGroupMessagesRequest,
   loadIncomingFriendRequests as loadIncomingFriendRequestsRequest,
+  logRound as logRoundRequest,
   recordActivity as recordActivityRequest,
   sendFriendRequest as sendFriendRequestRequest,
   loadUserBundle,
@@ -37,12 +39,15 @@ import {
   ActivityItem,
   ActivityShoutoutType,
   AppBundle,
+  Course,
   FriendRequestProfile,
+  GameMode,
   GroupDetails,
   GroupMessage,
   GroupSettingsInput,
   Habit,
   Profile,
+  Round,
   SessionUser,
   UserSearchResult,
 } from '@/types/models';
@@ -69,6 +74,8 @@ type AppContextValue = {
   shopInventory: Profile['shopInventory'] | null;
   habits: Habit[];
   groups: AppBundle['groups'];
+  courses: Course[];
+  rounds: Round[];
   signIn: (email: string, password: string) => Promise<ActionResult>;
   signUp: (name: string, email: string, password: string) => Promise<ActionResult>;
   signOut: () => Promise<void>;
@@ -78,6 +85,8 @@ type AppContextValue = {
   toggleHabitCheckIn: (habitId: string) => Promise<void>;
   restoreHabitStreak: (habitId: string) => Promise<ActionResult>;
   createGroup: (input: GroupSettingsInput) => Promise<GroupActionResult>;
+  createCourse: (input: { groupId: string; name: string; location: string; teeName: string; par: number }) => Promise<ActionResult>;
+  logRound: (input: { groupId: string; courseId: string; score: number; gameMode: GameMode; playedOn: string; notes?: string }) => Promise<ActionResult>;
   updateGroup: (groupId: string, input: GroupSettingsInput) => Promise<ActionResult>;
   joinGroup: (joinCode: string) => Promise<GroupActionResult>;
   joinPublicGroup: (groupId: string) => Promise<GroupActionResult>;
@@ -105,11 +114,15 @@ export function AppProvider({ children, fallback }: PropsWithChildren<{ fallback
   const [profile, setProfile] = useState<Profile | null>(null);
   const [habits, setHabits] = useState<Habit[]>([]);
   const [groups, setGroups] = useState<AppBundle['groups']>([]);
+  const [courses, setCourses] = useState<Course[]>([]);
+  const [rounds, setRounds] = useState<Round[]>([]);
 
   const hydrateBundle = useCallback((bundle: AppBundle | null) => {
     setProfile(bundle?.profile ?? null);
     setHabits(bundle?.habits ?? []);
     setGroups(bundle?.groups ?? []);
+    setCourses(bundle?.courses ?? []);
+    setRounds(bundle?.rounds ?? []);
   }, []);
 
   const getBootstrapErrorMessage = useCallback((error: unknown) => {
@@ -369,6 +382,53 @@ export function AppProvider({ children, fallback }: PropsWithChildren<{ fallback
     [refreshUserData, session]
   );
 
+  const createCourse = useCallback(
+    async (input: { groupId: string; name: string; location: string; teeName: string; par: number }) => {
+      if (!session) {
+        return { ok: false, message: 'No active session.' };
+      }
+      if (!input.groupId.trim()) {
+        return { ok: false, message: 'Choose a golf group first.' };
+      }
+      if (!input.name.trim()) {
+        return { ok: false, message: 'Please enter a course name.' };
+      }
+
+      setBusy(true);
+      await createCourseRequest(session.uid, {
+        ...input,
+        name: input.name.trim(),
+        location: input.location.trim(),
+        teeName: input.teeName.trim(),
+      });
+      await refreshUserData(session);
+      setBusy(false);
+      return { ok: true, message: 'Course added.' };
+    },
+    [refreshUserData, session]
+  );
+
+  const logRound = useCallback(
+    async (input: { groupId: string; courseId: string; score: number; gameMode: GameMode; playedOn: string; notes?: string }) => {
+      if (!session) {
+        return { ok: false, message: 'No active session.' };
+      }
+      if (!input.groupId.trim() || !input.courseId.trim()) {
+        return { ok: false, message: 'Choose a group and course first.' };
+      }
+      if (!Number.isFinite(input.score) || input.score <= 0) {
+        return { ok: false, message: 'Enter a valid round score.' };
+      }
+
+      setBusy(true);
+      await logRoundRequest(session.uid, input);
+      await refreshUserData(session);
+      setBusy(false);
+      return { ok: true, message: 'Round logged.' };
+    },
+    [refreshUserData, session]
+  );
+
   const updateLeagueChallengeLifecycle = useCallback(
     async (challengeId: string, action: 'archive' | 'complete' | 'reactivate') => {
       if (!session) {
@@ -540,6 +600,8 @@ export function AppProvider({ children, fallback }: PropsWithChildren<{ fallback
       shopInventory: profile?.shopInventory ?? null,
       habits,
       groups,
+      courses,
+      rounds,
       signIn,
       signUp,
       signOut,
@@ -549,6 +611,8 @@ export function AppProvider({ children, fallback }: PropsWithChildren<{ fallback
       toggleHabitCheckIn,
       restoreHabitStreak,
       createGroup,
+      createCourse,
+      logRound,
       updateGroup,
       joinGroup,
       joinPublicGroup,
@@ -574,6 +638,8 @@ export function AppProvider({ children, fallback }: PropsWithChildren<{ fallback
       profile?.shopInventory,
       habits,
       groups,
+      courses,
+      rounds,
       signIn,
       signUp,
       signOut,
@@ -583,6 +649,8 @@ export function AppProvider({ children, fallback }: PropsWithChildren<{ fallback
       toggleHabitCheckIn,
       restoreHabitStreak,
       createGroup,
+      createCourse,
+      logRound,
       updateGroup,
       joinGroup,
       joinPublicGroup,

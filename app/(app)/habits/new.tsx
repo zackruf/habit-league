@@ -49,13 +49,13 @@ export default function CreateHabitScreen() {
     return (
       <AppScreen scrollable contentContainerStyle={commonStyles.pageStack}>
         <PageHeader
-          eyebrow="League challenge"
-          title="Join a league before adding challenges"
-          subtitle="Rivl works best when every challenge belongs to a live league competition."
+          eyebrow="Legacy tracker"
+          title="Join a golf group before using legacy trackers"
+          subtitle="Rivl is shifting toward golf groups, courses, and rounds first. This older flow still needs a group."
         />
         <SurfaceCard>
-          <Text style={commonStyles.cardTitle}>No leagues yet</Text>
-          <Text style={commonStyles.cardCopy}>Create a league or join one first, then add the challenge your group will compete around.</Text>
+          <Text style={commonStyles.cardTitle}>No golf groups yet</Text>
+          <Text style={commonStyles.cardCopy}>Create or join a golf group first, then use this older tracker flow only if you still need it.</Text>
           <View style={commonStyles.actionRowTight}>
             <PrimaryButton label="Create league" onPress={() => router.push('/(app)/groups/new')} />
             <PrimaryButton label="Join league" onPress={() => router.push('/(app)/groups/join')} variant="secondary" />
@@ -67,14 +67,14 @@ export default function CreateHabitScreen() {
 
   return (
     <AppScreen scrollable contentContainerStyle={commonStyles.pageStack}>
-      <PageHeader
-        eyebrow="League challenge"
-        title="Add a challenge for your league"
-        subtitle="Choose the league first, then launch a repeatable check-in challenge that counts toward competition."
+        <PageHeader
+        eyebrow="Legacy tracker"
+        title="Add a legacy competition tracker"
+        subtitle="This older challenge flow is still available while Rivl pivots into course-based golf competition."
       />
 
       <SurfaceCard>
-        <Text style={commonStyles.cardTitle}>Choose the league</Text>
+        <Text style={commonStyles.cardTitle}>Choose the golf group</Text>
         <View style={styles.groupGrid}>
           {availableGroups.map((group) => {
             const selected = group.id === selectedGroupId;
@@ -93,7 +93,7 @@ export default function CreateHabitScreen() {
                 ]}
               >
                 <Text style={commonStyles.settingTitle}>{group.name}</Text>
-                <Text style={commonStyles.smallMuted}>{group.visibility === 'public' ? 'Public league' : 'Private league'}</Text>
+                <Text style={commonStyles.smallMuted}>{group.visibility === 'public' ? 'Public golf group' : 'Private golf group'}</Text>
               </Pressable>
             );
           })}
@@ -101,8 +101,8 @@ export default function CreateHabitScreen() {
       </SurfaceCard>
 
       <SurfaceCard>
-        <Text style={commonStyles.cardTitle}>Challenge templates</Text>
-        <Text style={commonStyles.cardCopy}>Start with a proven routine, then adapt it for your league.</Text>
+        <Text style={commonStyles.cardTitle}>Competition templates</Text>
+        <Text style={commonStyles.cardCopy}>Start with a golf-oriented format, then adapt it for your group.</Text>
         <View style={styles.templateGrid}>
           {HABIT_TEMPLATES.map((template) => {
             const selected = template.id === selectedTemplateId;
@@ -131,22 +131,22 @@ export default function CreateHabitScreen() {
       </SurfaceCard>
 
       <SurfaceCard>
-        <Text style={commonStyles.cardTitle}>Customize challenge</Text>
-        <TextField label="Challenge name" value={title} onChangeText={setTitle} placeholder="Morning walk" />
+        <Text style={commonStyles.cardTitle}>Customize legacy tracker</Text>
+        <TextField label="Tracker name" value={title} onChangeText={setTitle} placeholder="Weekend 18" />
         <TextField label="Short label" value={emoji} onChangeText={setEmoji} placeholder="Fit" />
         <TextField label="Category" value={category} onChangeText={setCategory} placeholder="Health" />
         <TextField
           label="Challenge details"
           value={description}
           onChangeText={setDescription}
-          placeholder="What counts as a successful check-in for this league?"
+          placeholder="What should count for this older group competition tracker?"
           multiline
         />
         <TextField label="Frequency" value={frequency} onChangeText={setFrequency} placeholder="Daily" />
         <Text style={commonStyles.smallMuted}>
-          {selectedGroup ? `This will count toward ${selectedGroup.name}.` : 'Pick a league above to continue.'}
+          {selectedGroup ? `This tracker will count toward ${selectedGroup.name}.` : 'Pick a golf group above to continue.'}
         </Text>
-        <PrimaryButton label={busy ? 'Adding...' : 'Add league challenge'} onPress={handleCreate} disabled={busy || !selectedGroupId} />
+        <PrimaryButton label={busy ? 'Adding...' : 'Add legacy tracker'} onPress={handleCreate} disabled={busy || !selectedGroupId} />
       </SurfaceCard>
     </AppScreen>
   );

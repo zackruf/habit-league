@@ -13,6 +13,7 @@ import { SectionHeader } from '@/components/SectionHeader';
 import { SurfaceCard } from '@/components/SurfaceCard';
 import { useApp } from '@/context/AppProvider';
 import { useThemePreferences } from '@/context/ThemeProvider';
+import { getFeaturedCourseLabel } from '@/lib/golf';
 import { getLeaderboardNotice, pickTopLeaderboardNotice } from '@/lib/leaderboard';
 import { createCommonStyles } from '@/styles/commonStyles';
 import { GroupDetails } from '@/types/models';
@@ -53,31 +54,28 @@ export default function GroupsTabScreen() {
     <AppScreen scrollable contentContainerStyle={commonStyles.pageStack}>
       <PageHeader
         eyebrow="Groups"
-        title="Your leagues"
-        subtitle={`Track ${groups.length} leagues, ${totalMembers} visible members, and the challenges driving this week's standings.`}
+        title="Your golf groups"
+        subtitle={`Track ${groups.length} groups, ${totalMembers} visible players, and the courses shaping this week's standings.`}
       />
 
       {warning ? <LeaderboardNoticeCard title={warning.title} message={warning.message} /> : null}
 
       <View style={commonStyles.actionRowTight}>
-        <PrimaryButton label="Create league" onPress={() => router.push('/(app)/groups/new')} />
-        <PrimaryButton label="Join league" onPress={() => router.push('/(app)/groups/join')} variant="secondary" />
+        <PrimaryButton label="Create golf group" onPress={() => router.push('/(app)/groups/new')} />
+        <PrimaryButton label="Join golf group" onPress={() => router.push('/(app)/groups/join')} variant="secondary" />
       </View>
 
-      <SectionHeader title="Your leagues" />
+      <SectionHeader title="Your golf groups" />
       <View style={commonStyles.compactSection}>
         {groupDetails.length ? (
           groupDetails.map((details) => {
             const foundIndex = details.leaderboard.findIndex((entry) => entry.userId === profile.uid);
             const rank = foundIndex === -1 ? details.members.length : foundIndex + 1;
-            const memberLabel = details.members.length === 1 ? '1 member' : `${details.members.length} members`;
+            const memberLabel = details.members.length === 1 ? '1 golfer' : `${details.members.length} golfers`;
             const visibilityLabel = details.group.visibility === 'public' ? 'Public' : 'Private';
-            const activeChallenges = details.challenges.filter((challenge) => challenge.status === 'active');
-            const challengeLabel = activeChallenges[0]?.title
-              ? `${activeChallenges.length === 1 ? 'Active challenge' : `${activeChallenges.length} active challenges`}: ${activeChallenges[0].title}`
-              : 'Add the first shared league challenge';
+            const challengeLabel = getFeaturedCourseLabel(details.courses[0], details.rounds);
             const statusLine = `#${rank} this week / ${memberLabel}`;
-            const secondaryLine = details.group.stakesEnabled && details.group.stakesText ? `${visibilityLabel} / Stakes live` : visibilityLabel;
+            const secondaryLine = details.group.stakesEnabled && details.group.stakesText ? `${visibilityLabel} / Side game active` : visibilityLabel;
 
             return (
               <PressableCard
@@ -102,8 +100,8 @@ export default function GroupsTabScreen() {
           })
         ) : (
           <SurfaceCard>
-            <Text style={commonStyles.cardTitle}>No leagues yet</Text>
-            <Text style={commonStyles.cardCopy}>Create or join a league to start competing around shared challenges instead of tracking alone.</Text>
+            <Text style={commonStyles.cardTitle}>No golf groups yet</Text>
+            <Text style={commonStyles.cardCopy}>Create or join a golf group to start logging rounds, comparing scores by course, and chatting with your group.</Text>
           </SurfaceCard>
         )}
       </View>

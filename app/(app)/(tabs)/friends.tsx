@@ -183,7 +183,7 @@ export default function FriendsTabScreen() {
       <PageHeader
         eyebrow="Friends"
         title="Discover your circle"
-        subtitle="Find people by name or handle, connect quickly, and turn solo habits into visible accountability."
+        subtitle="Find golfers by name or handle, connect quickly, and turn casual rounds into visible competition."
       />
 
       <SectionHeader title="Social feed" />
