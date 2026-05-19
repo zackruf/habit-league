@@ -6,7 +6,6 @@ import { ActivityFeed } from '@/components/ActivityFeed';
 import { AppScreen } from '@/components/AppScreen';
 import { GroupChatPanel } from '@/components/GroupChatPanel';
 import { GroupSummaryCard } from '@/components/GroupSummaryCard';
-import { LeaderboardNoticeCard } from '@/components/LeaderboardNoticeCard';
 import { LoadingScreen } from '@/components/LoadingScreen';
 import { PageHeader } from '@/components/PageHeader';
 import { PrimaryButton } from '@/components/PrimaryButton';
@@ -14,22 +13,19 @@ import { SectionHeader } from '@/components/SectionHeader';
 import { SurfaceCard } from '@/components/SurfaceCard';
 import { useApp } from '@/context/AppProvider';
 import { useThemePreferences } from '@/context/ThemeProvider';
-import { formatFriendlyDate, getCurrentWeekKeys, getDaysUntilDateKey, getPreviousWeekKeys } from '@/lib/date';
-import { buildCourseLeaderboard, getPersonalBest } from '@/lib/golf';
-import { getLeaderboardNotice } from '@/lib/leaderboard';
+import { buildCourseLeaderboard, formatScoreToPar, getPersonalBest } from '@/lib/golf';
 import { createCommonStyles } from '@/styles/commonStyles';
-import { ActivityItem, ActivityShoutoutType, GroupDetails, LeagueChallenge } from '@/types/models';
+import { ActivityItem, ActivityShoutoutType, GroupDetails } from '@/types/models';
 import { spacing } from '@/constants/theme';
 
 export default function GroupScreen() {
   const { groupId } = useLocalSearchParams<{ groupId: string }>();
-  const { addActivityShoutout, getActivityFeed, getGroupDetails, recordActivity, session, toggleHabitCheckIn, updateLeagueChallengeLifecycle } = useApp();
+  const { addActivityShoutout, getActivityFeed, getGroupDetails, session } = useApp();
   const { theme } = useThemePreferences();
   const commonStyles = createCommonStyles(theme.colors);
   const [details, setDetails] = useState<GroupDetails | null>(null);
   const [activeTab, setActiveTab] = useState<'overview' | 'chat'>('overview');
   const [activities, setActivities] = useState<ActivityItem[]>([]);
-  const [challengeActionId, setChallengeActionId] = useState<string | null>(null);
 
   useEffect(() => {
     if (!groupId) {
@@ -45,14 +41,11 @@ export default function GroupScreen() {
       return undefined;
     }
 
-    async function loadFeed() {
-      const feed = await getActivityFeed(groupId);
+    getActivityFeed(groupId).then((feed) => {
       if (active) {
         setActivities(feed);
       }
-    }
-
-    loadFeed();
+    });
 
     return () => {
       active = false;
@@ -60,98 +53,19 @@ export default function GroupScreen() {
   }, [getActivityFeed, groupId]);
 
   if (!details) {
-    return <LoadingScreen message="Loading your group..." />;
+    return <LoadingScreen message="Loading your golf group..." />;
   }
-
-  const leaderboardNotice = session ? getLeaderboardNotice(details.leaderboard, session.uid) : null;
-  const isOwner = session?.uid === details.group.ownerId;
-  const todayKey = formatFriendlyDate(new Date(), 'key');
-  const activeChallenges = details.challenges.filter((challenge) => challenge.status === 'active');
-  const pastChallenges = details.challenges.filter((challenge) => challenge.status !== 'active');
 
   async function handleShoutout(activityId: string, shoutoutType: ActivityShoutoutType) {
     if (!details) {
       return;
     }
-
+    const currentGroupId = details.group.id;
     await addActivityShoutout(activityId, shoutoutType);
-    setActivities(await getActivityFeed(details.group.id));
+    setActivities(await getActivityFeed(currentGroupId));
   }
 
-  async function handleChallengeCheckIn(challenge: LeagueChallenge) {
-    if (!details || !session) {
-      return;
-    }
-
-    const participation = details.challengeParticipations.find(
-      (entry) => entry.challengeId === challenge.id && entry.userId === session.uid
-    );
-    if (!participation) {
-      return;
-    }
-
-    const beforeRank = getRank(details.leaderboard, session.uid);
-    const wasCheckedInToday = participation.checkIns.includes(todayKey);
-
-    await toggleHabitCheckIn(participation.id);
-
-    const nextDetails = await getGroupDetails(details.group.id);
-    if (!nextDetails) {
-      return;
-    }
-
-    setDetails(nextDetails);
-
-    if (!wasCheckedInToday) {
-      await recordActivity({
-        type: 'check_in',
-        groupId: nextDetails.group.id,
-        groupName: nextDetails.group.name,
-        habitId: participation.id,
-        habitTitle: challenge.title,
-      });
-
-      const afterRank = getRank(nextDetails.leaderboard, session.uid);
-      if (beforeRank && afterRank && afterRank < beforeRank) {
-        await recordActivity({
-          type: 'rank_movement',
-          groupId: nextDetails.group.id,
-          groupName: nextDetails.group.name,
-          habitId: participation.id,
-          habitTitle: challenge.title,
-          spotsMoved: beforeRank - afterRank,
-          rank: afterRank,
-        });
-      }
-    }
-
-    setActivities(await getActivityFeed(nextDetails.group.id));
-  }
-
-  async function handleChallengeAction(challenge: LeagueChallenge, action: 'archive' | 'complete' | 'reactivate') {
-    if (!details) {
-      return;
-    }
-
-    setChallengeActionId(`${challenge.id}:${action}`);
-    const result = await updateLeagueChallengeLifecycle(challenge.id, action);
-    if (result.ok) {
-      const nextDetails = await getGroupDetails(details.group.id);
-      if (nextDetails) {
-        setDetails(nextDetails);
-      }
-      await recordActivity({
-        type: 'challenge_update',
-        groupId: details.group.id,
-        groupName: details.group.name,
-        habitId: challenge.id,
-        habitTitle: challenge.title,
-        summaryOverride: getChallengeActivitySummary(action, challenge.title, details.group.name),
-      });
-      setActivities(await getActivityFeed(details.group.id));
-    }
-    setChallengeActionId(null);
-  }
+  const isOwner = session?.uid === details.group.ownerId;
 
   return (
     <AppScreen contentContainerStyle={styles.screenContent} disableBottomPadding>
@@ -159,10 +73,8 @@ export default function GroupScreen() {
         <PageHeader
           eyebrow="Golf group"
           title={details.group.name}
-          subtitle={details.group.description || 'A golf group built around logged rounds, leaderboard pressure, and better scores over time.'}
+          subtitle={details.group.description || 'A golf group built around real rounds, course-specific scoreboards, and chat that keeps the pressure on.'}
         />
-
-        {leaderboardNotice ? <LeaderboardNoticeCard title={leaderboardNotice.title} message={leaderboardNotice.message} /> : null}
 
         <View style={commonStyles.segmentedRow}>
           {[
@@ -171,11 +83,7 @@ export default function GroupScreen() {
           ].map((option) => {
             const active = activeTab === option.key;
             return (
-              <Pressable
-                key={option.key}
-                onPress={() => setActiveTab(option.key)}
-                style={[commonStyles.segmentedButton, active ? commonStyles.segmentedButtonActive : null]}
-              >
+              <Pressable key={option.key} onPress={() => setActiveTab(option.key)} style={[commonStyles.segmentedButton, active ? commonStyles.segmentedButtonActive : null]}>
                 <Text style={[commonStyles.segmentedLabel, active ? commonStyles.segmentedLabelActive : null]}>{option.label}</Text>
               </Pressable>
             );
@@ -193,17 +101,19 @@ export default function GroupScreen() {
           <GroupSummaryCard group={details.group} memberCount={details.members.length} onEdit={isOwner ? () => router.push(`/(app)/groups/${details.group.id}/edit`) : undefined} />
 
           <View style={commonStyles.actionRowTight}>
-            <PrimaryButton label="Add course" onPress={() => router.push('/(app)/courses/new')} variant="secondary" />
-            <PrimaryButton label="Log round" onPress={() => router.push(`/(app)/rounds/new?groupId=${details.group.id}`)} variant="secondary" />
+            <PrimaryButton label="Search courses" onPress={() => router.push('/(app)/courses/new')} variant="secondary" />
+            <PrimaryButton label="Log round" onPress={() => router.push(`/(app)/rounds/new?groupId=${details.group.id}`)} />
           </View>
 
-          <SectionHeader title="Courses" />
+          <SectionHeader title="Course scoreboards" />
           <View style={commonStyles.compactSection}>
             {details.courses.length ? (
               details.courses.map((course) => {
-                const leaderboard = buildCourseLeaderboard(course.id, details.rounds, details.members);
-                const personalBest = session ? getPersonalBest(course.id, session.uid, details.rounds) : null;
-                const leader = leaderboard[0];
+                const strokeLeaderboard = buildCourseLeaderboard(course, details.rounds, details.members, { gameMode: 'stroke', scope: 'group' });
+                const scrambleLeaderboard = buildCourseLeaderboard(course, details.rounds, details.members, { gameMode: 'scramble', scope: 'group' });
+                const personalBest = session ? getPersonalBest(course, session.uid, details.rounds) : null;
+                const strokeLeader = strokeLeaderboard[0];
+                const scrambleLeader = scrambleLeaderboard[0];
 
                 return (
                   <SurfaceCard key={course.id}>
@@ -211,173 +121,65 @@ export default function GroupScreen() {
                       <View style={commonStyles.cardCopyBlock}>
                         <Text style={commonStyles.cardTitle}>{course.name}</Text>
                         <Text style={commonStyles.cardCopy}>
-                          {course.location} / Par {course.par} / {course.teeName}
+                          {course.location} / Par {course.par} / {course.holesCount} holes
                         </Text>
                         <Text style={commonStyles.smallMuted}>
-                          {leader ? `Course leader: ${leader.name} / Best ${leader.bestScore}` : 'Log the first round to establish the course leaderboard.'}
+                          {strokeLeader ? `Stroke leader: ${strokeLeader.name} / ${strokeLeader.totalScore} (${strokeLeader.indicatorLabel})` : 'No stroke scores yet.'}
                         </Text>
                         <Text style={commonStyles.smallMuted}>
-                          {personalBest ? `Your personal best: ${personalBest}` : 'No personal best logged yet.'}
+                          {scrambleLeader ? `Scramble leader: ${scrambleLeader.name} / ${scrambleLeader.totalScore} (${scrambleLeader.indicatorLabel})` : 'No scramble teams logged yet.'}
+                        </Text>
+                        <Text style={commonStyles.smallMuted}>
+                          {personalBest ? `Your best: ${personalBest.totalScore} (${formatScoreToPar(personalBest.scoreToPar)})` : 'Your best will appear after your first round.'}
                         </Text>
                       </View>
-                      <PrimaryButton label="Log round" onPress={() => router.push(`/(app)/rounds/new?groupId=${details.group.id}&courseId=${course.id}`)} variant="secondary" />
+                      <PrimaryButton label="Open" onPress={() => router.push(`/(app)/courses/${course.id}`)} variant="secondary" />
                     </View>
                   </SurfaceCard>
                 );
               })
             ) : (
               <SurfaceCard>
-                <Text style={commonStyles.cardTitle}>No courses yet</Text>
-                <Text style={commonStyles.cardCopy}>Add the first course so this group can start comparing real scores instead of just activity.</Text>
+                <Text style={commonStyles.cardTitle}>No courses saved yet</Text>
+                <Text style={commonStyles.cardCopy}>Save the first course for this group so rounds, leaderboards, and personal bests all live in one place.</Text>
               </SurfaceCard>
             )}
           </View>
-
-          <SectionHeader title="Legacy competition tracking" />
-          <View style={commonStyles.compactSection}>
-            {activeChallenges.length ? (
-              activeChallenges.map((challenge) => {
-                const userParticipation = session
-                  ? details.challengeParticipations.find(
-                      (entry) => entry.challengeId === challenge.id && entry.userId === session.uid
-                    )
-                  : null;
-                const canManage = Boolean(session && (session.uid === details.group.ownerId || session.uid === challenge.createdBy));
-                const checkedToday = Boolean(userParticipation?.checkIns.includes(todayKey));
-                const checkedInCount = details.challengeParticipations.filter(
-                  (entry) => entry.challengeId === challenge.id && entry.checkIns.includes(todayKey)
-                ).length;
-                const participantsLabel = checkedInCount === 1 ? '1 check-in today' : `${checkedInCount} check-ins today`;
-                const currentLeader = getChallengeLeaderLabel(challenge, details, 'current');
-                const endingLabel = getChallengeEndingLabel(challenge);
-                return (
-                  <SurfaceCard key={challenge.id}>
-                    <View style={commonStyles.rowBetween}>
-                      <View style={commonStyles.cardCopyBlock}>
-                        <Text style={commonStyles.cardTitle}>
-                          {challenge.emoji} {challenge.title}
-                        </Text>
-                        <Text style={commonStyles.cardCopy}>
-                          {challenge.frequency} / {challenge.category}
-                        </Text>
-                        <Text style={commonStyles.smallMuted}>
-                          {challenge.description || 'Older shared challenge data kept live during the golf pivot.'}
-                        </Text>
-                        <Text style={commonStyles.smallMuted}>
-                          {checkedToday ? 'You checked in today.' : 'Ready for today.'} / {participantsLabel}
-                        </Text>
-                        {currentLeader ? <Text style={commonStyles.smallMuted}>{currentLeader}</Text> : null}
-                        {endingLabel ? <Text style={commonStyles.smallMuted}>{endingLabel}</Text> : null}
-                      </View>
-                      {userParticipation ? (
-                        <PrimaryButton
-                          label={checkedToday ? 'Checked in' : 'Check in'}
-                          onPress={() => handleChallengeCheckIn(challenge)}
-                          variant={checkedToday ? 'secondary' : 'primary'}
-                        />
-                      ) : (
-                        <Text style={commonStyles.smallMuted}>Joins automatically</Text>
-                      )}
-                    </View>
-                    {canManage ? (
-                      <View style={commonStyles.actionRowTight}>
-                        <PrimaryButton
-                          label={challengeActionId === `${challenge.id}:complete` ? 'Saving...' : 'Complete'}
-                          onPress={() => handleChallengeAction(challenge, 'complete')}
-                          disabled={Boolean(challengeActionId)}
-                          variant="ghost"
-                        />
-                        <PrimaryButton
-                          label={challengeActionId === `${challenge.id}:archive` ? 'Saving...' : 'Archive'}
-                          onPress={() => handleChallengeAction(challenge, 'archive')}
-                          disabled={Boolean(challengeActionId)}
-                          variant="ghost"
-                        />
-                      </View>
-                    ) : null}
-                  </SurfaceCard>
-                );
-              })
-            ) : (
-              <SurfaceCard>
-                <Text style={commonStyles.cardTitle}>No legacy challenge tracking right now</Text>
-                <Text style={commonStyles.cardCopy}>That is okay. Rivl is shifting toward courses, rounds, and scoreboards first.</Text>
-                {isOwner ? (
-                  <View style={commonStyles.actionRowTight}>
-                    <PrimaryButton label="Add legacy tracker" onPress={() => router.push(`/(app)/habits/new?groupId=${details.group.id}`)} />
-                  </View>
-                ) : null}
-              </SurfaceCard>
-            )}
-          </View>
-
-          {pastChallenges.length ? (
-            <>
-              <SectionHeader title="Past challenges" />
-              <View style={commonStyles.compactSection}>
-                {pastChallenges.map((challenge) => {
-                  const canManage = Boolean(session && (session.uid === details.group.ownerId || session.uid === challenge.createdBy));
-                  const winnerLabel = getChallengeLeaderLabel(challenge, details, 'winner');
-                  return (
-                    <SurfaceCard key={challenge.id}>
-                      <View style={commonStyles.cardCopyBlock}>
-                        <Text style={commonStyles.cardTitle}>
-                          {challenge.emoji} {challenge.title}
-                        </Text>
-                        <Text style={commonStyles.cardCopy}>
-                          {challenge.status === 'completed' ? 'Completed challenge' : 'Archived challenge'}
-                        </Text>
-                        {winnerLabel ? <Text style={commonStyles.smallMuted}>{winnerLabel}</Text> : null}
-                      </View>
-                      {canManage ? (
-                        <View style={commonStyles.actionRowTight}>
-                          <PrimaryButton
-                            label={challengeActionId === `${challenge.id}:reactivate` ? 'Saving...' : 'Reactivate'}
-                            onPress={() => handleChallengeAction(challenge, 'reactivate')}
-                            disabled={Boolean(challengeActionId)}
-                            variant="ghost"
-                          />
-                        </View>
-                      ) : null}
-                    </SurfaceCard>
-                  );
-                })}
-              </View>
-            </>
-          ) : null}
-
-          {isOwner && pastChallenges.length ? (
-            <SurfaceCard>
-              <Text style={commonStyles.cardTitle}>Keep the league moving</Text>
-              <Text style={commonStyles.cardCopy}>Wrap one competition, then add the next course or legacy tracker before the group loses momentum.</Text>
-              <View style={commonStyles.actionRowTight}>
-                <PrimaryButton label="Add legacy tracker" onPress={() => router.push(`/(app)/habits/new?groupId=${details.group.id}`)} />
-              </View>
-            </SurfaceCard>
-          ) : null}
 
           <SectionHeader title="Recent activity" />
           <ActivityFeed
-            activities={activities.slice(0, 4)}
+            activities={activities.slice(0, 5)}
             currentUserId={session?.uid}
-            emptyMessage="Check-ins, rank moves, and new joins for this group will show up here."
-            emptyTitle="No group activity yet"
+            emptyMessage="Rounds, leaderboard moves, and personal bests for this group will show up here."
+            emptyTitle="No group golf activity yet"
             onShoutout={handleShoutout}
           />
 
-          <SectionHeader title="Weekly leaderboard" />
+          <SectionHeader title="Group scoreboard snapshot" />
           <View style={commonStyles.compactSection}>
-            {details.leaderboard.slice(0, 3).map((entry, index) => (
-              <SurfaceCard key={entry.userId}>
-                <View style={commonStyles.rowBetween}>
-                  <Text style={commonStyles.cardTitle}>
-                    #{index + 1} {entry.name}
-                  </Text>
-                  <Text style={commonStyles.statValue}>{entry.weeklyCheckIns}</Text>
-                </View>
-                <Text style={commonStyles.cardCopy}>{entry.weeklyCheckIns} tracked updates this week</Text>
+            {details.rounds.length ? (
+              details.rounds
+                .slice()
+                .sort((left, right) => right.playedOn.localeCompare(left.playedOn) || right.createdAt.localeCompare(left.createdAt))
+                .slice(0, 3)
+                .map((round) => (
+                  <SurfaceCard key={round.id}>
+                    <View style={commonStyles.rowBetween}>
+                      <Text style={commonStyles.cardTitle}>{round.playerName}</Text>
+                      <Text style={commonStyles.statValue}>{round.totalScore}</Text>
+                    </View>
+                    <Text style={commonStyles.cardCopy}>
+                      {round.courseName} / {round.gameMode === 'stroke' ? 'Stroke' : 'Scramble'} / {formatScoreToPar(round.scoreToPar)}
+                    </Text>
+                    <Text style={commonStyles.smallMuted}>{round.playedOn}</Text>
+                  </SurfaceCard>
+                ))
+            ) : (
+              <SurfaceCard>
+                <Text style={commonStyles.cardTitle}>No group rounds yet</Text>
+                <Text style={commonStyles.cardCopy}>Once someone posts the first score, the group snapshot will start filling in here.</Text>
               </SurfaceCard>
-            ))}
+            )}
           </View>
 
           <SectionHeader title="Members" />
@@ -389,6 +191,13 @@ export default function GroupScreen() {
               </SurfaceCard>
             ))}
           </View>
+
+          <SurfaceCard>
+            <Text style={commonStyles.cardTitle}>Legacy tools stay tucked away</Text>
+            <Text style={commonStyles.cardCopy}>
+              The older habit and streak systems are still preserved in the codebase for compatibility, but Rivl now centers golf groups, saved courses, logged rounds, and scoreboards.
+            </Text>
+          </SurfaceCard>
         </ScrollView>
       ) : (
         <View style={styles.body}>
@@ -397,62 +206,6 @@ export default function GroupScreen() {
       )}
     </AppScreen>
   );
-}
-
-function getRank(leaderboard: GroupDetails['leaderboard'], userId: string) {
-  const index = leaderboard.findIndex((entry) => entry.userId === userId);
-  return index === -1 ? null : index + 1;
-}
-
-function getChallengeEndingLabel(challenge: LeagueChallenge) {
-  if (challenge.status !== 'active' || !challenge.endDateKey) {
-    return null;
-  }
-
-  const daysUntil = getDaysUntilDateKey(challenge.endDateKey);
-  if (daysUntil === 0) {
-    return 'Final push / Ends today';
-  }
-  if (daysUntil === 1) {
-    return 'Ending soon / Ends tomorrow';
-  }
-
-  return null;
-}
-
-function getChallengeLeaderLabel(challenge: LeagueChallenge, details: GroupDetails, mode: 'current' | 'winner') {
-  if (mode === 'winner' && challenge.winnerDisplayName) {
-    return `Winner: ${challenge.winnerDisplayName}`;
-  }
-
-  const keys = new Set(mode === 'winner' ? getPreviousWeekKeys() : getCurrentWeekKeys());
-  const scores = details.challengeParticipations
-    .filter((entry) => entry.challengeId === challenge.id)
-    .map((entry) => ({
-      userId: entry.userId,
-      total: entry.checkIns.filter((dateKey) => keys.has(dateKey)).length,
-      name: details.members.find((member) => member.uid === entry.userId)?.name ?? 'Teammate',
-    }))
-    .filter((entry) => entry.total > 0)
-    .sort((left, right) => right.total - left.total || left.name.localeCompare(right.name));
-
-  if (!scores.length) {
-    return mode === 'winner' ? null : 'Current leader will appear after the first check-ins.';
-  }
-
-  return mode === 'winner'
-    ? `Last winner: ${scores[0].name}`
-    : `Current leader: ${scores[0].name}`;
-}
-
-function getChallengeActivitySummary(action: 'archive' | 'complete' | 'reactivate', challengeTitle: string, groupName: string) {
-  if (action === 'archive') {
-    return `Archived ${challengeTitle} in ${groupName}`;
-  }
-  if (action === 'reactivate') {
-    return `Reactivated ${challengeTitle} in ${groupName}`;
-  }
-  return `Completed ${challengeTitle} in ${groupName}`;
 }
 
 const styles = StyleSheet.create({

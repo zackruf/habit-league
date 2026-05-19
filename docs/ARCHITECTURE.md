@@ -2,9 +2,9 @@
 
 ## Overview
 
-Rivl is a React Native + Expo application using Expo Router for navigation and Firebase for backend services when environment configuration is available. When Firebase is unavailable, the app falls back to a seeded AsyncStorage-backed demo mode.
+Rivl is a React Native + Expo app using Expo Router for navigation and Firebase for backend services when environment configuration is available. When Firebase is unavailable, the app falls back to a seeded AsyncStorage-backed demo mode.
 
-The codebase is intentionally beginner-friendly and organized around a few clear layers:
+The codebase stays intentionally beginner-friendly and organized around a few clear layers:
 
 - `app/` for routes and screens
 - `src/components/` for shared UI
@@ -20,16 +20,16 @@ Main routing areas:
   - entry point that redirects based on auth and onboarding state
 - `app/(auth)/`
   - sign-in and sign-up flow
-- `app/(app)/`
-  - authenticated experience
 - `app/(app)/(tabs)/`
-  - main tabbed areas such as Dashboard, Groups, Friends, Profile, and Shop where applicable
+  - main areas such as Dashboard, Groups, Courses, Friends, and Profile
 - `app/(app)/groups/[groupId]/`
-  - league-specific detail, edit, and related flows
-- `app/(app)/habits/new.tsx`
-  - shared challenge creation flow within league context
+  - golf-group detail, edit, chat, and related flows
+- `app/(app)/courses/`
+  - course search, saved course detail, and leaderboard flows
+- `app/(app)/rounds/new.tsx`
+  - round logging flow
 
-## Main Providers / Contexts
+## Main Providers
 
 ### `AppProvider`
 
@@ -38,23 +38,22 @@ Located in `src/context/AppProvider.tsx`.
 Responsibilities:
 
 - restore auth session
-- hydrate profile, league membership, and participation data
+- hydrate profile, golf groups, saved courses, rounds, and compatibility data
 - expose actions for:
   - sign in / sign up / sign out
   - profile save
-  - league creation/joining
-  - shared challenge creation
-  - challenge check-ins
-  - challenge lifecycle actions
+  - group creation and joining
+  - course search and course save
+  - round logging
   - group chat
   - activity feed access
   - friend request actions
 
-### Purchase / Theme providers
+### Theme and purchase providers
 
-Other providers manage app-wide theme and purchase scaffolding without deeply coupling those concerns into route files.
+Other providers manage app-wide theme and purchase scaffolding without coupling those concerns into route files.
 
-## Firebase / Data Layer
+## Firebase and Data Layer
 
 The main data layer lives in `src/lib/data.ts`.
 
@@ -64,84 +63,78 @@ It handles:
 - Firestore reads and writes
 - demo mode read/write fallbacks
 - normalization helpers for legacy-safe loading
-- feed, leaderboard, and social actions
-- shared challenge creation and lifecycle updates
+- course provider access through a provider abstraction
+- course save and round logging
+- social actions and feed updates
 
-The app uses a “normalize first” approach so older or partially missing data can be loaded safely without immediately breaking the UI.
+The app uses a normalize-first approach so older or partially missing data can still load safely while the product pivots from challenge tracking to golf scoring.
 
-## Shared League Challenge Model
+## Golf Models
 
-Rivl uses a two-layer challenge structure:
+### `Course`
 
-### Shared challenge
-
-`LeagueChallenge` is the league-level object.
-
-It stores:
-
-- challenge identity and league ownership
-- shared title/description/category/frequency
-- lifecycle metadata such as status, dates, and winner fields
-
-### Participation record
-
-`Habit` remains the per-user participation/check-in record.
+`Course` is the saved golf course record attached to a group.
 
 It stores:
 
-- `userId`
+- provider/source metadata
+- location and geo fields
+- total holes and total par
+- tee boxes
+- hole-by-hole pars and yardages
+
+### `Round`
+
+`Round` is the main scoring record.
+
+It stores:
+
 - `groupId`
-- `challengeId`
-- title/category/emoji snapshot data
-- check-in history
-- restore metadata for streak recovery
+- `courseId`
+- `courseSourceId`
+- `userId`
+- `gameMode`
+- `teeBoxId`
+- `holesPlayed`
+- `totalScore`
+- `scoreToPar`
+- optional `holeScores`
+- optional scramble team metadata
+- visibility for group/friends vs public boards
 
-This keeps the product model group-first while preserving simple per-user streak logic.
+### Compatibility models
 
-## Check-Ins
+The older `LeagueChallenge` and `Habit` models still exist for compatibility, demo continuity, and retained systems such as streak restore. They are no longer the main product driver.
 
-Check-ins are recorded on the per-user participation record (`Habit`).
+## Leaderboards
 
-Why this is useful:
+Course leaderboards are built from `Round` records.
 
-- streaks stay user-specific
-- restore logic stays simple
-- ranking aggregation can still happen at the league level
-- shared challenge membership is represented without duplicating challenge definitions
+Current leaderboard helpers support:
 
-## Rankings
-
-Rankings are calculated from challenge participation records inside a league.
-
-Current logic:
-
-- `weeklyCheckIns` counts the current week’s check-ins
-- `completedHabits` counts unique `challengeId` values, not raw participation row count
-
-This keeps league ranking compatible with shared challenge behavior.
+- group/friends scope
+- public scope foundation
+- stroke mode
+- scramble mode
+- lowest-score ranking with score-to-par when available
 
 ## Activity Feed
 
-The activity system is intentionally lightweight.
+The activity system is lightweight and now supports golf-first events such as:
 
-It records:
+- round logged
+- personal best
+- leaderboard movement / course leader callouts
+- group joins and social connections
 
-- check-ins
-- rank movement
-- league joins
-- accepted social connections
-- selected challenge lifecycle actions
+## Shop and Purchase Foundation
 
-The feed is designed to feel alive without becoming a heavy social platform.
-
-## Shop / Purchase Foundation
-
-The codebase contains a purchase foundation intended for development builds and future monetization work. It is not the main architecture driver, but it is isolated enough to evolve later.
+The codebase still contains a purchase foundation intended for development builds and future monetization work.
 
 Current design:
 
 - inventory lives on the profile
-- streak restore flows already connect to meaningful retention moments
+- older streak/restore foundations remain intact but de-emphasized
 - RevenueCat-ready foundations exist for future native billing validation
 
 ## Safe Extension Points
@@ -149,7 +142,7 @@ Current design:
 The safest places to add future features are:
 
 - `src/lib/data.ts`
-  - new backend actions and data helpers
+  - backend actions, golf provider wiring, and data helpers
 - `src/types/models.ts`
   - model evolution
 - `src/context/AppProvider.tsx`

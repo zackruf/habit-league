@@ -24,7 +24,7 @@ export function ActivityFeed({
   activities,
   currentUserId,
   emptyTitle = 'No activity yet',
-  emptyMessage = 'Check-ins, rank moves, and new connections will appear here.',
+  emptyMessage = 'Rounds, leaderboard moves, and new connections will appear here.',
   onShoutout,
 }: ActivityFeedProps) {
   const { theme } = useThemePreferences();
@@ -86,12 +86,12 @@ export function ActivityFeed({
 }
 
 function buildContextLine(activity: ActivityItem) {
-  const parts = [activity.groupName, activity.habitTitle].filter(Boolean);
+  const parts = [activity.groupName, activity.courseName, activity.habitTitle].filter(Boolean);
   if (activity.type === 'connection' && activity.targetUserName) {
     parts.push(`with ${activity.targetUserName}`);
   }
 
-  return parts.length ? parts.join(' / ') : 'Social activity';
+  return parts.length ? parts.join(' / ') : 'Golf activity';
 }
 
 function formatRelativeTime(value: string) {

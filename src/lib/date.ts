@@ -87,7 +87,7 @@ export function getWeekUrgencyMessage(date: Date = new Date()) {
   if (day === 1) {
     return {
       title: 'Fresh week',
-      message: 'A clean leaderboard is live. Early check-ins set the pace.',
+      message: 'A clean leaderboard is live. Early rounds set the pace.',
     };
   }
 

@@ -6,6 +6,7 @@ export default function AppLayout() {
       <Stack.Screen name="(tabs)" />
       <Stack.Screen name="onboarding" />
       <Stack.Screen name="habits/new" />
+      <Stack.Screen name="courses/[courseId]" />
       <Stack.Screen name="courses/new" />
       <Stack.Screen name="groups/new" />
       <Stack.Screen name="groups/join" />

@@ -88,7 +88,7 @@ export function GroupChatPanel({ groupId }: { groupId: string }) {
           ) : (
             <SurfaceCard>
               <Text style={commonStyles.cardTitle}>No messages yet</Text>
-              <Text style={commonStyles.cardCopy}>Be the first to set the tone for this week's challenge.</Text>
+              <Text style={commonStyles.cardCopy}>Be the first to set the tone for this week’s round talk.</Text>
             </SurfaceCard>
           )}
         </View>
@@ -108,7 +108,7 @@ export function GroupChatPanel({ groupId }: { groupId: string }) {
           <TextInput
             value={draft}
             onChangeText={setDraft}
-            placeholder="Send a quick challenge update"
+            placeholder="Send a quick round update"
             placeholderTextColor={theme.colors.muted}
             style={[
               styles.input,

@@ -18,6 +18,7 @@ import {
   loadIncomingFriendRequests as loadIncomingFriendRequestsRequest,
   logRound as logRoundRequest,
   recordActivity as recordActivityRequest,
+  searchCourseCatalog as searchCourseCatalogRequest,
   sendFriendRequest as sendFriendRequestRequest,
   loadUserBundle,
   restoreSession,
@@ -40,6 +41,7 @@ import {
   ActivityShoutoutType,
   AppBundle,
   Course,
+  CourseHole,
   FriendRequestProfile,
   GameMode,
   GroupDetails,
@@ -48,9 +50,13 @@ import {
   Habit,
   Profile,
   Round,
+  RoundHoleScore,
+  RoundVisibility,
   SessionUser,
+  TeeBox,
   UserSearchResult,
 } from '@/types/models';
+import { CourseSearchResult } from '@/lib/courseProviders';
 
 const FIREBASE_ACCESS_ERROR_MESSAGE =
   'Firebase Auth succeeded, but Rivl could not read or create your Firestore profile. Update Firestore rules for profiles, groups, habits, challenges, and activities, then try again.';
@@ -76,6 +82,7 @@ type AppContextValue = {
   groups: AppBundle['groups'];
   courses: Course[];
   rounds: Round[];
+  searchCourses: (searchTerm: string) => Promise<CourseSearchResult[]>;
   signIn: (email: string, password: string) => Promise<ActionResult>;
   signUp: (name: string, email: string, password: string) => Promise<ActionResult>;
   signOut: () => Promise<void>;
@@ -85,8 +92,36 @@ type AppContextValue = {
   toggleHabitCheckIn: (habitId: string) => Promise<void>;
   restoreHabitStreak: (habitId: string) => Promise<ActionResult>;
   createGroup: (input: GroupSettingsInput) => Promise<GroupActionResult>;
-  createCourse: (input: { groupId: string; name: string; location: string; teeName: string; par: number }) => Promise<ActionResult>;
-  logRound: (input: { groupId: string; courseId: string; score: number; gameMode: GameMode; playedOn: string; notes?: string }) => Promise<ActionResult>;
+  createCourse: (input: {
+    groupId: string;
+    sourceId?: string;
+    sourceProvider?: Course['sourceProvider'];
+    name: string;
+    location: string;
+    city?: string;
+    state?: string;
+    country?: string;
+    latitude?: number | null;
+    longitude?: number | null;
+    holesCount?: number;
+    par: number;
+    tees?: TeeBox[];
+    holes?: CourseHole[];
+  }) => Promise<ActionResult>;
+  logRound: (input: {
+    groupId: string;
+    courseId: string;
+    gameMode: GameMode;
+    playedOn: string;
+    teeBoxId?: string | null;
+    holesPlayed: 9 | 18;
+    totalScore: number;
+    holeScores?: RoundHoleScore[];
+    teamName?: string;
+    teamMemberIds?: string[];
+    visibility: RoundVisibility;
+    notes?: string;
+  }) => Promise<ActionResult>;
   updateGroup: (groupId: string, input: GroupSettingsInput) => Promise<ActionResult>;
   joinGroup: (joinCode: string) => Promise<GroupActionResult>;
   joinPublicGroup: (groupId: string) => Promise<GroupActionResult>;
@@ -227,6 +262,8 @@ export function AppProvider({ children, fallback }: PropsWithChildren<{ fallback
     setSession(null);
     hydrateBundle(null);
   }, [hydrateBundle]);
+
+  const searchCourses = useCallback(async (searchTerm: string) => searchCourseCatalogRequest(searchTerm), []);
 
   const saveProfile = useCallback(
     async (patch: Partial<Profile>) => {
@@ -383,7 +420,22 @@ export function AppProvider({ children, fallback }: PropsWithChildren<{ fallback
   );
 
   const createCourse = useCallback(
-    async (input: { groupId: string; name: string; location: string; teeName: string; par: number }) => {
+    async (input: {
+      groupId: string;
+      sourceId?: string;
+      sourceProvider?: Course['sourceProvider'];
+      name: string;
+      location: string;
+      city?: string;
+      state?: string;
+      country?: string;
+      latitude?: number | null;
+      longitude?: number | null;
+      holesCount?: number;
+      par: number;
+      tees?: TeeBox[];
+      holes?: CourseHole[];
+    }) => {
       if (!session) {
         return { ok: false, message: 'No active session.' };
       }
@@ -399,7 +451,9 @@ export function AppProvider({ children, fallback }: PropsWithChildren<{ fallback
         ...input,
         name: input.name.trim(),
         location: input.location.trim(),
-        teeName: input.teeName.trim(),
+        city: input.city?.trim(),
+        state: input.state?.trim(),
+        country: input.country?.trim(),
       });
       await refreshUserData(session);
       setBusy(false);
@@ -409,19 +463,39 @@ export function AppProvider({ children, fallback }: PropsWithChildren<{ fallback
   );
 
   const logRound = useCallback(
-    async (input: { groupId: string; courseId: string; score: number; gameMode: GameMode; playedOn: string; notes?: string }) => {
+    async (input: {
+      groupId: string;
+      courseId: string;
+      gameMode: GameMode;
+      playedOn: string;
+      teeBoxId?: string | null;
+      holesPlayed: 9 | 18;
+      totalScore: number;
+      holeScores?: RoundHoleScore[];
+      teamName?: string;
+      teamMemberIds?: string[];
+      visibility: RoundVisibility;
+      notes?: string;
+    }) => {
       if (!session) {
         return { ok: false, message: 'No active session.' };
       }
       if (!input.groupId.trim() || !input.courseId.trim()) {
         return { ok: false, message: 'Choose a group and course first.' };
       }
-      if (!Number.isFinite(input.score) || input.score <= 0) {
+      if (!Number.isFinite(input.totalScore) || input.totalScore <= 0) {
         return { ok: false, message: 'Enter a valid round score.' };
+      }
+      if (input.gameMode === 'scramble' && !input.teamName?.trim()) {
+        return { ok: false, message: 'Add a scramble team name.' };
       }
 
       setBusy(true);
-      await logRoundRequest(session.uid, input);
+      const result = await logRoundRequest(session.uid, input);
+      if (!result) {
+        setBusy(false);
+        return { ok: false, message: 'That course could not be found.' };
+      }
       await refreshUserData(session);
       setBusy(false);
       return { ok: true, message: 'Round logged.' };
@@ -602,6 +676,7 @@ export function AppProvider({ children, fallback }: PropsWithChildren<{ fallback
       groups,
       courses,
       rounds,
+      searchCourses,
       signIn,
       signUp,
       signOut,
@@ -640,6 +715,7 @@ export function AppProvider({ children, fallback }: PropsWithChildren<{ fallback
       groups,
       courses,
       rounds,
+      searchCourses,
       signIn,
       signUp,
       signOut,

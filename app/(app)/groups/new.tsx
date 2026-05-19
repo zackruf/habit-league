@@ -34,7 +34,7 @@ export default function CreateGroupScreen() {
       <PageHeader
         eyebrow="Create league"
         title="Start a league for your crew"
-        subtitle="Set the basics, choose visibility, and optionally add a challenge consequence without adding anything risky."
+        subtitle="Set the basics, choose visibility, and optionally add a friendly side-game consequence without making the group feel complicated."
       />
       <GroupSettingsForm
         values={values}

@@ -73,7 +73,7 @@ export default function GroupsTabScreen() {
             const rank = foundIndex === -1 ? details.members.length : foundIndex + 1;
             const memberLabel = details.members.length === 1 ? '1 golfer' : `${details.members.length} golfers`;
             const visibilityLabel = details.group.visibility === 'public' ? 'Public' : 'Private';
-            const challengeLabel = getFeaturedCourseLabel(details.courses[0], details.rounds);
+            const courseLabel = getFeaturedCourseLabel(details.courses[0], details.rounds);
             const statusLine = `#${rank} this week / ${memberLabel}`;
             const secondaryLine = details.group.stakesEnabled && details.group.stakesText ? `${visibilityLabel} / Side game active` : visibilityLabel;
 
@@ -92,7 +92,7 @@ export default function GroupsTabScreen() {
                   </View>
                   <JoinCodeChip code={details.group.joinCode} />
                 </View>
-                <Text style={commonStyles.cardCopy}>{challengeLabel}</Text>
+                <Text style={commonStyles.cardCopy}>{courseLabel}</Text>
                 {details.group.description ? <Text style={commonStyles.smallMuted}>{details.group.description}</Text> : null}
                 <Text style={commonStyles.listRowSubtitle}>{secondaryLine}</Text>
               </PressableCard>

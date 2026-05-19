@@ -31,9 +31,9 @@ export default function LeaderboardScreen() {
 
   return (
     <AppScreen scrollable>
-      <Text style={commonStyles.eyebrow}>Weekly leaderboard</Text>
+      <Text style={commonStyles.eyebrow}>Group activity board</Text>
       <Text style={commonStyles.pageTitle}>{details.group.name}</Text>
-      <Text style={commonStyles.pageCopy}>Rankings are based on total daily check-ins during the current week.</Text>
+      <Text style={commonStyles.pageCopy}>This legacy board still ranks weekly group activity while Rivl shifts its center of gravity to course scores and round-based leaderboards.</Text>
 
       {details.leaderboard.map((entry, index) => (
         <SurfaceCard key={entry.userId}>
@@ -43,7 +43,7 @@ export default function LeaderboardScreen() {
             </Text>
             <Text style={commonStyles.statValue}>{entry.weeklyCheckIns}</Text>
           </View>
-          <Text style={commonStyles.cardCopy}>{entry.completedHabits} active habits contributing this week</Text>
+          <Text style={commonStyles.cardCopy}>{entry.completedHabits} legacy tracker entries contributing this week</Text>
         </SurfaceCard>
       ))}
     </AppScreen>

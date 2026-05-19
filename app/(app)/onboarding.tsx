@@ -105,13 +105,13 @@ export default function OnboardingScreen() {
     <AppScreen scrollable>
       <Text style={commonStyles.eyebrow}>Onboarding</Text>
       <Text style={commonStyles.pageTitle}>Get into your first golf group</Text>
-      <Text style={commonStyles.pageCopy}>Pick a golf format, then join or create a group so your first Rivl score lands inside real competition.</Text>
+      <Text style={commonStyles.pageCopy}>Pick a golf format, then join or create a group so your first Rivl round lands inside real competition.</Text>
 
       <SurfaceCard>
         <Text style={commonStyles.cardTitle}>How others will see you</Text>
         <TextField label="Display name" value={name} onChangeText={setName} />
         <TextField label="Short bio" value={bio} onChangeText={setBio} multiline />
-        <TextField label="Weekly check-in goal" value={goal} onChangeText={setGoal} keyboardType="number-pad" />
+        <TextField label="Weekly rounds goal" value={goal} onChangeText={setGoal} keyboardType="number-pad" />
       </SurfaceCard>
 
       <SurfaceCard>
@@ -177,7 +177,7 @@ export default function OnboardingScreen() {
             );
           })
         ) : (
-          <Text style={commonStyles.cardCopy}>No public leagues are open yet. You can create or join one from Groups after setup.</Text>
+          <Text style={commonStyles.cardCopy}>No public golf groups are open yet. You can create or join one from Groups after setup.</Text>
         )}
         {error ? <Text style={commonStyles.errorText}>{error}</Text> : null}
         <View style={commonStyles.actionRowTight}>

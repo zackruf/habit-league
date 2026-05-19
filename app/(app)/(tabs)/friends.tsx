@@ -190,7 +190,7 @@ export default function FriendsTabScreen() {
       <ActivityFeed
         activities={activities}
         currentUserId={profile.uid}
-        emptyMessage="Connect with people or join a league to see check-ins, rank moves, and shoutouts here."
+        emptyMessage="Connect with people or join a golf group to see rounds, leaderboard moves, and shoutouts here."
         emptyTitle="Your feed is warming up"
         onShoutout={handleShoutout}
       />

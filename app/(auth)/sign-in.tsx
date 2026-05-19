@@ -49,7 +49,7 @@ export default function SignInScreen() {
           <Text style={authStyles.kicker}>Rivl</Text>
           <Text style={authStyles.title}>Show up. Move up.</Text>
           <Text style={authStyles.subtitle}>
-            Rivl is where friends compete in shared league challenges, check in daily, and push each other up the rankings.
+            Rivl is where friends add real courses, log real rounds, and push each other up the leaderboard.
           </Text>
         </View>
 
@@ -68,13 +68,13 @@ export default function SignInScreen() {
           </View>
           <View style={authStyles.proofRow}>
             <View style={authStyles.proofPill}>
-              <Text style={authStyles.proofText}>Streaks</Text>
+              <Text style={authStyles.proofText}>Courses</Text>
             </View>
             <View style={authStyles.proofPill}>
               <Text style={authStyles.proofText}>Groups</Text>
             </View>
             <View style={authStyles.proofPill}>
-              <Text style={authStyles.proofText}>Boosts</Text>
+              <Text style={authStyles.proofText}>Rounds</Text>
             </View>
           </View>
         </View>
@@ -85,7 +85,7 @@ export default function SignInScreen() {
           <Text style={authStyles.cardTitle}>Welcome back</Text>
           <Text style={authStyles.cardCopy}>
             {usingFirebase
-              ? 'Sign in to keep your leagues, challenge streaks, and weekly rank moving.'
+              ? 'Sign in to keep your golf groups, rounds, and course rankings moving.'
               : 'Demo mode is on, so you can explore groups, courses, and scoreboards instantly.'}
           </Text>
         </View>

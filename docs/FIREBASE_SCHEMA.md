@@ -2,22 +2,28 @@
 
 ## Overview
 
-The current data model is designed around group-first league competition with shared challenges and per-user participation records.
+Rivl is moving to a golf-first data model built around:
 
-The app also maintains demo-mode compatibility through an AsyncStorage-backed structure that mirrors the same concepts.
+- profiles
+- golf groups
+- saved courses
+- logged rounds
+- activity feed
+- social connections
+
+The app still keeps older challenge and streak records for compatibility, but those are no longer the main product center of gravity.
 
 ## Rules Alignment
 
-The current client expects Firestore rules to allow authenticated access patterns for:
+The client currently expects Firestore rules to allow authenticated access patterns for:
 
 - profile bootstrap on sign-in
-- loading a signed-in user profile and league memberships
-- reading discoverable leagues
-- reading shared league challenges for joined leagues
-- reading and updating participation records for the signed-in user
-- reading league participation records for leaderboard and league detail views
-- loading and writing group chat messages
-- loading and updating activity feed items and shoutouts
+- loading a signed-in user profile and group memberships
+- reading discoverable groups
+- reading and writing saved courses for joined groups
+- reading and writing rounds for joined groups
+- reading group chat messages
+- reading and updating activity feed items and shoutouts
 
 The repository-level rules source is:
 
@@ -44,17 +50,7 @@ Primary fields:
 - `outgoingFriendRequestIds`
 - `shopInventory`
 
-## Users
-
-In Firebase Auth:
-
-- authentication identity is handled by Firebase Auth
-
-In demo mode:
-
-- local credential records exist in the demo store for seeded/demo login
-
-## Groups / Leagues
+## Groups
 
 Collection:
 
@@ -76,82 +72,74 @@ Primary fields:
 - `memberLimit`
 - `createdAt`
 
-## Shared League Challenges
+## Courses
 
 Collection:
 
-- `challenges`
+- `courses`
 
 Primary fields:
 
 - `id`
 - `groupId`
-- `title`
-- `emoji`
-- `category`
-- `description`
-- `frequency`
+- `sourceId`
+- `sourceProvider`
+- `name`
+- `location`
+- `city`
+- `state`
+- `country`
+- `latitude`
+- `longitude`
+- `holesCount`
+- `par`
+- `tees`
+- `holes`
 - `createdBy`
 - `createdAt`
-- `status`
-- `startDateKey`
-- `endDateKey`
-- `archivedAt`
-- `archivedBy`
-- `completedAt`
-- `winnerUserId`
-- `winnerDisplayName`
-- `active`
 
 Notes:
 
-- `LeagueChallenge` is the shared league-level object
-- it defines the challenge once for the whole league
-- lifecycle status is stored here
+- a course is saved into a specific group
+- `sourceId` and `sourceProvider` let Rivl connect one saved course back to a provider-backed course record later
+- tee and hole data are stored with the saved course so score logging does not depend on a live API call
 
-## Challenge Participation Records
-
-Internal model name:
-
-- `Habit`
+## Rounds
 
 Collection:
 
-- `habits`
-
-Role:
-
-- per-user participation and check-in record for a shared challenge
+- `rounds`
 
 Primary fields:
 
 - `id`
-- `userId`
 - `groupId`
-- `challengeId`
-- `title`
-- `emoji`
-- `category`
+- `courseId`
+- `courseSourceId`
+- `courseSourceProvider`
+- `courseName`
+- `userId`
+- `playerName`
+- `totalScore`
+- `scoreToPar`
+- `gameMode`
+- `teeBoxId`
+- `teeBoxName`
+- `holesPlayed`
+- `holeScores`
+- `teamName`
+- `teamMemberIds`
+- `playedOn`
+- `notes`
+- `photoUrls`
+- `visibility`
 - `createdAt`
-- `checkIns`
-- `restoreUsedForDate`
-- `restoreUsedAt`
 
 Notes:
 
-- the internal type name is still `Habit` for compatibility
-- product-wise, these records represent a user’s participation in a shared league challenge
-
-## Check-Ins
-
-Check-ins are stored as date-key strings on the participation record:
-
-- `checkIns: string[]`
-
-Current pattern:
-
-- each entry is a `YYYY-MM-DD` style key
-- streak and restore logic are computed from this history
+- `gameMode` currently supports `stroke` and `scramble`
+- `visibility` is used to separate group/friends leaderboards from public ones
+- public leaderboard foundations can aggregate across groups by `courseSourceId`
 
 ## Activity Feed
 
@@ -167,23 +155,24 @@ Primary fields:
 - `actorName`
 - `groupId`
 - `groupName`
-- `habitId`
-- `habitTitle`
-- `targetUserId`
-- `targetUserName`
+- `courseId`
+- `courseName`
+- `roundId`
+- `score`
+- `scoreToPar`
 - `summary`
 - `createdAt`
 - `shoutouts`
 
-Current activity types include:
+Current golf-first activity types include:
 
-- check-in
-- rank movement
-- league join
+- round logged
+- personal best
+- course leader callout
+- group join
 - social connection
-- challenge lifecycle updates
 
-## Friend Requests / Friends
+## Friend Requests and Friends
 
 Stored on profile documents:
 
@@ -193,30 +182,14 @@ Stored on profile documents:
 
 Current design:
 
-- lightweight request/accept model
+- lightweight request / accept model
 - accepted friends appear in `friendIds`
-
-## Shop Inventory
-
-Stored on profile documents:
-
-- `shopInventory`
-
-Current fields:
-
-- `streakRestoreCredits`
-- `streakRestoreCooldownUntil`
-- `streakFreezeCredits`
-- `streakFreezeCooldownUntil`
-- `premiumPlaceholderOwned`
 
 ## Legacy Compatibility Notes
 
 Important compatibility decisions:
 
-- `Habit` remains the internal participation record type for now
-- older shared-challenge-incompatible data is normalized safely on read
-- legacy records missing `challengeId` are treated as if `challengeId === habit.id`
-- older challenges default to active lifecycle state when lifecycle fields are missing
-
-This keeps the product direction moving forward without forcing a risky one-shot migration.
+- `LeagueChallenge` and `Habit` still exist in the codebase
+- older challenge and streak systems are preserved for stability
+- older records are normalized safely on read where possible
+- the golf pivot is intentionally additive first, not a destructive one-shot migration

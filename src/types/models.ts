@@ -29,14 +29,46 @@ export type ShopInventory = {
 };
 
 export type GameMode = 'stroke' | 'scramble';
+export type RoundVisibility = 'friends' | 'public';
+export type CourseProviderId = 'mock' | 'manual' | 'golfapi' | 'golfcourseapi' | 'igolf' | 'opengolfapi';
+
+export type TeeBox = {
+  id: string;
+  name: string;
+  color: string;
+  totalYards: number | null;
+  rating: number | null;
+  slope: number | null;
+};
+
+export type CourseHole = {
+  number: number;
+  par: number;
+  handicapIndex: number | null;
+  yardagesByTee: Record<string, number>;
+};
+
+export type RoundHoleScore = {
+  holeNumber: number;
+  score: number;
+};
 
 export type Course = {
   id: string;
   groupId: string;
+  sourceId: string;
+  sourceProvider: CourseProviderId;
   name: string;
   location: string;
-  teeName: string;
+  city: string;
+  state: string;
+  country: string;
+  latitude: number | null;
+  longitude: number | null;
+  holesCount: number;
   par: number;
+  tees: TeeBox[];
+  holes: CourseHole[];
   createdBy: string;
   createdAt: string;
 };
@@ -45,13 +77,24 @@ export type Round = {
   id: string;
   groupId: string;
   courseId: string;
+  courseSourceId: string;
+  courseSourceProvider: CourseProviderId;
+  courseName: string;
   userId: string;
   playerName: string;
-  score: number;
+  totalScore: number;
+  scoreToPar: number | null;
   gameMode: GameMode;
+  teeBoxId: string | null;
+  teeBoxName: string;
+  holesPlayed: 9 | 18;
+  holeScores: RoundHoleScore[];
+  teamName: string;
+  teamMemberIds: string[];
   playedOn: string;
   notes: string;
   photoUrls: string[];
+  visibility: RoundVisibility;
   createdAt: string;
 };
 
@@ -144,7 +187,15 @@ export type GroupMessage = {
   createdAt: string;
 };
 
-export type ActivityType = 'check_in' | 'rank_movement' | 'league_join' | 'connection' | 'challenge_update';
+export type ActivityType =
+  | 'check_in'
+  | 'rank_movement'
+  | 'league_join'
+  | 'connection'
+  | 'challenge_update'
+  | 'round_logged'
+  | 'personal_best'
+  | 'course_leader';
 
 export type ActivityShoutoutType = 'keep_going' | 'on_fire' | 'nice_work';
 
@@ -159,6 +210,12 @@ export type ActivityItem = {
   groupName: string | null;
   habitId: string | null;
   habitTitle: string | null;
+  courseId: string | null;
+  courseName: string | null;
+  roundId: string | null;
+  gameMode: GameMode | null;
+  score: number | null;
+  scoreToPar: number | null;
   targetUserId: string | null;
   targetUserName: string | null;
   summary: string;
@@ -174,6 +231,12 @@ export type ActivityInput = {
   groupName?: string | null;
   habitId?: string | null;
   habitTitle?: string | null;
+  courseId?: string | null;
+  courseName?: string | null;
+  roundId?: string | null;
+  gameMode?: GameMode | null;
+  score?: number | null;
+  scoreToPar?: number | null;
   targetUserId?: string | null;
   targetUserName?: string | null;
   summaryOverride?: string;
@@ -208,11 +271,26 @@ export type GroupDetails = {
 };
 
 export type CourseLeaderboardEntry = {
-  userId: string;
+  entryId: string;
+  userId: string | null;
   name: string;
-  bestScore: number;
-  lastScore: number;
+  totalScore: number;
+  scoreToPar: number | null;
+  playedOn: string;
   roundsPlayed: number;
+  gameMode: GameMode;
+  visibility: RoundVisibility;
+  groupId: string;
+  teamName: string | null;
+  indicatorLabel: string;
+};
+
+export type PersonalBest = {
+  roundId: string;
+  totalScore: number;
+  scoreToPar: number | null;
+  playedOn: string;
+  improvement: number | null;
 };
 
 export type UserSearchResult = {

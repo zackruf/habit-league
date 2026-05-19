@@ -35,7 +35,7 @@ export default function GroupChatScreen() {
         <PageHeader
           eyebrow="Group chat"
           title={details.group.name}
-          subtitle="Keep the momentum going with quick check-ins, nudges, and challenge talk."
+          subtitle="Keep the momentum going with quick score updates, round plans, and friendly pressure."
         />
         <GroupChatPanel groupId={details.group.id} />
       </View>

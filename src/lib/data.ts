@@ -17,6 +17,7 @@ import {
 } from 'firebase/firestore';
 
 import { firebaseAuth, firebaseConfigured, firestore } from '@/lib/firebase';
+import { CourseSearchResult, getDefaultCourseProvider, MOCK_COURSES } from '@/lib/courseProviders';
 import { getCurrentDateKey, getCurrentWeekEndKey, getCurrentWeekKeys, getDateKeysBetween, getPreviousWeekKeys } from '@/lib/date';
 import { getDefaultShopInventory, normalizeShopInventory } from '@/lib/shop';
 import { getHabitStreakStatus } from '@/lib/streaks';
@@ -39,7 +40,10 @@ import {
   LeagueChallengeStatus,
   LeaderboardEntry,
   Profile,
+  RoundVisibility,
   Round,
+  RoundHoleScore,
+  TeeBox,
   SessionUser,
   UserSearchResult,
 } from '@/types/models';
@@ -665,9 +669,28 @@ export async function createGroup(uid: string, input: GroupSettingsInput) {
   return group.id;
 }
 
+export async function searchCourseCatalog(searchTerm: string): Promise<CourseSearchResult[]> {
+  return getDefaultCourseProvider().searchCourses(searchTerm);
+}
+
 export async function createCourse(
   uid: string,
-  input: { groupId: string; name: string; location: string; teeName: string; par: number }
+  input: {
+    groupId: string;
+    sourceId?: string;
+    sourceProvider?: Course['sourceProvider'];
+    name: string;
+    location: string;
+    city?: string;
+    state?: string;
+    country?: string;
+    latitude?: number | null;
+    longitude?: number | null;
+    holesCount?: number;
+    par: number;
+    tees?: TeeBox[];
+    holes?: Course['holes'];
+  }
 ) {
   const course = buildCourse(uid, input);
 
@@ -684,28 +707,59 @@ export async function createCourse(
 
 export async function logRound(
   uid: string,
-  input: { groupId: string; courseId: string; score: number; gameMode: GameMode; playedOn: string; notes?: string }
+  input: {
+    groupId: string;
+    courseId: string;
+    gameMode: GameMode;
+    playedOn: string;
+    teeBoxId?: string | null;
+    holesPlayed: 9 | 18;
+    totalScore: number;
+    holeScores?: RoundHoleScore[];
+    teamName?: string;
+    teamMemberIds?: string[];
+    visibility: RoundVisibility;
+    notes?: string;
+  }
 ) {
-  const storeRound = buildRound(uid, input);
-
   if (usingFirebaseBackend && firestore) {
-    const profileSnapshot = await getDoc(doc(firestore, 'profiles', uid));
+    const [courseSnapshot, profileSnapshot] = await Promise.all([
+      getDoc(doc(firestore, 'courses', input.courseId)),
+      getDoc(doc(firestore, 'profiles', uid)),
+    ]);
+    const course = normalizeCourse(courseSnapshot.data() as Course);
     const profile = normalizeProfile(profileSnapshot.data() as Profile);
-    await setDoc(doc(firestore, 'rounds', storeRound.id), {
-      ...storeRound,
-      playerName: profile.name,
-    });
-    return storeRound.id;
+    if (!course || !profile) {
+      return null;
+    }
+
+    const existingRounds = await loadRoundsForCourseSource(course.sourceId);
+    const storeRound = buildRound(uid, profile, course, input);
+    await setDoc(doc(firestore, 'rounds', storeRound.id), storeRound);
+    await recordRoundActivities(storeRound, course, existingRounds, profile);
+    return storeRound;
   }
 
   const store = await readDemoStore();
+  const course = normalizeCourse(store.courses[input.courseId]);
   const profile = normalizeProfile(store.profiles[uid]);
-  store.rounds[storeRound.id] = {
-    ...storeRound,
-    playerName: profile?.name ?? 'Player',
-  };
+  if (!course || !profile) {
+    return null;
+  }
+
+  const existingRounds = Object.values(store.rounds)
+    .map((round) => normalizeRound(round))
+    .filter((round): round is Round => {
+      if (!round) {
+        return false;
+      }
+      return round.courseSourceId === course.sourceId;
+    });
+  const storeRound = buildRound(uid, profile, course, input);
+  store.rounds[storeRound.id] = storeRound;
   await writeDemoStore(store);
-  return storeRound.id;
+  await recordRoundActivities(storeRound, course, existingRounds, profile);
+  return storeRound;
 }
 
 export async function updateGroup(uid: string, groupId: string, input: GroupSettingsInput) {
@@ -1195,14 +1249,55 @@ async function loadRoundsForGroups(groupIds: string[]) {
     .sort((left, right) => right.playedOn.localeCompare(left.playedOn) || right.createdAt.localeCompare(left.createdAt));
 }
 
-function buildCourse(uid: string, input: { groupId: string; name: string; location: string; teeName: string; par: number }): Course {
+async function loadRoundsForCourseSource(sourceId: string) {
+  if (!usingFirebaseBackend || !firestore || !sourceId) {
+    return [];
+  }
+
+  const snapshot = await getDocs(query(collection(firestore, 'rounds'), where('courseSourceId', '==', sourceId), limit(100)));
+  return snapshot.docs
+    .map((entry) => normalizeRound(entry.data() as Round))
+    .filter((round): round is Round => Boolean(round))
+    .sort((left, right) => right.playedOn.localeCompare(left.playedOn) || right.createdAt.localeCompare(left.createdAt));
+}
+
+function buildCourse(
+  uid: string,
+  input: {
+    groupId: string;
+    sourceId?: string;
+    sourceProvider?: Course['sourceProvider'];
+    name: string;
+    location: string;
+    city?: string;
+    state?: string;
+    country?: string;
+    latitude?: number | null;
+    longitude?: number | null;
+    holesCount?: number;
+    par: number;
+    tees?: TeeBox[];
+    holes?: Course['holes'];
+  }
+): Course {
+  const tees = normalizeTees(input.tees);
+  const holes = normalizeCourseHoles(input.holes, tees, input.holesCount ?? 18, input.par);
   return {
     id: createId('course'),
     groupId: input.groupId,
+    sourceId: input.sourceId?.trim() || createId('course-source'),
+    sourceProvider: input.sourceProvider ?? 'manual',
     name: input.name.trim(),
     location: input.location.trim(),
-    teeName: input.teeName.trim() || 'Default tees',
+    city: input.city?.trim() ?? '',
+    state: input.state?.trim() ?? '',
+    country: input.country?.trim() ?? '',
+    latitude: input.latitude ?? null,
+    longitude: input.longitude ?? null,
+    holesCount: input.holesCount ?? holes.length ?? 18,
     par: input.par,
+    tees,
+    holes,
     createdBy: uid,
     createdAt: new Date().toISOString(),
   };
@@ -1210,19 +1305,52 @@ function buildCourse(uid: string, input: { groupId: string; name: string; locati
 
 function buildRound(
   uid: string,
-  input: { groupId: string; courseId: string; score: number; gameMode: GameMode; playedOn: string; notes?: string }
+  profile: Profile,
+  course: Course,
+  input: {
+    groupId: string;
+    courseId: string;
+    gameMode: GameMode;
+    playedOn: string;
+    teeBoxId?: string | null;
+    holesPlayed: 9 | 18;
+    totalScore: number;
+    holeScores?: RoundHoleScore[];
+    teamName?: string;
+    teamMemberIds?: string[];
+    visibility: RoundVisibility;
+    notes?: string;
+  }
 ): Round {
+  const normalizedHoleScores = normalizeHoleScores(input.holeScores, input.holesPlayed);
+  const selectedTee = course.tees.find((tee) => tee.id === input.teeBoxId) ?? course.tees[0] ?? null;
+  const roundPar = getRoundPar(course, input.holesPlayed);
+  const totalScore = normalizedHoleScores.length
+    ? normalizedHoleScores.reduce((sum, hole) => sum + hole.score, 0)
+    : input.totalScore;
+
   return {
     id: createId('round'),
     groupId: input.groupId,
     courseId: input.courseId,
+    courseSourceId: course.sourceId,
+    courseSourceProvider: course.sourceProvider,
+    courseName: course.name,
     userId: uid,
-    playerName: '',
-    score: input.score,
+    playerName: profile.name || 'Player',
+    totalScore,
+    scoreToPar: roundPar ? totalScore - roundPar : null,
     gameMode: input.gameMode,
+    teeBoxId: selectedTee?.id ?? input.teeBoxId ?? null,
+    teeBoxName: selectedTee?.name ?? 'Default tees',
+    holesPlayed: input.holesPlayed,
+    holeScores: normalizedHoleScores,
+    teamName: input.gameMode === 'scramble' ? input.teamName?.trim() || 'Scramble team' : '',
+    teamMemberIds: input.gameMode === 'scramble' ? [...new Set(input.teamMemberIds ?? [])] : [],
     playedOn: input.playedOn,
     notes: input.notes?.trim() ?? '',
     photoUrls: [],
+    visibility: input.visibility,
     createdAt: new Date().toISOString(),
   };
 }
@@ -1235,8 +1363,17 @@ function normalizeCourse(course?: Course | null) {
   return {
     ...course,
     location: course.location ?? '',
-    teeName: course.teeName ?? 'Default tees',
+    sourceId: course.sourceId ?? course.id,
+    sourceProvider: course.sourceProvider ?? 'manual',
+    city: course.city ?? '',
+    state: course.state ?? '',
+    country: course.country ?? '',
+    latitude: typeof course.latitude === 'number' ? course.latitude : null,
+    longitude: typeof course.longitude === 'number' ? course.longitude : null,
+    holesCount: Number(course.holesCount) || course.holes?.length || 18,
     par: Number(course.par) || 72,
+    tees: normalizeTees(course.tees),
+    holes: normalizeCourseHoles(course.holes, normalizeTees(course.tees), Number(course.holesCount) || course.holes?.length || 18, Number(course.par) || 72),
   };
 }
 
@@ -1247,11 +1384,102 @@ function normalizeRound(round?: Round | null) {
 
   return {
     ...round,
+    courseSourceId: round.courseSourceId ?? round.courseId,
+    courseSourceProvider: round.courseSourceProvider ?? 'manual',
+    courseName: round.courseName ?? 'Golf course',
     playerName: round.playerName ?? 'Player',
-    score: Number(round.score) || 0,
+    totalScore: Number(round.totalScore ?? (round as Round & { score?: number }).score) || 0,
+    scoreToPar:
+      typeof round.scoreToPar === 'number'
+        ? round.scoreToPar
+        : null,
+    teeBoxId: round.teeBoxId ?? null,
+    teeBoxName: round.teeBoxName ?? 'Default tees',
+    holesPlayed: round.holesPlayed === 9 ? 9 : 18,
+    holeScores: normalizeHoleScores(round.holeScores, round.holesPlayed === 9 ? 9 : 18),
+    teamName: round.teamName ?? '',
+    teamMemberIds: round.teamMemberIds ?? [],
     notes: round.notes ?? '',
     photoUrls: round.photoUrls ?? [],
+    visibility: round.visibility === 'public' ? 'public' : 'friends',
   };
+}
+
+function normalizeTees(tees?: TeeBox[] | null): TeeBox[] {
+  if (!tees?.length) {
+    return [
+      {
+        id: 'default-tees',
+        name: 'Default tees',
+        color: 'Blue',
+        totalYards: null,
+        rating: null,
+        slope: null,
+      },
+    ];
+  }
+
+  return tees.map((tee, index) => ({
+    id: tee.id || `tee-${index + 1}`,
+    name: tee.name || `Tee ${index + 1}`,
+    color: tee.color || tee.name || 'Blue',
+    totalYards: typeof tee.totalYards === 'number' ? tee.totalYards : null,
+    rating: typeof tee.rating === 'number' ? tee.rating : null,
+    slope: typeof tee.slope === 'number' ? tee.slope : null,
+  }));
+}
+
+function normalizeCourseHoles(
+  holes: Course['holes'] | undefined,
+  tees: TeeBox[],
+  holesCount: number,
+  par: number
+): Course['holes'] {
+  if (holes?.length) {
+    return holes.map((hole, index) => ({
+      number: hole.number || index + 1,
+      par: Number(hole.par) || 4,
+      handicapIndex: typeof hole.handicapIndex === 'number' ? hole.handicapIndex : null,
+      yardagesByTee: hole.yardagesByTee ?? {},
+    }));
+  }
+
+  const targetCount = holesCount || 18;
+  const basePar = Math.max(3, Math.round(par / targetCount));
+  return Array.from({ length: targetCount }, (_, index) => ({
+    number: index + 1,
+    par: index % 5 === 0 ? basePar + 1 : index % 4 === 0 ? Math.max(3, basePar - 1) : basePar,
+    handicapIndex: ((index * 3) % targetCount) + 1,
+    yardagesByTee: Object.fromEntries(
+      tees.map((tee) => [
+        tee.id,
+        tee.totalYards ? Math.max(95, Math.round(tee.totalYards / targetCount) + ((index % 3) - 1) * 12) : 0,
+      ])
+    ),
+  }));
+}
+
+function normalizeHoleScores(holeScores?: RoundHoleScore[] | null, holesPlayed = 18): RoundHoleScore[] {
+  if (!holeScores?.length) {
+    return [];
+  }
+
+  return holeScores
+    .filter((entry) => Number.isFinite(entry.score) && entry.score > 0 && entry.holeNumber >= 1 && entry.holeNumber <= holesPlayed)
+    .map((entry) => ({
+      holeNumber: entry.holeNumber,
+      score: Number(entry.score),
+    }))
+    .sort((left, right) => left.holeNumber - right.holeNumber);
+}
+
+function getRoundPar(course: Course, holesPlayed: 9 | 18) {
+  const holes = course.holes.slice(0, holesPlayed);
+  if (!holes.length) {
+    return course.par || null;
+  }
+
+  return holes.reduce((sum, hole) => sum + hole.par, 0);
 }
 
 function buildUserSearchResults(
@@ -1643,6 +1871,7 @@ function mergeLegacyChallenges(challenges: LeagueChallenge[], participations: Ha
 function buildActivity(input: ActivityInput): ActivityItem {
   const groupName = input.groupName ?? null;
   const habitTitle = input.habitTitle ?? null;
+  const courseName = input.courseName ?? null;
   const targetUserName = input.targetUserName ?? null;
 
   return {
@@ -1654,6 +1883,12 @@ function buildActivity(input: ActivityInput): ActivityItem {
     groupName,
     habitId: input.habitId ?? null,
     habitTitle,
+    courseId: input.courseId ?? null,
+    courseName,
+    roundId: input.roundId ?? null,
+    gameMode: input.gameMode ?? null,
+    score: typeof input.score === 'number' ? input.score : null,
+    scoreToPar: typeof input.scoreToPar === 'number' ? input.scoreToPar : null,
     targetUserId: input.targetUserId ?? null,
     targetUserName,
     summary: buildActivitySummary(input),
@@ -1690,7 +1925,125 @@ function buildActivitySummary(input: ActivityInput) {
     return `${actor} updated ${input.habitTitle || 'a league challenge'}${input.groupName ? ` in ${input.groupName}` : ''}`;
   }
 
+  if (input.type === 'round_logged') {
+    const golfLabel = input.gameMode === 'scramble' ? 'logged a scramble round' : `shot ${input.score ?? '--'}`;
+    return `${actor} ${golfLabel}${input.courseName ? ` at ${input.courseName}` : ''}.`;
+  }
+
+  if (input.type === 'personal_best') {
+    return `${actor} set a new personal best${input.score ? `: ${input.score}` : ''}${input.courseName ? ` at ${input.courseName}` : ''}.`;
+  }
+
+  if (input.type === 'course_leader') {
+    return `${actor} took #1${input.courseName ? ` at ${input.courseName}` : ''}.`;
+  }
+
   return `${actor} made progress`;
+}
+
+async function recordRoundActivities(round: Round, course: Course, existingRounds: Round[], profile: Profile) {
+  const scoreLabel = round.scoreToPar !== null ? `${round.totalScore} (${formatSignedScore(round.scoreToPar)})` : `${round.totalScore}`;
+  await recordActivity({
+    type: 'round_logged',
+    actorId: profile.uid,
+    actorName: profile.name,
+    groupId: round.groupId,
+    groupName: await resolveGroupName(round.groupId),
+    courseId: round.courseId,
+    courseName: course.name,
+    roundId: round.id,
+    gameMode: round.gameMode,
+    score: round.totalScore,
+    scoreToPar: round.scoreToPar,
+    summaryOverride:
+      round.gameMode === 'scramble'
+        ? `${profile.name} logged a scramble round for ${round.teamName || 'the team'} at ${course.name}.`
+        : `${profile.name} shot ${scoreLabel} at ${course.name}.`,
+  });
+
+  if (round.gameMode === 'stroke' && isNewPersonalBest(round, existingRounds)) {
+    await recordActivity({
+      type: 'personal_best',
+      actorId: profile.uid,
+      actorName: profile.name,
+      groupId: round.groupId,
+      groupName: await resolveGroupName(round.groupId),
+      courseId: round.courseId,
+      courseName: course.name,
+      roundId: round.id,
+      score: round.totalScore,
+      scoreToPar: round.scoreToPar,
+      summaryOverride: `${profile.name} set a new personal best: ${scoreLabel} at ${course.name}.`,
+    });
+  }
+
+  if (becameCourseLeader(round, existingRounds)) {
+    await recordActivity({
+      type: 'course_leader',
+      actorId: profile.uid,
+      actorName: profile.name,
+      groupId: round.groupId,
+      groupName: await resolveGroupName(round.groupId),
+      courseId: round.courseId,
+      courseName: course.name,
+      roundId: round.id,
+      score: round.totalScore,
+      scoreToPar: round.scoreToPar,
+      summaryOverride: `${profile.name} took #1 at ${course.name}.`,
+    });
+  }
+}
+
+function isNewPersonalBest(round: Round, existingRounds: Round[]) {
+  if (round.gameMode !== 'stroke') {
+    return false;
+  }
+
+  const previousRounds = existingRounds.filter((entry) => entry.userId === round.userId && entry.gameMode === 'stroke');
+  if (!previousRounds.length) {
+    return true;
+  }
+
+  const bestPrevious = previousRounds.slice().sort(compareRoundsForActivity)[0];
+  return compareRoundsForActivity(round, bestPrevious) < 0;
+}
+
+function becameCourseLeader(round: Round, existingRounds: Round[]) {
+  const sameModeRounds = existingRounds.filter(
+    (entry) => entry.groupId === round.groupId && entry.gameMode === round.gameMode && entry.visibility === round.visibility
+  );
+  if (!sameModeRounds.length) {
+    return true;
+  }
+
+  const bestPrevious = sameModeRounds.slice().sort(compareRoundsForActivity)[0];
+  return compareRoundsForActivity(round, bestPrevious) < 0;
+}
+
+function compareRoundsForActivity(left: Round, right: Round) {
+  if (left.scoreToPar !== null && right.scoreToPar !== null && left.scoreToPar !== right.scoreToPar) {
+    return left.scoreToPar - right.scoreToPar;
+  }
+
+  return left.totalScore - right.totalScore;
+}
+
+async function resolveGroupName(groupId: string) {
+  if (usingFirebaseBackend && firestore) {
+    const snapshot = await getDoc(doc(firestore, 'groups', groupId));
+    return normalizeGroup(snapshot.data() as Group)?.name ?? 'Golf group';
+  }
+
+  const store = await readDemoStore();
+  return normalizeGroup(store.groups[groupId])?.name ?? 'Golf group';
+}
+
+function formatSignedScore(value: number) {
+  if (value === 0) {
+    return 'E';
+  }
+
+  return value > 0 ? `+${value}` : `${value}`;
 }
 
 function getEmptyShoutouts(): ActivityShoutouts {
@@ -1774,6 +2127,85 @@ async function writeDemoStore(store: DemoStore) {
   await AsyncStorage.setItem(STORAGE_KEY, JSON.stringify(store));
 }
 
+function buildSeedCourseFromCatalog(courseId: string, groupId: string, createdBy: string, sourceId: string): Course {
+  const sourceCourse = MOCK_COURSES.find((course) => course.sourceId === sourceId);
+  if (!sourceCourse) {
+    return buildCourse(createdBy, {
+      groupId,
+      sourceId,
+      sourceProvider: 'mock',
+      name: 'Course pending',
+      location: '',
+      par: 72,
+    });
+  }
+
+  return {
+    id: courseId,
+    groupId,
+    sourceId: sourceCourse.sourceId,
+    sourceProvider: sourceCourse.sourceProvider,
+    name: sourceCourse.name,
+    location: sourceCourse.location,
+    city: sourceCourse.city,
+    state: sourceCourse.state,
+    country: sourceCourse.country,
+    latitude: sourceCourse.latitude,
+    longitude: sourceCourse.longitude,
+    holesCount: sourceCourse.holesCount,
+    par: sourceCourse.par,
+    tees: sourceCourse.tees,
+    holes: sourceCourse.holes,
+    createdBy,
+    createdAt: new Date().toISOString(),
+  };
+}
+
+function buildSeedRound(input: {
+  id: string;
+  groupId: string;
+  course: Course;
+  userId: string;
+  playerName: string;
+  gameMode: GameMode;
+  playedOn: string;
+  totalScore: number;
+  notes: string;
+  createdAt: string;
+  visibility?: RoundVisibility;
+  teeBoxId?: string | null;
+  holesPlayed?: 9 | 18;
+  teamName?: string;
+  teamMemberIds?: string[];
+}) {
+  const tee = input.course.tees.find((entry) => entry.id === input.teeBoxId) ?? input.course.tees[0] ?? null;
+  const holesPlayed = input.holesPlayed ?? 18;
+  return {
+    id: input.id,
+    groupId: input.groupId,
+    courseId: input.course.id,
+    courseSourceId: input.course.sourceId,
+    courseSourceProvider: input.course.sourceProvider,
+    courseName: input.course.name,
+    userId: input.userId,
+    playerName: input.playerName,
+    totalScore: input.totalScore,
+    scoreToPar: input.totalScore - (getRoundPar(input.course, holesPlayed) ?? input.course.par),
+    gameMode: input.gameMode,
+    teeBoxId: tee?.id ?? null,
+    teeBoxName: tee?.name ?? 'Default tees',
+    holesPlayed,
+    holeScores: [],
+    teamName: input.gameMode === 'scramble' ? input.teamName ?? 'Scramble team' : '',
+    teamMemberIds: input.gameMode === 'scramble' ? input.teamMemberIds ?? [] : [],
+    playedOn: input.playedOn,
+    notes: input.notes,
+    photoUrls: [],
+    visibility: input.visibility ?? 'friends',
+    createdAt: input.createdAt,
+  } satisfies Round;
+}
+
 function seedDemoStore(): DemoStore {
   const demoUid = 'user-demo';
   const friendUid = 'user-friend';
@@ -1785,6 +2217,9 @@ function seedDemoStore(): DemoStore {
   const starterCourseId = 'course-starter-municipal';
   const hillsCourseId = 'course-starter-hills';
   const publicCourseId = 'course-public-dunes';
+  const starterCourseSourceId = 'mock-riverview-municipal';
+  const hillsCourseSourceId = 'mock-willow-creek';
+  const publicCourseSourceId = 'mock-three-ridges';
   const walkChallengeId = 'challenge-starter-walk';
   const waterChallengeId = 'challenge-starter-water';
   const journalChallengeId = 'challenge-starter-journal';
@@ -2081,90 +2516,63 @@ function seedDemoStore(): DemoStore {
       },
     },
     courses: {
-      [starterCourseId]: {
-        id: starterCourseId,
-        groupId,
-        name: 'Riverview Municipal',
-        location: 'Hartford, CT',
-        teeName: 'Blue tees',
-        par: 72,
-        createdBy: demoUid,
-        createdAt: new Date().toISOString(),
-      },
-      [hillsCourseId]: {
-        id: hillsCourseId,
-        groupId,
-        name: 'Pine Hills',
-        location: 'Springfield, MA',
-        teeName: 'White tees',
-        par: 70,
-        createdBy: friendUid,
-        createdAt: new Date().toISOString(),
-      },
-      [publicCourseId]: {
-        id: publicCourseId,
-        groupId: publicFitnessGroupId,
-        name: 'Harbor Dunes',
-        location: 'Newport, RI',
-        teeName: 'Member tees',
-        par: 72,
-        createdBy: runnerUid,
-        createdAt: new Date().toISOString(),
-      },
+      [starterCourseId]: buildSeedCourseFromCatalog(starterCourseId, groupId, demoUid, starterCourseSourceId),
+      [hillsCourseId]: buildSeedCourseFromCatalog(hillsCourseId, groupId, friendUid, hillsCourseSourceId),
+      [publicCourseId]: buildSeedCourseFromCatalog(publicCourseId, publicFitnessGroupId, runnerUid, publicCourseSourceId),
     },
     rounds: {
-      'round-demo-1': {
+      'round-demo-1': buildSeedRound({
         id: 'round-demo-1',
         groupId,
-        courseId: starterCourseId,
+        course: buildSeedCourseFromCatalog(starterCourseId, groupId, demoUid, starterCourseSourceId),
         userId: demoUid,
         playerName: 'Demo Captain',
-        score: 86,
         gameMode: 'stroke',
         playedOn: todayKey,
+        totalScore: 86,
         notes: 'Steady back nine.',
-        photoUrls: [],
         createdAt: new Date(Date.now() - 1000 * 60 * 50).toISOString(),
-      },
-      'round-demo-2': {
+      }),
+      'round-demo-2': buildSeedRound({
         id: 'round-demo-2',
         groupId,
-        courseId: starterCourseId,
+        course: buildSeedCourseFromCatalog(starterCourseId, groupId, demoUid, starterCourseSourceId),
         userId: friendUid,
         playerName: 'Jamie',
-        score: 83,
         gameMode: 'stroke',
         playedOn: todayKey,
+        totalScore: 83,
         notes: 'Best putting day this month.',
-        photoUrls: [],
         createdAt: new Date(Date.now() - 1000 * 60 * 80).toISOString(),
-      },
-      'round-demo-3': {
+      }),
+      'round-demo-3': buildSeedRound({
         id: 'round-demo-3',
         groupId,
-        courseId: hillsCourseId,
+        course: buildSeedCourseFromCatalog(hillsCourseId, groupId, friendUid, hillsCourseSourceId),
         userId: demoUid,
         playerName: 'Demo Captain',
-        score: 78,
         gameMode: 'scramble',
         playedOn: previousWeekKeys[previousWeekKeys.length - 1],
-        notes: 'Fun scramble finish.',
-        photoUrls: [],
+        totalScore: 68,
+        notes: 'Jamie and Demo Captain took the back-nine birdie train all the way in.',
         createdAt: new Date(Date.now() - 1000 * 60 * 60 * 24 * 3).toISOString(),
-      },
-      'round-public-1': {
+        visibility: 'friends',
+        teamName: 'Match Play Mischief',
+        teamMemberIds: [demoUid, friendUid],
+      }),
+      'round-public-1': buildSeedRound({
         id: 'round-public-1',
         groupId: publicFitnessGroupId,
-        courseId: publicCourseId,
+        course: buildSeedCourseFromCatalog(publicCourseId, publicFitnessGroupId, runnerUid, publicCourseSourceId),
         userId: runnerUid,
         playerName: 'Avery',
-        score: 81,
         gameMode: 'stroke',
         playedOn: todayKey,
-        notes: 'Windy front nine.',
-        photoUrls: [],
+        totalScore: 81,
+        notes: 'Windy front nine, clean finish.',
         createdAt: new Date(Date.now() - 1000 * 60 * 30).toISOString(),
-      },
+        visibility: 'public',
+      }),
     },
     groups: {
       [groupId]: {
@@ -2255,17 +2663,23 @@ function seedDemoStore(): DemoStore {
     },
     activities: [
       {
-        id: 'activity-demo-check-in',
-        type: 'check_in',
+        id: 'activity-demo-round',
+        type: 'round_logged',
         actorId: friendUid,
         actorName: 'Jamie',
         groupId,
         groupName: 'Starter Foursome',
-        habitId: friendWaterParticipationId,
-        habitTitle: 'Short game reps',
+        habitId: null,
+        habitTitle: null,
+        courseId: starterCourseId,
+        courseName: 'Riverview Municipal',
+        roundId: 'round-demo-2',
+        gameMode: 'stroke',
+        score: 83,
+        scoreToPar: 11,
         targetUserId: null,
         targetUserName: null,
-        summary: 'Jamie logged practice work in Starter Foursome',
+        summary: 'Jamie shot 83 (+11) at Riverview Municipal.',
         createdAt: new Date(Date.now() - 1000 * 60 * 35).toISOString(),
         shoutouts: {
           ...getEmptyShoutouts(),
@@ -2273,17 +2687,23 @@ function seedDemoStore(): DemoStore {
         },
       },
       {
-        id: 'activity-demo-rank',
-        type: 'rank_movement',
+        id: 'activity-demo-best',
+        type: 'personal_best',
         actorId: demoUid,
         actorName: 'Demo Captain',
         groupId,
         groupName: 'Starter Foursome',
-        habitId: demoWalkParticipationId,
-        habitTitle: 'Practice round',
+        habitId: null,
+        habitTitle: null,
+        courseId: starterCourseId,
+        courseName: 'Riverview Municipal',
+        roundId: 'round-demo-1',
+        gameMode: 'stroke',
+        score: 86,
+        scoreToPar: 14,
         targetUserId: null,
         targetUserName: null,
-        summary: 'Demo Captain moved up 1 spot in Starter Foursome',
+        summary: 'Demo Captain set a new personal best: 86 (+14) at Riverview Municipal.',
         createdAt: new Date(Date.now() - 1000 * 60 * 80).toISOString(),
         shoutouts: getEmptyShoutouts(),
       },
@@ -2296,6 +2716,12 @@ function seedDemoStore(): DemoStore {
         groupName: 'Morning Tee Time',
         habitId: null,
         habitTitle: null,
+        courseId: null,
+        courseName: null,
+        roundId: null,
+        gameMode: null,
+        score: null,
+        scoreToPar: null,
         targetUserId: null,
         targetUserName: null,
         summary: 'Avery joined Morning Tee Time',
