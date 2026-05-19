@@ -50,9 +50,22 @@ Minimum Firebase setup:
 2. Add a web app
 3. Enable Authentication
 4. Enable Firestore
-5. Copy the public config values into `.env`
+5. Deploy the Firestore rules from this repository
+6. Copy the public config values into `.env`
+
+Deploy rules with the Firebase CLI:
+
+```powershell
+firebase deploy --only firestore:rules
+```
+
+This repository includes:
+
+- `firestore.rules`
+- `firebase.json`
 
 If Firebase values are missing, the app falls back to demo mode.
+If Firebase Auth succeeds but Firestore rules have not been deployed, Rivl will fail during profile bootstrap with `Missing or insufficient permissions`.
 
 ## Run Locally
 
@@ -112,6 +125,18 @@ This repository is already structured to support that work later without forcing
 
 - If `.env` is incomplete, the app may fall back to demo mode
 - confirm the `EXPO_PUBLIC_FIREBASE_*` variables are present
+
+### Firestore permissions
+
+- if login succeeds but the app shows `Missing or insufficient permissions`, Firestore rules are blocking the bootstrap reads/writes
+- confirm `firestore.rules` has been deployed to the correct Firebase project
+- Rivl needs working access to:
+  - `profiles`
+  - `groups`
+  - `challenges`
+  - `habits`
+  - `activities`
+  - `groups/{groupId}/messages`
 
 ### Android package name
 

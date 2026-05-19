@@ -6,6 +6,23 @@ The current data model is designed around group-first league competition with sh
 
 The app also maintains demo-mode compatibility through an AsyncStorage-backed structure that mirrors the same concepts.
 
+## Rules Alignment
+
+The current client expects Firestore rules to allow authenticated access patterns for:
+
+- profile bootstrap on sign-in
+- loading a signed-in user profile and league memberships
+- reading discoverable leagues
+- reading shared league challenges for joined leagues
+- reading and updating participation records for the signed-in user
+- reading league participation records for leaderboard and league detail views
+- loading and writing group chat messages
+- loading and updating activity feed items and shoutouts
+
+The repository-level rules source is:
+
+- `firestore.rules`
+
 ## Profiles
 
 Collection:

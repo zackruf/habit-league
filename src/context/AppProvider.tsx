@@ -47,6 +47,9 @@ import {
   UserSearchResult,
 } from '@/types/models';
 
+const FIREBASE_ACCESS_ERROR_MESSAGE =
+  'Firebase Auth succeeded, but Rivl could not read or create your Firestore profile. Update Firestore rules for profiles, groups, habits, challenges, and activities, then try again.';
+
 type ActionResult = {
   ok: boolean;
   message: string;
@@ -109,6 +112,39 @@ export function AppProvider({ children, fallback }: PropsWithChildren<{ fallback
     setGroups(bundle?.groups ?? []);
   }, []);
 
+  const getBootstrapErrorMessage = useCallback((error: unknown) => {
+    if (error instanceof Error && error.message.includes('Missing or insufficient permissions')) {
+      return FIREBASE_ACCESS_ERROR_MESSAGE;
+    }
+
+    if (error instanceof Error && error.message) {
+      return error.message;
+    }
+
+    return 'Something went wrong while loading your account. Please try again.';
+  }, []);
+
+  const completeAuthenticatedSession = useCallback(
+    async (user: SessionUser, name = '') => {
+      try {
+        await initializeUserProfile(user.uid, user.email, name);
+        const bundle = await loadUserBundle(user.uid);
+        setSession(user);
+        hydrateBundle(bundle);
+        return { ok: true as const };
+      } catch (error) {
+        await signOutRequest();
+        setSession(null);
+        hydrateBundle(null);
+        return {
+          ok: false as const,
+          message: getBootstrapErrorMessage(error),
+        };
+      }
+    },
+    [getBootstrapErrorMessage, hydrateBundle]
+  );
+
   const refreshUserData = useCallback(
     async (user: SessionUser) => {
       setRefreshing(true);
@@ -124,17 +160,14 @@ export function AppProvider({ children, fallback }: PropsWithChildren<{ fallback
       await AsyncStorage.setItem('habitleague:last-opened', new Date().toISOString());
       const restored = await restoreSession();
       if (restored) {
-        await initializeUserProfile(restored.uid, restored.email);
-        const bundle = await loadUserBundle(restored.uid);
-        setSession(restored);
-        hydrateBundle(bundle);
+        await completeAuthenticatedSession(restored);
       }
 
       setAuthReady(true);
     }
 
     bootstrap();
-  }, [hydrateBundle]);
+  }, [completeAuthenticatedSession]);
 
   const signIn = useCallback(
     async (email: string, password: string) => {
@@ -146,14 +179,14 @@ export function AppProvider({ children, fallback }: PropsWithChildren<{ fallback
         return { ok: false, message: result.message };
       }
 
-      await initializeUserProfile(result.user.uid, result.user.email);
-      const bundle = await loadUserBundle(result.user.uid);
-      setSession(result.user);
-      hydrateBundle(bundle);
+      const bootstrapResult = await completeAuthenticatedSession(result.user);
       setBusy(false);
+      if (!bootstrapResult.ok) {
+        return bootstrapResult;
+      }
       return { ok: true, message: 'Signed in.' };
     },
-    [hydrateBundle]
+    [completeAuthenticatedSession]
   );
 
   const signUp = useCallback(
@@ -166,14 +199,14 @@ export function AppProvider({ children, fallback }: PropsWithChildren<{ fallback
         return { ok: false, message: result.message };
       }
 
-      await initializeUserProfile(result.user.uid, result.user.email, name.trim());
-      const bundle = await loadUserBundle(result.user.uid);
-      setSession(result.user);
-      hydrateBundle(bundle);
+      const bootstrapResult = await completeAuthenticatedSession(result.user, name.trim());
       setBusy(false);
+      if (!bootstrapResult.ok) {
+        return bootstrapResult;
+      }
       return { ok: true, message: 'Account created.' };
     },
-    [hydrateBundle]
+    [completeAuthenticatedSession]
   );
 
   const signOut = useCallback(async () => {

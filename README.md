@@ -167,6 +167,7 @@ npx.cmd expo export --platform android --clear
 - If Firebase configuration is present, the app uses Firebase Auth and Firestore.
 - If Firebase configuration is missing, the app falls back to demo mode backed by AsyncStorage.
 - Demo mode includes seeded leagues, users, shared challenges, activity, and leaderboard data to keep the product experience usable during local development.
+- If Firebase Auth succeeds but Firestore rules are missing or too strict, sign-in can fail during profile bootstrap with `Missing or insufficient permissions`.
 
 ## Purchase Foundation
 

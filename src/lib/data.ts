@@ -214,15 +214,22 @@ export async function searchUsers(uid: string, searchTerm: string): Promise<User
   const normalizedTerm = searchTerm.trim().toLowerCase();
 
   if (usingFirebaseBackend && firestore) {
-    const [profileSnapshot, profilesSnapshot, groupsSnapshot] = await Promise.all([
-      getDoc(doc(firestore, 'profiles', uid)),
-      getDocs(query(collection(firestore, 'profiles'), limit(25))),
-      getDocs(query(collection(firestore, 'groups'), where('discoverable', '==', true), limit(25))),
-    ]);
-    const currentProfile = normalizeProfile(profileSnapshot.data() as Profile);
-    const groups = groupsSnapshot.docs.map((entry) => normalizeGroup(entry.data() as Group)).filter((group): group is Group => Boolean(group));
-    const profiles = profilesSnapshot.docs.map((entry) => normalizeProfile(entry.data() as Profile));
-    return buildUserSearchResults(uid, currentProfile, profiles, groups, normalizedTerm);
+    try {
+      const [profileSnapshot, profilesSnapshot, groupsSnapshot] = await Promise.all([
+        getDoc(doc(firestore, 'profiles', uid)),
+        getDocs(query(collection(firestore, 'profiles'), limit(25))),
+        getDocs(query(collection(firestore, 'groups'), where('discoverable', '==', true), limit(25))),
+      ]);
+      const currentProfile = normalizeProfile(profileSnapshot.data() as Profile);
+      const groups = groupsSnapshot.docs.map((entry) => normalizeGroup(entry.data() as Group)).filter((group): group is Group => Boolean(group));
+      const profiles = profilesSnapshot.docs.map((entry) => normalizeProfile(entry.data() as Profile));
+      return buildUserSearchResults(uid, currentProfile, profiles, groups, normalizedTerm);
+    } catch (error) {
+      if (isFirestorePermissionError(error)) {
+        return [];
+      }
+      throw error;
+    }
   }
 
   const store = await readDemoStore();
@@ -294,16 +301,23 @@ export async function sendFriendRequest(uid: string, friendId: string) {
 
 export async function loadIncomingFriendRequests(uid: string): Promise<FriendRequestProfile[]> {
   if (usingFirebaseBackend && firestore) {
-    const db = firestore;
-    const profileSnapshot = await getDoc(doc(db, 'profiles', uid));
-    const profile = normalizeProfile(profileSnapshot.data() as Profile);
-    const requesters = await Promise.all(
-      profile.incomingFriendRequestIds.map(async (requesterId) => {
-        const snapshot = await getDoc(doc(db, 'profiles', requesterId));
-        return normalizeProfile(snapshot.data() as Profile);
-      })
-    );
-    return requesters.filter(Boolean).map(buildFriendRequestProfile);
+    try {
+      const db = firestore;
+      const profileSnapshot = await getDoc(doc(db, 'profiles', uid));
+      const profile = normalizeProfile(profileSnapshot.data() as Profile);
+      const requesters = await Promise.all(
+        profile.incomingFriendRequestIds.map(async (requesterId) => {
+          const snapshot = await getDoc(doc(db, 'profiles', requesterId));
+          return normalizeProfile(snapshot.data() as Profile);
+        })
+      );
+      return requesters.filter(Boolean).map(buildFriendRequestProfile);
+    } catch (error) {
+      if (isFirestorePermissionError(error)) {
+        return [];
+      }
+      throw error;
+    }
   }
 
   const store = await readDemoStore();
@@ -670,13 +684,20 @@ export async function updateGroup(uid: string, groupId: string, input: GroupSett
 
 export async function listPublicGroups(uid?: string): Promise<Group[]> {
   if (usingFirebaseBackend && firestore) {
-    const snapshot = await getDocs(query(collection(firestore, 'groups'), where('discoverable', '==', true), limit(8)));
-    return snapshot.docs
-      .map((entry) => normalizeGroup(entry.data() as Group))
-      .filter((group): group is Group => Boolean(group))
-      .filter((group) => !uid || !group.memberIds.includes(uid))
-      .filter((group) => !group.memberLimit || group.memberIds.length < group.memberLimit)
-      .sort((left, right) => right.memberIds.length - left.memberIds.length);
+    try {
+      const snapshot = await getDocs(query(collection(firestore, 'groups'), where('discoverable', '==', true), limit(8)));
+      return snapshot.docs
+        .map((entry) => normalizeGroup(entry.data() as Group))
+        .filter((group): group is Group => Boolean(group))
+        .filter((group) => !uid || !group.memberIds.includes(uid))
+        .filter((group) => !group.memberLimit || group.memberIds.length < group.memberLimit)
+        .sort((left, right) => right.memberIds.length - left.memberIds.length);
+    } catch (error) {
+      if (isFirestorePermissionError(error)) {
+        return [];
+      }
+      throw error;
+    }
   }
 
   const store = await readDemoStore();
@@ -691,10 +712,17 @@ export async function listPublicGroups(uid?: string): Promise<Group[]> {
 
 export async function loadGroupMessages(groupId: string): Promise<GroupMessage[]> {
   if (usingFirebaseBackend && firestore) {
-    const snapshot = await getDocs(query(collection(firestore, 'groups', groupId, 'messages'), orderBy('createdAt', 'asc')));
-    return snapshot.docs
-      .map((entry) => normalizeMessage({ id: entry.id, ...(entry.data() as Omit<GroupMessage, 'id'>) }))
-      .filter((message): message is GroupMessage => Boolean(message));
+    try {
+      const snapshot = await getDocs(query(collection(firestore, 'groups', groupId, 'messages'), orderBy('createdAt', 'asc')));
+      return snapshot.docs
+        .map((entry) => normalizeMessage({ id: entry.id, ...(entry.data() as Omit<GroupMessage, 'id'>) }))
+        .filter((message): message is GroupMessage => Boolean(message));
+    } catch (error) {
+      if (isFirestorePermissionError(error)) {
+        return [];
+      }
+      throw error;
+    }
   }
 
   const store = await readDemoStore();
@@ -719,14 +747,21 @@ export async function sendGroupMessage(groupId: string, sender: Profile, text: s
 
 export async function loadActivityFeed(uid: string, groupId?: string): Promise<ActivityItem[]> {
   if (usingFirebaseBackend && firestore) {
-    const profileSnapshot = await getDoc(doc(firestore, 'profiles', uid));
-    const profile = normalizeProfile(profileSnapshot.data() as Profile);
-    const snapshot = await getDocs(query(collection(firestore, 'activities'), orderBy('createdAt', 'desc'), limit(50)));
-    return snapshot.docs
-      .map((entry) => normalizeActivity(entry.data() as ActivityItem))
-      .filter((activity): activity is ActivityItem => Boolean(activity))
-      .filter((activity) => activityMatchesFeed(activity, uid, profile, groupId))
-      .slice(0, groupId ? 8 : 12);
+    try {
+      const profileSnapshot = await getDoc(doc(firestore, 'profiles', uid));
+      const profile = normalizeProfile(profileSnapshot.data() as Profile);
+      const snapshot = await getDocs(query(collection(firestore, 'activities'), orderBy('createdAt', 'desc'), limit(50)));
+      return snapshot.docs
+        .map((entry) => normalizeActivity(entry.data() as ActivityItem))
+        .filter((activity): activity is ActivityItem => Boolean(activity))
+        .filter((activity) => activityMatchesFeed(activity, uid, profile, groupId))
+        .slice(0, groupId ? 8 : 12);
+    } catch (error) {
+      if (isFirestorePermissionError(error)) {
+        return [];
+      }
+      throw error;
+    }
   }
 
   const store = await readDemoStore();
@@ -938,41 +973,48 @@ export async function getGroupDetails(groupId: string): Promise<GroupDetails | n
   const db = firestore;
 
   if (usingFirebaseBackend && db) {
-    const groupSnapshot = await getDoc(doc(db, 'groups', groupId));
-    if (!groupSnapshot.exists()) {
-      return null;
-    }
+    try {
+      const groupSnapshot = await getDoc(doc(db, 'groups', groupId));
+      if (!groupSnapshot.exists()) {
+        return null;
+      }
 
-    const group = normalizeGroup(groupSnapshot.data() as Group);
-    if (!group) {
-      return null;
-    }
-    const members = await Promise.all(
-      group.memberIds.map(async (uid) => {
-        const snapshot = await getDoc(doc(db, 'profiles', uid));
-        return normalizeProfile(snapshot.data() as Profile);
-      })
-    );
-    const [challengeSnapshot, participationSnapshot] = await Promise.all([
-      getDocs(query(collection(db, 'challenges'), where('groupId', '==', group.id))),
-      getDocs(query(collection(db, 'habits'), where('groupId', '==', group.id))),
-    ]);
-    const challenges = challengeSnapshot.docs
-      .map((entry) => normalizeChallenge(entry.data() as LeagueChallenge))
-      .filter((challenge): challenge is LeagueChallenge => Boolean(challenge));
-    const participations = participationSnapshot.docs
-      .map((entry) => normalizeHabit(entry.data() as Habit, group.id))
-      .filter((habit): habit is Habit => Boolean(habit));
-    const mergedChallenges = mergeLegacyChallenges(challenges, participations, group.id);
+      const group = normalizeGroup(groupSnapshot.data() as Group);
+      if (!group) {
+        return null;
+      }
+      const members = await Promise.all(
+        group.memberIds.map(async (uid) => {
+          const snapshot = await getDoc(doc(db, 'profiles', uid));
+          return normalizeProfile(snapshot.data() as Profile);
+        })
+      );
+      const [challengeSnapshot, participationSnapshot] = await Promise.all([
+        getDocs(query(collection(db, 'challenges'), where('groupId', '==', group.id))),
+        getDocs(query(collection(db, 'habits'), where('groupId', '==', group.id))),
+      ]);
+      const challenges = challengeSnapshot.docs
+        .map((entry) => normalizeChallenge(entry.data() as LeagueChallenge))
+        .filter((challenge): challenge is LeagueChallenge => Boolean(challenge));
+      const participations = participationSnapshot.docs
+        .map((entry) => normalizeHabit(entry.data() as Habit, group.id))
+        .filter((habit): habit is Habit => Boolean(habit));
+      const mergedChallenges = mergeLegacyChallenges(challenges, participations, group.id);
 
-    return {
-      group,
-      members,
-      challenges: mergedChallenges,
-      challengeParticipations: participations,
-      leaderboard: buildLeaderboard(members, participations),
-      previousWeekLeaderboard: buildLeaderboard(members, participations, getPreviousWeekKeys()),
-    };
+      return {
+        group,
+        members,
+        challenges: mergedChallenges,
+        challengeParticipations: participations,
+        leaderboard: buildLeaderboard(members, participations),
+        previousWeekLeaderboard: buildLeaderboard(members, participations, getPreviousWeekKeys()),
+      };
+    } catch (error) {
+      if (isFirestorePermissionError(error)) {
+        return null;
+      }
+      throw error;
+    }
   }
 
   const store = await readDemoStore();
@@ -2038,6 +2080,10 @@ function normalizeDemoEmailAlias(email: string) {
     return normalized.replace('@rivl.app', '@habitleague.app');
   }
   return normalized;
+}
+
+function isFirestorePermissionError(error: unknown) {
+  return error instanceof Error && error.message.includes('Missing or insufficient permissions');
 }
 
 function createUsername(name: string, email: string) {
