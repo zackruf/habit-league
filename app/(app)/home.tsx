@@ -12,7 +12,7 @@ import { SurfaceCard } from '@/components/SurfaceCard';
 import { useApp } from '@/context/AppProvider';
 import { useThemePreferences } from '@/context/ThemeProvider';
 import { formatFriendlyDate, getCurrentWeekLabel } from '@/lib/date';
-import { buildCourseLeaderboard, formatScoreToPar, getPersonalBest } from '@/lib/golf';
+import { buildCourseLeaderboard, formatScoreToPar, getPersonalBest, getRoundDisplayName, getRoundFormatLabel } from '@/lib/golf';
 import { createCommonStyles } from '@/styles/commonStyles';
 import { GroupDetails } from '@/types/models';
 
@@ -45,13 +45,13 @@ export default function HomeScreen() {
   }
 
   const recentRounds = rounds
-    .filter((round) => profile.groupIds.includes(round.groupId))
-    .sort((left, right) => right.playedOn.localeCompare(left.playedOn) || right.createdAt.localeCompare(left.createdAt))
+    .filter((round) => round.playerIds.includes(profile.uid) || round.relatedGroupIds.some((groupId) => profile.groupIds.includes(groupId)))
+    .sort((left, right) => right.dateKey.localeCompare(left.dateKey) || right.createdAt.localeCompare(left.createdAt))
     .slice(0, 4);
 
   const featuredCourses = courses
     .map((course) => {
-      const leaderboard = buildCourseLeaderboard(course, rounds, [], { gameMode: 'stroke', scope: 'group' });
+      const leaderboard = buildCourseLeaderboard(course, rounds, [], { format: 'scramble2', scope: 'public', currentUserId: profile.uid, friendIds: profile.friendIds });
       return {
         course,
         leaderboard,
@@ -86,12 +86,12 @@ export default function HomeScreen() {
 
       <SurfaceCard style={commonStyles.currentUserCard}>
         <Text style={commonStyles.noticeEyebrow}>This week</Text>
-        <Text style={commonStyles.noticeMessage}>Show up. Post a number. Move up the course leaderboard.</Text>
+        <Text style={commonStyles.noticeMessage}>Pick a course. Post a scramble score. Move up the leaderboard.</Text>
         <Text style={commonStyles.smallMuted}>{starterLine}</Text>
       </SurfaceCard>
 
       <View style={commonStyles.actionRowTight}>
-        <PrimaryButton label="Log round" onPress={() => router.push('/(app)/rounds/new')} />
+        <PrimaryButton label="Log scramble" onPress={() => router.push('/(app)/rounds/new')} />
         <PrimaryButton label="Search courses" onPress={() => router.push('/(app)/courses/new')} variant="secondary" />
       </View>
       <View style={commonStyles.actionRowTight}>
@@ -108,20 +108,20 @@ export default function HomeScreen() {
                 <View style={commonStyles.cardCopyBlock}>
                   <Text style={commonStyles.cardTitle}>{round.courseName}</Text>
                   <Text style={commonStyles.cardCopy}>
-                    {round.playerName} / {round.gameMode === 'stroke' ? 'Stroke play' : 'Scramble'} / {round.teeBoxName}
+                    {getRoundDisplayName(round)} / {getRoundFormatLabel(round.format)} / {round.teeBoxName}
                   </Text>
                 </View>
                 <Text style={commonStyles.statValue}>{round.totalScore}</Text>
               </View>
               <Text style={commonStyles.smallMuted}>
-                {formatFriendlyDate(new Date(round.playedOn))} / {formatScoreToPar(round.scoreToPar)} / {round.visibility === 'public' ? 'Public' : 'Group'}
+                {formatFriendlyDate(new Date(round.dateKey))} / {formatScoreToPar(round.scoreToPar)} / {round.visibility === 'public' ? 'Public' : 'Friends'}
               </Text>
             </SurfaceCard>
           ))
         ) : (
           <SurfaceCard>
             <Text style={commonStyles.cardTitle}>No golf rounds yet</Text>
-            <Text style={commonStyles.cardCopy}>Log the first round and Rivl will start turning group activity into real course rankings.</Text>
+            <Text style={commonStyles.cardCopy}>Log the first scramble round and Rivl will start ranking the course by format.</Text>
           </SurfaceCard>
         )}
       </View>
@@ -149,7 +149,7 @@ export default function HomeScreen() {
                   </View>
                 </View>
                 <Text style={commonStyles.cardCopy}>
-                  {leader ? `Current group leader: ${leader.name} / ${leader.totalScore} (${leader.indicatorLabel})` : 'Be the first to post a score here.'}
+                  {leader ? `2-Man Scramble leader: ${leader.name} / ${leader.totalScore} (${leader.indicatorLabel})` : 'Be the first to post a 2-Man Scramble score here.'}
                 </Text>
               </PressableCard>
             );
@@ -167,7 +167,7 @@ export default function HomeScreen() {
         {groupDetails.length ? (
           groupDetails.map((details) => {
             const featuredCourse = details.courses[0];
-            const courseLeader = featuredCourse ? buildCourseLeaderboard(featuredCourse, details.rounds, details.members, { gameMode: 'stroke', scope: 'group' })[0] : null;
+            const courseLeader = featuredCourse ? buildCourseLeaderboard(featuredCourse, details.rounds, details.members, { format: 'scramble2', scope: 'group', groupId: details.group.id })[0] : null;
             return (
               <PressableCard
                 key={details.group.id}

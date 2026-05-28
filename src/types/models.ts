@@ -28,7 +28,9 @@ export type ShopInventory = {
   premiumPlaceholderOwned: boolean;
 };
 
-export type GameMode = 'stroke' | 'scramble';
+export type RoundFormat = 'individual' | 'scramble2' | 'scramble3' | 'scramble4';
+export type LegacyGameMode = 'stroke' | 'scramble';
+export type GameMode = RoundFormat;
 export type RoundVisibility = 'friends' | 'public';
 export type CourseProviderId = 'mock' | 'manual' | 'golfapi' | 'golfcourseapi' | 'igolf' | 'opengolfapi';
 
@@ -75,15 +77,20 @@ export type Course = {
 
 export type Round = {
   id: string;
-  groupId: string;
+  groupId: string | null;
+  relatedGroupIds: string[];
   courseId: string;
   courseSourceId: string;
   courseSourceProvider: CourseProviderId;
   courseName: string;
+  createdBy: string;
   userId: string;
+  playerIds: string[];
+  playerNames: string[];
   playerName: string;
   totalScore: number;
   scoreToPar: number | null;
+  format: RoundFormat;
   gameMode: GameMode;
   teeBoxId: string | null;
   teeBoxName: string;
@@ -91,10 +98,13 @@ export type Round = {
   holeScores: RoundHoleScore[];
   teamName: string;
   teamMemberIds: string[];
+  dateKey: string;
   playedOn: string;
   notes: string;
   photoUrls: string[];
   visibility: RoundVisibility;
+  locationVerified: boolean;
+  distanceFromCourseMeters: number | null;
   createdAt: string;
 };
 
@@ -278,10 +288,13 @@ export type CourseLeaderboardEntry = {
   scoreToPar: number | null;
   playedOn: string;
   roundsPlayed: number;
+  format: RoundFormat;
   gameMode: GameMode;
   visibility: RoundVisibility;
-  groupId: string;
+  groupId: string | null;
   teamName: string | null;
+  locationVerified: boolean;
+  distanceFromCourseMeters: number | null;
   indicatorLabel: string;
 };
 

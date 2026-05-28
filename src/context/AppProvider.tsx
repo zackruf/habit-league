@@ -43,13 +43,13 @@ import {
   Course,
   CourseHole,
   FriendRequestProfile,
-  GameMode,
   GroupDetails,
   GroupMessage,
   GroupSettingsInput,
   Habit,
   Profile,
   Round,
+  RoundFormat,
   RoundHoleScore,
   RoundVisibility,
   SessionUser,
@@ -109,18 +109,22 @@ type AppContextValue = {
     holes?: CourseHole[];
   }) => Promise<ActionResult>;
   logRound: (input: {
-    groupId: string;
+    groupId?: string | null;
+    relatedGroupIds?: string[];
     courseId: string;
-    gameMode: GameMode;
+    format: RoundFormat;
     playedOn: string;
     teeBoxId?: string | null;
     holesPlayed: 9 | 18;
     totalScore: number;
     holeScores?: RoundHoleScore[];
+    playerIds: string[];
+    playerNames: string[];
     teamName?: string;
-    teamMemberIds?: string[];
     visibility: RoundVisibility;
     notes?: string;
+    locationVerified?: boolean;
+    distanceFromCourseMeters?: number | null;
   }) => Promise<ActionResult>;
   updateGroup: (groupId: string, input: GroupSettingsInput) => Promise<ActionResult>;
   joinGroup: (joinCode: string) => Promise<GroupActionResult>;
@@ -464,30 +468,34 @@ export function AppProvider({ children, fallback }: PropsWithChildren<{ fallback
 
   const logRound = useCallback(
     async (input: {
-      groupId: string;
+      groupId?: string | null;
+      relatedGroupIds?: string[];
       courseId: string;
-      gameMode: GameMode;
+      format: RoundFormat;
       playedOn: string;
       teeBoxId?: string | null;
       holesPlayed: 9 | 18;
       totalScore: number;
       holeScores?: RoundHoleScore[];
+      playerIds: string[];
+      playerNames: string[];
       teamName?: string;
-      teamMemberIds?: string[];
       visibility: RoundVisibility;
       notes?: string;
+      locationVerified?: boolean;
+      distanceFromCourseMeters?: number | null;
     }) => {
       if (!session) {
         return { ok: false, message: 'No active session.' };
       }
-      if (!input.groupId.trim() || !input.courseId.trim()) {
-        return { ok: false, message: 'Choose a group and course first.' };
+      if (!input.courseId.trim()) {
+        return { ok: false, message: 'Choose a course first.' };
       }
       if (!Number.isFinite(input.totalScore) || input.totalScore <= 0) {
         return { ok: false, message: 'Enter a valid round score.' };
       }
-      if (input.gameMode === 'scramble' && !input.teamName?.trim()) {
-        return { ok: false, message: 'Add a scramble team name.' };
+      if (!input.playerNames.length) {
+        return { ok: false, message: 'Add the players for this round.' };
       }
 
       setBusy(true);

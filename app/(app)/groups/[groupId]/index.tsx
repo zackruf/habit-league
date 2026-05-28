@@ -13,7 +13,7 @@ import { SectionHeader } from '@/components/SectionHeader';
 import { SurfaceCard } from '@/components/SurfaceCard';
 import { useApp } from '@/context/AppProvider';
 import { useThemePreferences } from '@/context/ThemeProvider';
-import { buildCourseLeaderboard, formatScoreToPar, getPersonalBest } from '@/lib/golf';
+import { buildCourseLeaderboard, formatScoreToPar, getPersonalBest, getRoundDisplayName, getRoundFormatLabel } from '@/lib/golf';
 import { createCommonStyles } from '@/styles/commonStyles';
 import { ActivityItem, ActivityShoutoutType, GroupDetails } from '@/types/models';
 import { spacing } from '@/constants/theme';
@@ -73,7 +73,7 @@ export default function GroupScreen() {
         <PageHeader
           eyebrow="Golf group"
           title={details.group.name}
-          subtitle={details.group.description || 'A golf group built around real rounds, course-specific scoreboards, and chat that keeps the pressure on.'}
+          subtitle={details.group.description || 'A social space for chat, members, activity, and group-filtered course leaderboards.'}
         />
 
         <View style={commonStyles.segmentedRow}>
@@ -102,17 +102,17 @@ export default function GroupScreen() {
 
           <View style={commonStyles.actionRowTight}>
             <PrimaryButton label="Search courses" onPress={() => router.push('/(app)/courses/new')} variant="secondary" />
-            <PrimaryButton label="Log round" onPress={() => router.push(`/(app)/rounds/new?groupId=${details.group.id}`)} />
+            <PrimaryButton label="Log scramble" onPress={() => router.push(`/(app)/rounds/new?groupId=${details.group.id}`)} />
           </View>
 
           <SectionHeader title="Course scoreboards" />
           <View style={commonStyles.compactSection}>
             {details.courses.length ? (
               details.courses.map((course) => {
-                const strokeLeaderboard = buildCourseLeaderboard(course, details.rounds, details.members, { gameMode: 'stroke', scope: 'group' });
-                const scrambleLeaderboard = buildCourseLeaderboard(course, details.rounds, details.members, { gameMode: 'scramble', scope: 'group' });
+                const individualLeaderboard = buildCourseLeaderboard(course, details.rounds, details.members, { format: 'individual', scope: 'group', groupId: details.group.id });
+                const scrambleLeaderboard = buildCourseLeaderboard(course, details.rounds, details.members, { format: 'scramble2', scope: 'group', groupId: details.group.id });
                 const personalBest = session ? getPersonalBest(course, session.uid, details.rounds) : null;
-                const strokeLeader = strokeLeaderboard[0];
+                const individualLeader = individualLeaderboard[0];
                 const scrambleLeader = scrambleLeaderboard[0];
 
                 return (
@@ -124,10 +124,10 @@ export default function GroupScreen() {
                           {course.location} / Par {course.par} / {course.holesCount} holes
                         </Text>
                         <Text style={commonStyles.smallMuted}>
-                          {strokeLeader ? `Stroke leader: ${strokeLeader.name} / ${strokeLeader.totalScore} (${strokeLeader.indicatorLabel})` : 'No stroke scores yet.'}
+                          {scrambleLeader ? `2-Man Scramble leader: ${scrambleLeader.name} / ${scrambleLeader.totalScore} (${scrambleLeader.indicatorLabel})` : 'No 2-Man Scramble scores yet.'}
                         </Text>
                         <Text style={commonStyles.smallMuted}>
-                          {scrambleLeader ? `Scramble leader: ${scrambleLeader.name} / ${scrambleLeader.totalScore} (${scrambleLeader.indicatorLabel})` : 'No scramble teams logged yet.'}
+                          {individualLeader ? `Individual leader: ${individualLeader.name} / ${individualLeader.totalScore} (${individualLeader.indicatorLabel})` : 'No individual scores yet.'}
                         </Text>
                         <Text style={commonStyles.smallMuted}>
                           {personalBest ? `Your best: ${personalBest.totalScore} (${formatScoreToPar(personalBest.scoreToPar)})` : 'Your best will appear after your first round.'}
@@ -141,7 +141,7 @@ export default function GroupScreen() {
             ) : (
               <SurfaceCard>
                 <Text style={commonStyles.cardTitle}>No courses saved yet</Text>
-                <Text style={commonStyles.cardCopy}>Save the first course for this group so rounds, leaderboards, and personal bests all live in one place.</Text>
+                <Text style={commonStyles.cardCopy}>Save the first course so this group can filter leaderboards around familiar tracks.</Text>
               </SurfaceCard>
             )}
           </View>
@@ -165,13 +165,13 @@ export default function GroupScreen() {
                 .map((round) => (
                   <SurfaceCard key={round.id}>
                     <View style={commonStyles.rowBetween}>
-                      <Text style={commonStyles.cardTitle}>{round.playerName}</Text>
+                      <Text style={commonStyles.cardTitle}>{getRoundDisplayName(round)}</Text>
                       <Text style={commonStyles.statValue}>{round.totalScore}</Text>
                     </View>
                     <Text style={commonStyles.cardCopy}>
-                      {round.courseName} / {round.gameMode === 'stroke' ? 'Stroke' : 'Scramble'} / {formatScoreToPar(round.scoreToPar)}
+                      {round.courseName} / {getRoundFormatLabel(round.format)} / {formatScoreToPar(round.scoreToPar)}
                     </Text>
-                    <Text style={commonStyles.smallMuted}>{round.playedOn}</Text>
+                    <Text style={commonStyles.smallMuted}>{round.dateKey}</Text>
                   </SurfaceCard>
                 ))
             ) : (
@@ -194,9 +194,7 @@ export default function GroupScreen() {
 
           <SurfaceCard>
             <Text style={commonStyles.cardTitle}>Legacy tools stay tucked away</Text>
-            <Text style={commonStyles.cardCopy}>
-              The older habit and streak systems are still preserved in the codebase for compatibility, but Rivl now centers golf groups, saved courses, logged rounds, and scoreboards.
-            </Text>
+            <Text style={commonStyles.cardCopy}>Groups are now for chat, member identity, activity, and leaderboard filters. Scoring starts with the course and format.</Text>
           </SurfaceCard>
         </ScrollView>
       ) : (

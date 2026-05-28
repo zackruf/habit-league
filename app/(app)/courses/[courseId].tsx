@@ -10,28 +10,40 @@ import { SectionHeader } from '@/components/SectionHeader';
 import { SurfaceCard } from '@/components/SurfaceCard';
 import { useApp } from '@/context/AppProvider';
 import { useThemePreferences } from '@/context/ThemeProvider';
-import { buildCourseLeaderboard, formatScoreToPar, getLatestRoundForCourse, getPersonalBest } from '@/lib/golf';
+import {
+  buildCourseLeaderboard,
+  formatScoreToPar,
+  getLatestRoundForCourse,
+  getPersonalBest,
+  getRoundFormatLabel,
+  getRoundTrustLabel,
+  SCRAMBLE_FIRST_FORMATS,
+} from '@/lib/golf';
 import { createCommonStyles } from '@/styles/commonStyles';
-import { GameMode, GroupDetails } from '@/types/models';
+import { GroupDetails, RoundFormat } from '@/types/models';
 
 export default function CourseDetailScreen() {
   const { courseId } = useLocalSearchParams<{ courseId: string }>();
-  const { courses, getGroupDetails, profile, rounds } = useApp();
+  const { courses, getGroupDetails, groups, profile, rounds } = useApp();
   const { theme } = useThemePreferences();
   const commonStyles = createCommonStyles(theme.colors);
   const [details, setDetails] = useState<GroupDetails | null>(null);
-  const [scope, setScope] = useState<'group' | 'public'>('group');
-  const [mode, setMode] = useState<GameMode>('stroke');
+  const [scope, setScope] = useState<'public' | 'friends' | 'group'>('public');
+  const [format, setFormat] = useState<RoundFormat>('scramble2');
+  const [selectedGroupId, setSelectedGroupId] = useState(groups[0]?.id ?? '');
 
   const course = useMemo(() => courses.find((entry) => entry.id === courseId) ?? null, [courseId, courses]);
+  const selectedGroup = groups.find((group) => group.id === selectedGroupId) ?? groups[0] ?? null;
 
   useEffect(() => {
     let active = true;
-    if (!course?.groupId) {
+    const groupToLoad = selectedGroup?.id ?? course?.groupId;
+    if (!groupToLoad) {
+      setDetails(null);
       return undefined;
     }
 
-    getGroupDetails(course.groupId).then((nextDetails) => {
+    getGroupDetails(groupToLoad).then((nextDetails) => {
       if (active) {
         setDetails(nextDetails);
       }
@@ -40,20 +52,26 @@ export default function CourseDetailScreen() {
     return () => {
       active = false;
     };
-  }, [course?.groupId, getGroupDetails]);
+  }, [course?.groupId, getGroupDetails, selectedGroup?.id]);
 
-  if (!profile || !course || !details) {
+  if (!profile || !course) {
     return <LoadingScreen message="Loading course leaderboard..." />;
   }
 
-  const leaderboard = buildCourseLeaderboard(course, rounds, details.members, { gameMode: mode, scope });
+  const leaderboard = buildCourseLeaderboard(course, rounds, details?.members ?? [], {
+    format,
+    scope,
+    currentUserId: profile.uid,
+    friendIds: profile.friendIds,
+    groupId: selectedGroup?.id ?? course.groupId,
+  });
   const personalBest = getPersonalBest(course, profile.uid, rounds);
   const latestRound = getLatestRoundForCourse(course, profile.uid, rounds);
 
   return (
     <AppScreen scrollable contentContainerStyle={commonStyles.pageStack}>
       <PageHeader
-        eyebrow="Course leaderboard"
+        eyebrow="Compete at this course"
         title={course.name}
         subtitle={`${course.location} / Par ${course.par} / ${course.holesCount} holes / ${course.tees.length} tee options`}
       />
@@ -61,23 +79,34 @@ export default function CourseDetailScreen() {
       <SurfaceCard>
         <View style={commonStyles.rowBetween}>
           <View style={commonStyles.cardCopyBlock}>
-            <Text style={commonStyles.cardTitle}>Your best here</Text>
+            <Text style={commonStyles.cardTitle}>Your individual best</Text>
             <Text style={commonStyles.cardCopy}>
-              {personalBest ? `${personalBest.totalScore} (${formatScoreToPar(personalBest.scoreToPar)}) on ${personalBest.playedOn}` : 'No score posted at this course yet.'}
+              {personalBest ? `${personalBest.totalScore} (${formatScoreToPar(personalBest.scoreToPar)}) on ${personalBest.playedOn}` : 'No individual score posted at this course yet.'}
             </Text>
             {personalBest?.improvement ? <Text style={commonStyles.smallMuted}>{personalBest.improvement} shots better than your last best.</Text> : null}
-            {latestRound ? <Text style={commonStyles.smallMuted}>Latest round: {latestRound.totalScore} on {latestRound.playedOn}</Text> : null}
+            {latestRound ? <Text style={commonStyles.smallMuted}>Latest score: {latestRound.totalScore} on {latestRound.dateKey}</Text> : null}
           </View>
-          <PrimaryButton label="Log round" onPress={() => router.push(`/(app)/rounds/new?groupId=${course.groupId}&courseId=${course.id}`)} variant="secondary" />
+          <PrimaryButton label="Log scramble" onPress={() => router.push(`/(app)/rounds/new?courseId=${course.id}`)} variant="secondary" />
         </View>
       </SurfaceCard>
 
       <SurfaceCard>
-        <Text style={commonStyles.cardTitle}>Leaderboard</Text>
+        <Text style={commonStyles.cardTitle}>{getRoundFormatLabel(format)} leaderboard</Text>
+        <View style={commonStyles.segmentedRow}>
+          {SCRAMBLE_FIRST_FORMATS.map((option) => {
+            const active = format === option;
+            return (
+              <Pressable key={option} onPress={() => setFormat(option)} style={[commonStyles.segmentedButton, active ? commonStyles.segmentedButtonActive : null]}>
+                <Text style={[commonStyles.segmentedLabel, active ? commonStyles.segmentedLabelActive : null]}>{getRoundFormatLabel(option)}</Text>
+              </Pressable>
+            );
+          })}
+        </View>
         <View style={commonStyles.segmentedRow}>
           {[
-            { key: 'group' as const, label: 'Group / Friends' },
-            { key: 'public' as const, label: 'Public' },
+            { key: 'public' as const, label: 'Public leaderboard' },
+            { key: 'friends' as const, label: 'Friends leaderboard' },
+            { key: 'group' as const, label: 'Group leaderboard' },
           ].map((option) => {
             const active = scope === option.key;
             return (
@@ -87,19 +116,25 @@ export default function CourseDetailScreen() {
             );
           })}
         </View>
-        <View style={commonStyles.segmentedRow}>
-          {[
-            { key: 'stroke' as const, label: 'Stroke' },
-            { key: 'scramble' as const, label: 'Scramble' },
-          ].map((option) => {
-            const active = mode === option.key;
-            return (
-              <Pressable key={option.key} onPress={() => setMode(option.key)} style={[commonStyles.segmentedButton, active ? commonStyles.segmentedButtonActive : null]}>
-                <Text style={[commonStyles.segmentedLabel, active ? commonStyles.segmentedLabelActive : null]}>{option.label}</Text>
-              </Pressable>
-            );
-          })}
-        </View>
+        {scope === 'group' && groups.length ? (
+          <View style={commonStyles.chipRow}>
+            {groups.map((group) => {
+              const active = selectedGroup?.id === group.id;
+              return (
+                <Pressable
+                  key={group.id}
+                  onPress={() => setSelectedGroupId(group.id)}
+                  style={[
+                    commonStyles.subtleChip,
+                    active ? { backgroundColor: theme.colors.badgeBackground, borderColor: theme.colors.primary } : null,
+                  ]}
+                >
+                  <Text style={[commonStyles.subtleChipText, active ? { color: theme.colors.primary } : null]}>{group.name}</Text>
+                </Pressable>
+              );
+            })}
+          </View>
+        ) : null}
       </SurfaceCard>
 
       <View style={commonStyles.compactSection}>
@@ -110,8 +145,9 @@ export default function CourseDetailScreen() {
                 <View style={commonStyles.listRowMeta}>
                   <Text style={commonStyles.listRowTitle}>#{index + 1} {entry.name}</Text>
                   <Text style={commonStyles.listRowSubtitle}>
-                    {entry.indicatorLabel} / {entry.roundsPlayed} rounds / {entry.playedOn}
+                    {entry.totalScore} / {entry.indicatorLabel} / {entry.playedOn}
                   </Text>
+                  <Text style={commonStyles.smallMuted}>{getRoundTrustLabel(entry)}</Text>
                 </View>
                 <Text style={commonStyles.listValue}>{entry.totalScore}</Text>
               </View>
@@ -120,9 +156,7 @@ export default function CourseDetailScreen() {
         ) : (
           <SurfaceCard>
             <Text style={commonStyles.cardTitle}>No scores yet</Text>
-            <Text style={commonStyles.cardCopy}>
-              {scope === 'public' ? 'No public rounds have been posted for this course yet.' : 'Be the first to post a score here.'}
-            </Text>
+            <Text style={commonStyles.cardCopy}>Be the first to post a score in this format.</Text>
           </SurfaceCard>
         )}
       </View>

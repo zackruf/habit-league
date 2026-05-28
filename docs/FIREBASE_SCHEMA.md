@@ -20,8 +20,8 @@ The client currently expects Firestore rules to allow authenticated access patte
 - profile bootstrap on sign-in
 - loading a signed-in user profile and group memberships
 - reading discoverable groups
-- reading and writing saved courses for joined groups
-- reading and writing rounds for joined groups
+- reading and writing saved courses
+- reading and writing rounds by course, visibility, friends, and optional group metadata
 - reading group chat messages
 - reading and updating activity feed items and shoutouts
 
@@ -113,33 +113,43 @@ Collection:
 Primary fields:
 
 - `id`
-- `groupId`
+- `groupId` optional legacy/group-save context
 - `courseId`
 - `courseSourceId`
 - `courseSourceProvider`
 - `courseName`
+- `createdBy`
 - `userId`
+- `playerIds`
+- `playerNames`
 - `playerName`
 - `totalScore`
 - `scoreToPar`
-- `gameMode`
+- `format`
+- `gameMode` compatibility alias
 - `teeBoxId`
 - `teeBoxName`
 - `holesPlayed`
 - `holeScores`
 - `teamName`
 - `teamMemberIds`
+- `dateKey`
 - `playedOn`
 - `notes`
 - `photoUrls`
 - `visibility`
+- `relatedGroupIds`
+- `locationVerified`
+- `distanceFromCourseMeters`
 - `createdAt`
 
 Notes:
 
-- `gameMode` currently supports `stroke` and `scramble`
-- `visibility` is used to separate group/friends leaderboards from public ones
-- public leaderboard foundations can aggregate across groups by `courseSourceId`
+- `format` supports `individual`, `scramble2`, `scramble3`, and `scramble4`
+- `groupId` is not required for new round logging; `relatedGroupIds` controls group-filter visibility
+- `visibility` separates public and friends-scoped leaderboards
+- public leaderboards can aggregate across saved course records by `courseSourceId`
+- `locationVerified` and `distanceFromCourseMeters` are honor-system trust signals, not strict anti-cheat controls
 
 ## Activity Feed
 

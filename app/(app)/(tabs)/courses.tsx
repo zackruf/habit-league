@@ -11,7 +11,7 @@ import { SurfaceCard } from '@/components/SurfaceCard';
 import { useApp } from '@/context/AppProvider';
 import { useThemePreferences } from '@/context/ThemeProvider';
 import { formatFriendlyDate } from '@/lib/date';
-import { buildCourseLeaderboard, formatScoreToPar, getLatestRoundForCourse, getPersonalBest } from '@/lib/golf';
+import { buildCourseLeaderboard, formatScoreToPar, getLatestRoundForCourse, getPersonalBest, getRoundDisplayName, getRoundFormatLabel } from '@/lib/golf';
 import { createCommonStyles } from '@/styles/commonStyles';
 
 export default function CoursesTabScreen() {
@@ -31,41 +31,41 @@ export default function CoursesTabScreen() {
     .filter((entry) => entry.courses.length > 0);
 
   const recentRounds = rounds
-    .filter((round) => round.userId === profile.uid)
-    .sort((left, right) => right.playedOn.localeCompare(left.playedOn) || right.createdAt.localeCompare(left.createdAt))
+    .filter((round) => round.playerIds.includes(profile.uid))
+    .sort((left, right) => right.dateKey.localeCompare(left.dateKey) || right.createdAt.localeCompare(left.createdAt))
     .slice(0, 4);
 
   return (
     <AppScreen scrollable contentContainerStyle={commonStyles.pageStack}>
       <PageHeader
         eyebrow="Courses"
-        title="Courses and scoreboards"
-        subtitle="Search real-looking courses, save them to golf groups, log rounds, and compare your best numbers by course instead of bouncing between generic trackers."
+        title="Courses and leaderboards"
+        subtitle="Pick a course, log a scramble round, and see where your team ranks."
       />
 
       <View style={commonStyles.actionRowTight}>
         <PrimaryButton label="Search courses" onPress={() => router.push('/(app)/courses/new')} />
-        <PrimaryButton label="Log round" onPress={() => router.push('/(app)/rounds/new')} variant="secondary" />
+        <PrimaryButton label="Log scramble" onPress={() => router.push('/(app)/rounds/new')} variant="secondary" />
       </View>
 
       <SectionHeader title="Recent rounds" />
       <View style={commonStyles.compactSection}>
         {recentRounds.length ? (
           recentRounds.map((round) => {
-            const group = groups.find((entry) => entry.id === round.groupId);
+            const group = groups.find((entry) => round.relatedGroupIds.includes(entry.id));
             return (
               <SurfaceCard key={round.id}>
                 <View style={commonStyles.rowBetween}>
                   <View style={commonStyles.cardCopyBlock}>
                     <Text style={commonStyles.cardTitle}>{round.courseName}</Text>
                     <Text style={commonStyles.cardCopy}>
-                      {group?.name ?? 'Golf group'} / {round.gameMode === 'stroke' ? 'Stroke play' : 'Scramble'} / {round.teeBoxName}
+                      {group?.name ?? 'Public leaderboard'} / {getRoundFormatLabel(round.format)} / {round.teeBoxName}
                     </Text>
                   </View>
                   <Text style={commonStyles.statValue}>{round.totalScore}</Text>
                 </View>
                 <Text style={commonStyles.smallMuted}>
-                  {formatFriendlyDate(new Date(round.playedOn))} / {formatScoreToPar(round.scoreToPar)} / {round.visibility === 'public' ? 'Public' : 'Group only'}
+                  {formatFriendlyDate(new Date(round.dateKey))} / {formatScoreToPar(round.scoreToPar)} / {round.visibility === 'public' ? 'Public' : 'Friends'}
                 </Text>
                 {round.notes ? <Text style={commonStyles.smallMuted}>{round.notes}</Text> : null}
               </SurfaceCard>
@@ -74,21 +74,21 @@ export default function CoursesTabScreen() {
         ) : (
           <SurfaceCard>
             <Text style={commonStyles.cardTitle}>No rounds logged yet</Text>
-            <Text style={commonStyles.cardCopy}>Start by adding a course, then post your first score for the group.</Text>
+            <Text style={commonStyles.cardCopy}>Pick a course, choose a format, and post your first score.</Text>
           </SurfaceCard>
         )}
       </View>
 
-      <SectionHeader title="Courses by group" />
+      <SectionHeader title="Courses" />
       <View style={commonStyles.compactSection}>
         {groupedCourses.length ? (
           groupedCourses.map(({ group, courses: groupCourses }) => (
             <SurfaceCard key={group.id} style={commonStyles.sectionCard}>
               <Text style={commonStyles.cardTitle}>{group.name}</Text>
-              <Text style={commonStyles.cardCopy}>Course cards below open the scoreboard, personal best view, and public-vs-group leaderboard toggle.</Text>
+              <Text style={commonStyles.cardCopy}>Open a course to compare public, friends, and group leaderboards by format.</Text>
               <View style={commonStyles.compactSection}>
                 {groupCourses.map((course) => {
-                  const leaderboard = buildCourseLeaderboard(course, rounds, [], { gameMode: 'stroke', scope: 'group' });
+                  const leaderboard = buildCourseLeaderboard(course, rounds, [], { format: 'scramble2', scope: 'public', currentUserId: profile.uid, friendIds: profile.friendIds });
                   const bestScore = getPersonalBest(course, profile.uid, rounds);
                   const latestRound = getLatestRoundForCourse(course, profile.uid, rounds);
                   const leader = leaderboard[0];
@@ -111,10 +111,10 @@ export default function CoursesTabScreen() {
                         <Text style={commonStyles.listValue}>{bestScore?.totalScore ?? '--'}</Text>
                       </View>
                       <Text style={commonStyles.cardCopy}>
-                        {leader ? `Group leader: ${leader.name} / ${leader.totalScore} (${leader.indicatorLabel})` : 'Be the first to post a score here.'}
+                        {leader ? `2-Man leader: ${leader.name} / ${leader.totalScore} (${leader.indicatorLabel})` : 'Be the first to post a 2-Man Scramble score here.'}
                       </Text>
                       <Text style={commonStyles.smallMuted}>
-                        {latestRound ? `Your latest round: ${latestRound.totalScore} on ${formatFriendlyDate(new Date(latestRound.playedOn))}` : 'No round logged yet.'}
+                        {latestRound ? `Your latest: ${getRoundDisplayName(latestRound)} / ${latestRound.totalScore} on ${formatFriendlyDate(new Date(latestRound.dateKey))}` : 'No round logged yet.'}
                       </Text>
                     </PressableCard>
                   );
@@ -125,7 +125,7 @@ export default function CoursesTabScreen() {
         ) : (
           <SurfaceCard>
             <Text style={commonStyles.cardTitle}>No courses yet</Text>
-            <Text style={commonStyles.cardCopy}>Courses will appear here once your group saves its first track and starts posting scores.</Text>
+            <Text style={commonStyles.cardCopy}>Courses will appear here once you save the first course and start posting scores.</Text>
           </SurfaceCard>
         )}
       </View>

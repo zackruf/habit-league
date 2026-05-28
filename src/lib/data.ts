@@ -19,6 +19,7 @@ import {
 import { firebaseAuth, firebaseConfigured, firestore } from '@/lib/firebase';
 import { CourseSearchResult, getDefaultCourseProvider, MOCK_COURSES } from '@/lib/courseProviders';
 import { getCurrentDateKey, getCurrentWeekEndKey, getCurrentWeekKeys, getDateKeysBetween, getPreviousWeekKeys } from '@/lib/date';
+import { getRoundDisplayName, getRoundFormatLabel, isScrambleFormat, normalizeRoundFormat } from '@/lib/golf';
 import { getDefaultShopInventory, normalizeShopInventory } from '@/lib/shop';
 import { getHabitStreakStatus } from '@/lib/streaks';
 import {
@@ -30,7 +31,6 @@ import {
   Course,
   DemoStore,
   FriendRequestProfile,
-  GameMode,
   Group,
   GroupDetails,
   GroupMessage,
@@ -40,6 +40,7 @@ import {
   LeagueChallengeStatus,
   LeaderboardEntry,
   Profile,
+  RoundFormat,
   RoundVisibility,
   Round,
   RoundHoleScore,
@@ -63,6 +64,25 @@ const blankStore: DemoStore = {
   groups: {},
   groupMessages: {},
   activities: [],
+};
+
+export type LogRoundInput = {
+  groupId?: string | null;
+  relatedGroupIds?: string[];
+  courseId: string;
+  format: RoundFormat;
+  playedOn: string;
+  teeBoxId?: string | null;
+  holesPlayed: 9 | 18;
+  totalScore: number;
+  holeScores?: RoundHoleScore[];
+  playerIds: string[];
+  playerNames: string[];
+  teamName?: string;
+  visibility: RoundVisibility;
+  notes?: string;
+  locationVerified?: boolean;
+  distanceFromCourseMeters?: number | null;
 };
 
 export async function restoreSession(): Promise<SessionUser | null> {
@@ -210,11 +230,22 @@ export async function loadUserBundle(uid: string): Promise<AppBundle | null> {
   const groupIds = groups.map((group) => group.id);
   const courses = Object.values(store.courses)
     .map((course) => normalizeCourse(course))
-    .filter((course): course is Course => course !== null && groupIds.includes(course.groupId))
+    .filter((course): course is Course => course !== null && (!course.groupId || groupIds.includes(course.groupId)))
     .sort((left, right) => left.name.localeCompare(right.name));
   const rounds = Object.values(store.rounds)
     .map((round) => normalizeRound(round))
-    .filter((round): round is Round => round !== null && groupIds.includes(round.groupId))
+    .filter((round): round is Round => {
+      if (!round) {
+        return false;
+      }
+      return (
+        round.createdBy === uid ||
+        round.playerIds.includes(uid) ||
+        round.playerIds.some((playerId) => profile.friendIds.includes(playerId)) ||
+        round.relatedGroupIds.some((groupId) => groupIds.includes(groupId)) ||
+        round.visibility === 'public'
+      );
+    })
     .sort((left, right) => right.playedOn.localeCompare(left.playedOn) || right.createdAt.localeCompare(left.createdAt));
 
   return {
@@ -707,20 +738,7 @@ export async function createCourse(
 
 export async function logRound(
   uid: string,
-  input: {
-    groupId: string;
-    courseId: string;
-    gameMode: GameMode;
-    playedOn: string;
-    teeBoxId?: string | null;
-    holesPlayed: 9 | 18;
-    totalScore: number;
-    holeScores?: RoundHoleScore[];
-    teamName?: string;
-    teamMemberIds?: string[];
-    visibility: RoundVisibility;
-    notes?: string;
-  }
+  input: LogRoundInput
 ) {
   if (usingFirebaseBackend && firestore) {
     const [courseSnapshot, profileSnapshot] = await Promise.all([
@@ -1163,7 +1181,7 @@ export async function getGroupDetails(groupId: string): Promise<GroupDetails | n
     .sort((left, right) => left.name.localeCompare(right.name));
   const rounds = Object.values(store.rounds)
     .map((round) => normalizeRound(round))
-    .filter((round): round is Round => round !== null && round.groupId === group.id)
+    .filter((round): round is Round => round !== null && roundBelongsToGroup(round, group))
     .sort((left, right) => right.playedOn.localeCompare(left.playedOn) || right.createdAt.localeCompare(left.createdAt));
   const mergedChallenges = mergeLegacyChallenges(challenges, participations, group.id);
   return {
@@ -1307,20 +1325,7 @@ function buildRound(
   uid: string,
   profile: Profile,
   course: Course,
-  input: {
-    groupId: string;
-    courseId: string;
-    gameMode: GameMode;
-    playedOn: string;
-    teeBoxId?: string | null;
-    holesPlayed: 9 | 18;
-    totalScore: number;
-    holeScores?: RoundHoleScore[];
-    teamName?: string;
-    teamMemberIds?: string[];
-    visibility: RoundVisibility;
-    notes?: string;
-  }
+  input: LogRoundInput
 ): Round {
   const normalizedHoleScores = normalizeHoleScores(input.holeScores, input.holesPlayed);
   const selectedTee = course.tees.find((tee) => tee.id === input.teeBoxId) ?? course.tees[0] ?? null;
@@ -1328,29 +1333,43 @@ function buildRound(
   const totalScore = normalizedHoleScores.length
     ? normalizedHoleScores.reduce((sum, hole) => sum + hole.score, 0)
     : input.totalScore;
+  const format = normalizeRoundFormat(input.format);
+  const playerIds = [...new Set(input.playerIds.filter(Boolean))];
+  const playerNames = input.playerNames.map((name) => name.trim()).filter(Boolean);
+  const fallbackNames = playerIds.length ? playerIds.map((playerId) => (playerId === uid ? profile.name : 'Teammate')) : [profile.name];
+  const displayNames = playerNames.length ? playerNames : fallbackNames;
+  const relatedGroupIds = [...new Set([...(input.relatedGroupIds ?? []), input.groupId ?? course.groupId].filter(Boolean) as string[])];
 
   return {
     id: createId('round'),
-    groupId: input.groupId,
+    groupId: input.groupId ?? null,
+    relatedGroupIds,
     courseId: input.courseId,
     courseSourceId: course.sourceId,
     courseSourceProvider: course.sourceProvider,
     courseName: course.name,
+    createdBy: uid,
     userId: uid,
-    playerName: profile.name || 'Player',
+    playerIds,
+    playerNames: displayNames,
+    playerName: displayNames[0] || profile.name || 'Player',
     totalScore,
     scoreToPar: roundPar ? totalScore - roundPar : null,
-    gameMode: input.gameMode,
+    format,
+    gameMode: format,
     teeBoxId: selectedTee?.id ?? input.teeBoxId ?? null,
     teeBoxName: selectedTee?.name ?? 'Default tees',
     holesPlayed: input.holesPlayed,
     holeScores: normalizedHoleScores,
-    teamName: input.gameMode === 'scramble' ? input.teamName?.trim() || 'Scramble team' : '',
-    teamMemberIds: input.gameMode === 'scramble' ? [...new Set(input.teamMemberIds ?? [])] : [],
+    teamName: isScrambleFormat(format) ? input.teamName?.trim() || displayNames.join(' and ') || 'Scramble team' : '',
+    teamMemberIds: isScrambleFormat(format) ? playerIds : [],
+    dateKey: input.playedOn,
     playedOn: input.playedOn,
     notes: input.notes?.trim() ?? '',
     photoUrls: [],
     visibility: input.visibility,
+    locationVerified: Boolean(input.locationVerified),
+    distanceFromCourseMeters: typeof input.distanceFromCourseMeters === 'number' ? input.distanceFromCourseMeters : null,
     createdAt: new Date().toISOString(),
   };
 }
@@ -1377,31 +1396,51 @@ function normalizeCourse(course?: Course | null) {
   };
 }
 
-function normalizeRound(round?: Round | null) {
-  if (!round?.id || !round.groupId || !round.courseId || !round.userId) {
+function normalizeRound(round?: Round | null): Round | null {
+  if (!round?.id || !round.courseId || !(round.userId || round.createdBy)) {
     return null;
   }
+  const format = normalizeRoundFormat(round.format ?? round.gameMode);
+  const playerIds = [...new Set((round.playerIds?.length ? round.playerIds : [round.userId || round.createdBy]).filter(Boolean))];
+  const playerNames = (round.playerNames?.length ? round.playerNames : [round.playerName]).filter(Boolean);
+  const groupId = round.groupId ?? null;
+  const relatedGroupIds = [
+    ...new Set([...(round.relatedGroupIds ?? []), groupId].filter(Boolean) as string[]),
+  ];
+  const holesPlayed: 9 | 18 = round.holesPlayed === 9 ? 9 : 18;
 
   return {
     ...round,
+    groupId,
+    relatedGroupIds,
     courseSourceId: round.courseSourceId ?? round.courseId,
     courseSourceProvider: round.courseSourceProvider ?? 'manual',
     courseName: round.courseName ?? 'Golf course',
-    playerName: round.playerName ?? 'Player',
+    createdBy: round.createdBy ?? round.userId,
+    userId: round.userId ?? round.createdBy,
+    playerIds,
+    playerNames,
+    playerName: playerNames[0] ?? round.playerName ?? 'Player',
     totalScore: Number(round.totalScore ?? (round as Round & { score?: number }).score) || 0,
     scoreToPar:
       typeof round.scoreToPar === 'number'
         ? round.scoreToPar
         : null,
+    format,
+    gameMode: format,
     teeBoxId: round.teeBoxId ?? null,
     teeBoxName: round.teeBoxName ?? 'Default tees',
-    holesPlayed: round.holesPlayed === 9 ? 9 : 18,
-    holeScores: normalizeHoleScores(round.holeScores, round.holesPlayed === 9 ? 9 : 18),
-    teamName: round.teamName ?? '',
-    teamMemberIds: round.teamMemberIds ?? [],
+    holesPlayed,
+    holeScores: normalizeHoleScores(round.holeScores, holesPlayed),
+    teamName: isScrambleFormat(format) ? round.teamName || playerNames.join(' and ') || 'Scramble team' : '',
+    teamMemberIds: isScrambleFormat(format) ? round.teamMemberIds?.length ? round.teamMemberIds : playerIds : [],
+    dateKey: round.dateKey ?? round.playedOn ?? round.createdAt?.slice(0, 10) ?? getCurrentDateKey(),
+    playedOn: round.playedOn ?? round.dateKey ?? getCurrentDateKey(),
     notes: round.notes ?? '',
     photoUrls: round.photoUrls ?? [],
     visibility: round.visibility === 'public' ? 'public' : 'friends',
+    locationVerified: Boolean(round.locationVerified),
+    distanceFromCourseMeters: typeof round.distanceFromCourseMeters === 'number' ? round.distanceFromCourseMeters : null,
   };
 }
 
@@ -1547,6 +1586,15 @@ function normalizeGroup(group?: Group | null): Group | null {
     stakesText: group.stakesText || '',
     memberLimit: typeof group.memberLimit === 'number' && group.memberLimit > 0 ? group.memberLimit : null,
   };
+}
+
+function roundBelongsToGroup(round: Round, group: Group) {
+  return (
+    round.groupId === group.id ||
+    round.relatedGroupIds.includes(group.id) ||
+    round.playerIds.some((playerId) => group.memberIds.includes(playerId)) ||
+    round.createdBy === group.ownerId
+  );
 }
 
 function normalizeChallenge(challenge?: LeagueChallenge | null): LeagueChallenge | null {
@@ -1926,7 +1974,7 @@ function buildActivitySummary(input: ActivityInput) {
   }
 
   if (input.type === 'round_logged') {
-    const golfLabel = input.gameMode === 'scramble' ? 'logged a scramble round' : `shot ${input.score ?? '--'}`;
+    const golfLabel = input.gameMode && isScrambleFormat(input.gameMode) ? `posted a ${getRoundFormatLabel(input.gameMode)} score` : `shot ${input.score ?? '--'}`;
     return `${actor} ${golfLabel}${input.courseName ? ` at ${input.courseName}` : ''}.`;
   }
 
@@ -1943,12 +1991,15 @@ function buildActivitySummary(input: ActivityInput) {
 
 async function recordRoundActivities(round: Round, course: Course, existingRounds: Round[], profile: Profile) {
   const scoreLabel = round.scoreToPar !== null ? `${round.totalScore} (${formatSignedScore(round.scoreToPar)})` : `${round.totalScore}`;
+  const groupId = round.relatedGroupIds[0] ?? round.groupId ?? null;
+  const groupName = groupId ? await resolveGroupName(groupId) : null;
+  const displayName = getRoundDisplayName(round);
   await recordActivity({
     type: 'round_logged',
     actorId: profile.uid,
     actorName: profile.name,
-    groupId: round.groupId,
-    groupName: await resolveGroupName(round.groupId),
+    groupId,
+    groupName,
     courseId: round.courseId,
     courseName: course.name,
     roundId: round.id,
@@ -1956,18 +2007,18 @@ async function recordRoundActivities(round: Round, course: Course, existingRound
     score: round.totalScore,
     scoreToPar: round.scoreToPar,
     summaryOverride:
-      round.gameMode === 'scramble'
-        ? `${profile.name} logged a scramble round for ${round.teamName || 'the team'} at ${course.name}.`
-        : `${profile.name} shot ${scoreLabel} at ${course.name}.`,
+      isScrambleFormat(round.format)
+        ? `${displayName} shot ${scoreLabel} at ${course.name}.`
+        : `${displayName} posted ${scoreLabel} at ${course.name}.`,
   });
 
-  if (round.gameMode === 'stroke' && isNewPersonalBest(round, existingRounds)) {
+  if (round.format === 'individual' && isNewPersonalBest(round, existingRounds)) {
     await recordActivity({
       type: 'personal_best',
       actorId: profile.uid,
       actorName: profile.name,
-      groupId: round.groupId,
-      groupName: await resolveGroupName(round.groupId),
+      groupId,
+      groupName,
       courseId: round.courseId,
       courseName: course.name,
       roundId: round.id,
@@ -1982,24 +2033,24 @@ async function recordRoundActivities(round: Round, course: Course, existingRound
       type: 'course_leader',
       actorId: profile.uid,
       actorName: profile.name,
-      groupId: round.groupId,
-      groupName: await resolveGroupName(round.groupId),
+      groupId,
+      groupName,
       courseId: round.courseId,
       courseName: course.name,
       roundId: round.id,
       score: round.totalScore,
       scoreToPar: round.scoreToPar,
-      summaryOverride: `${profile.name} took #1 at ${course.name}.`,
+      summaryOverride: `${displayName} took #1 in ${getRoundFormatLabel(round.format)} at ${course.name}.`,
     });
   }
 }
 
 function isNewPersonalBest(round: Round, existingRounds: Round[]) {
-  if (round.gameMode !== 'stroke') {
+  if (round.format !== 'individual') {
     return false;
   }
 
-  const previousRounds = existingRounds.filter((entry) => entry.userId === round.userId && entry.gameMode === 'stroke');
+  const previousRounds = existingRounds.filter((entry) => entry.playerIds.includes(round.createdBy) && entry.format === 'individual');
   if (!previousRounds.length) {
     return true;
   }
@@ -2010,7 +2061,7 @@ function isNewPersonalBest(round: Round, existingRounds: Round[]) {
 
 function becameCourseLeader(round: Round, existingRounds: Round[]) {
   const sameModeRounds = existingRounds.filter(
-    (entry) => entry.groupId === round.groupId && entry.gameMode === round.gameMode && entry.visibility === round.visibility
+    (entry) => entry.courseSourceId === round.courseSourceId && entry.format === round.format && entry.visibility === round.visibility
   );
   if (!sameModeRounds.length) {
     return true;
@@ -2163,11 +2214,12 @@ function buildSeedCourseFromCatalog(courseId: string, groupId: string, createdBy
 
 function buildSeedRound(input: {
   id: string;
-  groupId: string;
+  groupId?: string | null;
+  relatedGroupIds?: string[];
   course: Course;
   userId: string;
   playerName: string;
-  gameMode: GameMode;
+  format: RoundFormat;
   playedOn: string;
   totalScore: number;
   notes: string;
@@ -2177,31 +2229,46 @@ function buildSeedRound(input: {
   holesPlayed?: 9 | 18;
   teamName?: string;
   teamMemberIds?: string[];
+  playerIds?: string[];
+  playerNames?: string[];
+  locationVerified?: boolean;
+  distanceFromCourseMeters?: number | null;
 }) {
   const tee = input.course.tees.find((entry) => entry.id === input.teeBoxId) ?? input.course.tees[0] ?? null;
   const holesPlayed = input.holesPlayed ?? 18;
+  const playerIds = input.playerIds ?? [input.userId];
+  const playerNames = input.playerNames ?? [input.playerName];
+  const relatedGroupIds = [...new Set([...(input.relatedGroupIds ?? []), input.groupId ?? input.course.groupId].filter(Boolean) as string[])];
   return {
     id: input.id,
-    groupId: input.groupId,
+    groupId: input.groupId ?? null,
+    relatedGroupIds,
     courseId: input.course.id,
     courseSourceId: input.course.sourceId,
     courseSourceProvider: input.course.sourceProvider,
     courseName: input.course.name,
+    createdBy: input.userId,
     userId: input.userId,
+    playerIds,
+    playerNames,
     playerName: input.playerName,
     totalScore: input.totalScore,
     scoreToPar: input.totalScore - (getRoundPar(input.course, holesPlayed) ?? input.course.par),
-    gameMode: input.gameMode,
+    format: input.format,
+    gameMode: input.format,
     teeBoxId: tee?.id ?? null,
     teeBoxName: tee?.name ?? 'Default tees',
     holesPlayed,
     holeScores: [],
-    teamName: input.gameMode === 'scramble' ? input.teamName ?? 'Scramble team' : '',
-    teamMemberIds: input.gameMode === 'scramble' ? input.teamMemberIds ?? [] : [],
+    teamName: isScrambleFormat(input.format) ? input.teamName ?? playerNames.join(' and ') : '',
+    teamMemberIds: isScrambleFormat(input.format) ? input.teamMemberIds ?? playerIds : [],
+    dateKey: input.playedOn,
     playedOn: input.playedOn,
     notes: input.notes,
     photoUrls: [],
     visibility: input.visibility ?? 'friends',
+    locationVerified: Boolean(input.locationVerified),
+    distanceFromCourseMeters: typeof input.distanceFromCourseMeters === 'number' ? input.distanceFromCourseMeters : null,
     createdAt: input.createdAt,
   } satisfies Round;
 }
@@ -2527,7 +2594,7 @@ function seedDemoStore(): DemoStore {
         course: buildSeedCourseFromCatalog(starterCourseId, groupId, demoUid, starterCourseSourceId),
         userId: demoUid,
         playerName: 'Demo Captain',
-        gameMode: 'stroke',
+        format: 'individual',
         playedOn: todayKey,
         totalScore: 86,
         notes: 'Steady back nine.',
@@ -2539,7 +2606,7 @@ function seedDemoStore(): DemoStore {
         course: buildSeedCourseFromCatalog(starterCourseId, groupId, demoUid, starterCourseSourceId),
         userId: friendUid,
         playerName: 'Jamie',
-        gameMode: 'stroke',
+        format: 'individual',
         playedOn: todayKey,
         totalScore: 83,
         notes: 'Best putting day this month.',
@@ -2551,7 +2618,7 @@ function seedDemoStore(): DemoStore {
         course: buildSeedCourseFromCatalog(hillsCourseId, groupId, friendUid, hillsCourseSourceId),
         userId: demoUid,
         playerName: 'Demo Captain',
-        gameMode: 'scramble',
+        format: 'scramble2',
         playedOn: previousWeekKeys[previousWeekKeys.length - 1],
         totalScore: 68,
         notes: 'Jamie and Demo Captain took the back-nine birdie train all the way in.',
@@ -2559,6 +2626,8 @@ function seedDemoStore(): DemoStore {
         visibility: 'friends',
         teamName: 'Match Play Mischief',
         teamMemberIds: [demoUid, friendUid],
+        playerIds: [demoUid, friendUid],
+        playerNames: ['Demo Captain', 'Jamie'],
       }),
       'round-public-1': buildSeedRound({
         id: 'round-public-1',
@@ -2566,12 +2635,69 @@ function seedDemoStore(): DemoStore {
         course: buildSeedCourseFromCatalog(publicCourseId, publicFitnessGroupId, runnerUid, publicCourseSourceId),
         userId: runnerUid,
         playerName: 'Avery',
-        gameMode: 'stroke',
+        format: 'individual',
         playedOn: todayKey,
         totalScore: 81,
         notes: 'Windy front nine, clean finish.',
         createdAt: new Date(Date.now() - 1000 * 60 * 30).toISOString(),
         visibility: 'public',
+      }),
+      'round-scramble-2-public': buildSeedRound({
+        id: 'round-scramble-2-public',
+        groupId,
+        course: buildSeedCourseFromCatalog(starterCourseId, groupId, demoUid, starterCourseSourceId),
+        userId: demoUid,
+        playerName: 'Demo Captain',
+        format: 'scramble2',
+        playedOn: recentKeys[recentKeys.length - 1],
+        totalScore: 68,
+        notes: 'Two-man scramble score to beat.',
+        createdAt: new Date(Date.now() - 1000 * 60 * 18).toISOString(),
+        visibility: 'public',
+        teamName: 'Cart Path Only',
+        teamMemberIds: [demoUid, friendUid],
+        playerIds: [demoUid, friendUid],
+        playerNames: ['Demo Captain', 'Jamie'],
+        locationVerified: true,
+        distanceFromCourseMeters: 142,
+      }),
+      'round-scramble-3-public': buildSeedRound({
+        id: 'round-scramble-3-public',
+        groupId: publicFitnessGroupId,
+        course: buildSeedCourseFromCatalog(publicCourseId, publicFitnessGroupId, runnerUid, publicCourseSourceId),
+        userId: runnerUid,
+        playerName: 'Avery',
+        format: 'scramble3',
+        playedOn: recentKeys[recentKeys.length - 2],
+        totalScore: 64,
+        notes: 'Three players, one clean card.',
+        createdAt: new Date(Date.now() - 1000 * 60 * 115).toISOString(),
+        visibility: 'public',
+        teamName: 'Pin Seekers',
+        teamMemberIds: [runnerUid],
+        playerIds: [runnerUid],
+        playerNames: ['Avery', 'Noah', 'Reese'],
+        locationVerified: true,
+        distanceFromCourseMeters: 224,
+      }),
+      'round-scramble-4-public': buildSeedRound({
+        id: 'round-scramble-4-public',
+        groupId: publicFocusGroupId,
+        course: buildSeedCourseFromCatalog(publicCourseId, publicFocusGroupId, readerUid, publicCourseSourceId),
+        userId: readerUid,
+        playerName: 'Mika',
+        format: 'scramble4',
+        playedOn: todayKey,
+        totalScore: 61,
+        notes: 'Four-man scramble lit up the back nine.',
+        createdAt: new Date(Date.now() - 1000 * 60 * 20).toISOString(),
+        visibility: 'public',
+        teamName: 'Dead Solid Perfect',
+        teamMemberIds: [readerUid],
+        playerIds: [readerUid],
+        playerNames: ['Mika', 'Sam', 'Priya', 'Cole'],
+        locationVerified: false,
+        distanceFromCourseMeters: null,
       }),
     },
     groups: {
@@ -2674,7 +2800,7 @@ function seedDemoStore(): DemoStore {
         courseId: starterCourseId,
         courseName: 'Riverview Municipal',
         roundId: 'round-demo-2',
-        gameMode: 'stroke',
+        gameMode: 'individual',
         score: 83,
         scoreToPar: 11,
         targetUserId: null,
@@ -2698,7 +2824,7 @@ function seedDemoStore(): DemoStore {
         courseId: starterCourseId,
         courseName: 'Riverview Municipal',
         roundId: 'round-demo-1',
-        gameMode: 'stroke',
+        gameMode: 'individual',
         score: 86,
         scoreToPar: 14,
         targetUserId: null,

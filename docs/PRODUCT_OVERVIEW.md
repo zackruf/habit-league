@@ -2,7 +2,7 @@
 
 ## Purpose
 
-Rivl exists to make golf more social, visible, and competitive. The app is designed to turn logged rounds, course-specific scores, and friend-group pressure into a repeatable reason to come back and play again.
+Rivl exists to make scramble golf more social, visible, and competitive. The app is designed around one simple loop: pick a course, pick a format, log a score, and see where you rank.
 
 ## Problem
 
@@ -17,19 +17,19 @@ Common failure points:
 
 ## Solution
 
-Rivl is a social golf competition app where friends create groups, save real courses, log rounds, compare scores, and push each other up the leaderboard.
+Rivl is a golf leaderboard app where players log Individual, 2-Man Scramble, 3-Man Scramble, and 4-Man Scramble scores at real courses. Groups support chat, identity, activity, and leaderboard filters, but they are not required to log a round.
 
 The product centers on:
 
-- golf groups
-- saved courses
+- course + format competition
+- scramble-first scoring
 - round logging
-- course-specific leaderboards
+- public, friends, and group-filtered leaderboards
 - group chat
 - activity visibility
 - shoutouts
 - personal best tracking
-- scramble mode support
+- location-assisted nearest-course suggestions
 
 ## Target User
 
@@ -44,20 +44,20 @@ Primary target users:
 
 Rivl differentiates itself by focusing on:
 
-- group-first product structure
+- scramble-first product structure
 - real courses and real rounds instead of abstract habit tracking
 - course-specific scoreboards instead of generic leaderboards
-- scramble support as a social differentiator
+- 2-Man, 3-Man, and 4-Man Scramble as the primary differentiator
 - integrated accountability through chat, feed, shoutouts, and visible score movement
 
 ## Core Loop
 
-1. Join or create a golf group
-2. Save a course the group actually plays
-3. Log a stroke or scramble round
-4. Move up or down the course leaderboard
-5. See activity, shoutouts, and group pressure
-6. Return to defend a personal best or chase a better number
+1. Pick a course
+2. Pick Individual, 2-Man Scramble, 3-Man Scramble, or 4-Man Scramble
+3. Add known friends or typed teammate names
+4. Post a score to the course + format leaderboard
+5. Filter by public, friends, or group
+6. Return to defend the number or take #1
 
 ## Monetization Strategy
 
@@ -81,13 +81,13 @@ Rivl has strong reasons to keep moving:
 
 Rivl is not a solo habit tracker.
 
-Rivl is for showing up with your group, posting real scores, and moving up together.
+Rivl is for posting real golf scores, especially scramble scores, and moving up course leaderboards together.
 
 The product should continue moving toward:
 
 - stronger course search and score logging
 - cleaner course-specific leaderboards
-- smoother onboarding into a first golf group
+- smoother first score logging without requiring a group
 - better social pressure loops around rounds and personal bests
 - monetization that supports the competition instead of distracting from it
 

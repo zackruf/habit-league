@@ -38,7 +38,7 @@ Located in `src/context/AppProvider.tsx`.
 Responsibilities:
 
 - restore auth session
-- hydrate profile, golf groups, saved courses, rounds, and compatibility data
+- hydrate profile, golf groups, saved courses, public/friend/group-visible rounds, and compatibility data
 - expose actions for:
   - sign in / sign up / sign out
   - profile save
@@ -73,7 +73,7 @@ The app uses a normalize-first approach so older or partially missing data can s
 
 ### `Course`
 
-`Course` is the saved golf course record attached to a group.
+`Course` is the saved golf course record. Courses may still be saved from a group context, but rounds compete by course + format rather than requiring group ownership.
 
 It stores:
 
@@ -89,17 +89,23 @@ It stores:
 
 It stores:
 
-- `groupId`
+- optional `groupId`
+- optional `relatedGroupIds`
 - `courseId`
 - `courseSourceId`
 - `userId`
-- `gameMode`
+- `playerIds`
+- `playerNames`
+- `format`
 - `teeBoxId`
 - `holesPlayed`
 - `totalScore`
 - `scoreToPar`
 - optional `holeScores`
-- optional scramble team metadata
+- optional scramble team name
+- `visibility`
+- `locationVerified`
+- `distanceFromCourseMeters`
 - visibility for group/friends vs public boards
 
 ### Compatibility models
@@ -112,10 +118,10 @@ Course leaderboards are built from `Round` records.
 
 Current leaderboard helpers support:
 
-- group/friends scope
-- public scope foundation
-- stroke mode
-- scramble mode
+- public scope
+- friends scope
+- group-filter scope
+- Individual, 2-Man Scramble, 3-Man Scramble, and 4-Man Scramble formats
 - lowest-score ranking with score-to-par when available
 
 ## Activity Feed

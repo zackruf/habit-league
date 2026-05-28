@@ -2,7 +2,7 @@
 
 Show up. Move up.
 
-Social golf competition app where friends create groups, save real courses, log rounds, and move up course leaderboards together.
+Scramble-first golf competition app where players pick a course, pick a format, post a score, and rank on public, friends, or group-filtered leaderboards.
 
 ## Repository Status
 
@@ -14,14 +14,14 @@ This repository is not open source. Access is limited to invited collaborators a
 
 ## Product Overview
 
-Rivl is a group-first golf competition app built around friend groups, real courses, logged rounds, social accountability, and score-based rankings. Instead of treating progress as a private solo tracker, Rivl turns every posted round into shared competition with visible movement and lightweight pressure.
+Rivl is a golf leaderboard app centered on real courses, scramble formats, logged scores, and visible competition. Groups still matter, but they are social spaces for chat, identity, activity, and leaderboard filters rather than a required scoring container.
 
 Core idea:
 
-- users do not track habits alone
-- users join golf groups
-- groups save shared courses
-- logged rounds move members up or down the rankings
+- pick a course
+- pick Individual, 2-Man Scramble, 3-Man Scramble, or 4-Man Scramble
+- log score, players, tee, date, and holes played
+- compare on public, friends, or group leaderboards
 
 ## Current MVP Scope
 
@@ -29,11 +29,12 @@ The current MVP includes:
 
 - Email sign up and sign in
 - Firebase Auth with React Native persistence
-- Group-first onboarding
+- Golf-first onboarding
 - Public and private golf groups
 - Saved course catalog entries per group
-- Individual stroke and scramble round logging
-- Course-specific group and public leaderboard foundations
+- Individual, 2-Man Scramble, 3-Man Scramble, and 4-Man Scramble logging
+- Course + format leaderboards with public, friends, and group filters
+- Optional nearest-course suggestion with foreground location
 - Personal best tracking surfaces
 - Group chat
 - Social activity feed and shoutouts
@@ -59,12 +60,11 @@ Rivl is not positioned as an individual habit tracker with optional social featu
 
 Rivl is now focused on:
 
-- golf groups
+- scramble-first course competition
 - course search and saved course records
 - logged rounds and scorecards
-- group and public course leaderboards
-- scramble mode
-- group accountability and social momentum
+- public, friends, and group-filtered course leaderboards
+- groups as chat, social identity, and filtering spaces
 
 Current retained systems include:
 
