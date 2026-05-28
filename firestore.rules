@@ -26,6 +26,28 @@ service cloud.firestore {
       return groupExists(groupId) && groupDoc(groupId).data.ownerId == request.auth.uid;
     }
 
+    function hasGroupId(data) {
+      return data.groupId is string && data.groupId != '';
+    }
+
+    function hasRelatedGroupAccess(data) {
+      return data.relatedGroupIds is list
+        && data.relatedGroupIds.hasAny(get(/databases/$(database)/documents/profiles/$(request.auth.uid)).data.groupIds);
+    }
+
+    function isPublicRecord(data) {
+      return data.visibility == 'public';
+    }
+
+    function isRoundParticipant(data) {
+      return data.createdBy == request.auth.uid
+        || data.userId == request.auth.uid
+        || (
+          data.playerIds is list
+          && request.auth.uid in data.playerIds
+        );
+    }
+
     function isChallengeCreator() {
       return isSignedIn() && request.resource.data.createdBy == request.auth.uid;
     }
@@ -81,33 +103,63 @@ service cloud.firestore {
 
     match /courses/{courseId} {
       allow read: if isSignedIn()
-        && groupExists(resource.data.groupId)
         && (
-          groupDoc(resource.data.groupId).data.discoverable == true
-          || isGroupMember(resource.data.groupId)
+          !hasGroupId(resource.data)
+          || (
+            groupExists(resource.data.groupId)
+            && (
+              groupDoc(resource.data.groupId).data.discoverable == true
+              || isGroupMember(resource.data.groupId)
+            )
+          )
         );
-      allow create: if isSignedIn() && isGroupMember(request.resource.data.groupId);
+      allow create: if isSignedIn()
+        && request.resource.data.createdBy == request.auth.uid
+        && (
+          !hasGroupId(request.resource.data)
+          || isGroupMember(request.resource.data.groupId)
+        );
       allow update: if isSignedIn()
         && (
-          isGroupOwner(resource.data.groupId)
-          || resource.data.createdBy == request.auth.uid
+          resource.data.createdBy == request.auth.uid
+          || (
+            hasGroupId(resource.data)
+            && isGroupOwner(resource.data.groupId)
+          )
         );
     }
 
     match /rounds/{roundId} {
       allow read: if isSignedIn()
-        && groupExists(resource.data.groupId)
         && (
-          groupDoc(resource.data.groupId).data.discoverable == true
-          || isGroupMember(resource.data.groupId)
+          isPublicRecord(resource.data)
+          || isRoundParticipant(resource.data)
+          || (
+            hasGroupId(resource.data)
+            && groupExists(resource.data.groupId)
+            && (
+              groupDoc(resource.data.groupId).data.discoverable == true
+              || isGroupMember(resource.data.groupId)
+            )
+          )
+          || hasRelatedGroupAccess(resource.data)
         );
       allow create: if isSignedIn()
-        && request.resource.data.userId == request.auth.uid
-        && isGroupMember(request.resource.data.groupId);
+        && (
+          request.resource.data.createdBy == request.auth.uid
+          || request.resource.data.userId == request.auth.uid
+        )
+        && (
+          !hasGroupId(request.resource.data)
+          || isGroupMember(request.resource.data.groupId)
+        );
       allow update: if isSignedIn()
         && (
-          resource.data.userId == request.auth.uid
-          || isGroupOwner(resource.data.groupId)
+          isRoundParticipant(resource.data)
+          || (
+            hasGroupId(resource.data)
+            && isGroupOwner(resource.data.groupId)
+          )
         );
     }
 

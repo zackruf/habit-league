@@ -1272,11 +1272,18 @@ async function loadRoundsForCourseSource(sourceId: string) {
     return [];
   }
 
-  const snapshot = await getDocs(query(collection(firestore, 'rounds'), where('courseSourceId', '==', sourceId), limit(100)));
-  return snapshot.docs
-    .map((entry) => normalizeRound(entry.data() as Round))
-    .filter((round): round is Round => Boolean(round))
-    .sort((left, right) => right.playedOn.localeCompare(left.playedOn) || right.createdAt.localeCompare(left.createdAt));
+  try {
+    const snapshot = await getDocs(query(collection(firestore, 'rounds'), where('courseSourceId', '==', sourceId), limit(100)));
+    return snapshot.docs
+      .map((entry) => normalizeRound(entry.data() as Round))
+      .filter((round): round is Round => Boolean(round))
+      .sort((left, right) => right.playedOn.localeCompare(left.playedOn) || right.createdAt.localeCompare(left.createdAt));
+  } catch (error) {
+    if (isFirestorePermissionError(error)) {
+      return [];
+    }
+    throw error;
+  }
 }
 
 function buildCourse(
