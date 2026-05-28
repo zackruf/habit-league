@@ -11,7 +11,7 @@ import { SectionHeader } from '@/components/SectionHeader';
 import { SurfaceCard } from '@/components/SurfaceCard';
 import { useApp } from '@/context/AppProvider';
 import { useThemePreferences } from '@/context/ThemeProvider';
-import { formatFriendlyDate, getCurrentWeekLabel } from '@/lib/date';
+import { formatFriendlyDate } from '@/lib/date';
 import { buildCourseLeaderboard, formatScoreToPar, getPersonalBest, getRoundDisplayName, getRoundFormatLabel } from '@/lib/golf';
 import { createCommonStyles } from '@/styles/commonStyles';
 import { GroupDetails } from '@/types/models';
@@ -81,12 +81,12 @@ export default function HomeScreen() {
       <PageHeader
         eyebrow="Dashboard"
         title={`Hi, ${profile.name.split(' ')[0]}.`}
-        subtitle={`${rounds.length} rounds logged, ${courses.length} saved courses, and ${totalPublicRounds} public scores live. ${getCurrentWeekLabel()}.`}
+        subtitle={`${rounds.length} rounds / ${courses.length} courses / ${totalPublicRounds} public`}
       />
 
       <SurfaceCard style={commonStyles.currentUserCard}>
         <Text style={commonStyles.noticeEyebrow}>This week</Text>
-        <Text style={commonStyles.noticeMessage}>Pick a course. Post a scramble score. Move up the leaderboard.</Text>
+        <Text style={commonStyles.noticeMessage}>Pick a course. Post a score.</Text>
         <Text style={commonStyles.smallMuted}>{starterLine}</Text>
       </SurfaceCard>
 
@@ -121,7 +121,7 @@ export default function HomeScreen() {
         ) : (
           <SurfaceCard>
             <Text style={commonStyles.cardTitle}>No golf rounds yet</Text>
-            <Text style={commonStyles.cardCopy}>Log the first scramble round and Rivl will start ranking the course by format.</Text>
+            <Text style={commonStyles.cardCopy}>Post the first score.</Text>
           </SurfaceCard>
         )}
       </View>
@@ -149,7 +149,7 @@ export default function HomeScreen() {
                   </View>
                 </View>
                 <Text style={commonStyles.cardCopy}>
-                  {leader ? `2-Man Scramble leader: ${leader.name} / ${leader.totalScore} (${leader.indicatorLabel})` : 'Be the first to post a 2-Man Scramble score here.'}
+                  {leader ? `2-Man: ${leader.name} / ${leader.totalScore} (${leader.indicatorLabel})` : 'No 2-Man scores yet.'}
                 </Text>
               </PressableCard>
             );

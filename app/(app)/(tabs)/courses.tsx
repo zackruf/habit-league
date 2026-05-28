@@ -15,7 +15,7 @@ import { buildCourseLeaderboard, formatScoreToPar, getLatestRoundForCourse, getP
 import { createCommonStyles } from '@/styles/commonStyles';
 
 export default function CoursesTabScreen() {
-  const { courses, groups, profile, rounds } = useApp();
+  const { busy, courses, groups, profile, rounds, updateRoundVisibility } = useApp();
   const { theme } = useThemePreferences();
   const commonStyles = createCommonStyles(theme.colors);
 
@@ -40,7 +40,6 @@ export default function CoursesTabScreen() {
       <PageHeader
         eyebrow="Courses"
         title="Courses and leaderboards"
-        subtitle="Pick a course, log a scramble round, and see where your team ranks."
       />
 
       <View style={commonStyles.actionRowTight}>
@@ -68,6 +67,14 @@ export default function CoursesTabScreen() {
                   {formatFriendlyDate(new Date(round.dateKey))} / {formatScoreToPar(round.scoreToPar)} / {round.visibility === 'public' ? 'Public' : 'Friends'}
                 </Text>
                 {round.notes ? <Text style={commonStyles.smallMuted}>{round.notes}</Text> : null}
+                <View style={commonStyles.actionRowTight}>
+                  <PrimaryButton
+                    label={round.visibility === 'public' ? 'Make private' : 'Make public'}
+                    onPress={() => updateRoundVisibility(round.id, round.visibility === 'public' ? 'friends' : 'public')}
+                    disabled={busy}
+                    variant="secondary"
+                  />
+                </View>
               </SurfaceCard>
             );
           })
@@ -85,7 +92,6 @@ export default function CoursesTabScreen() {
           groupedCourses.map(({ group, courses: groupCourses }) => (
             <SurfaceCard key={group.id} style={commonStyles.sectionCard}>
               <Text style={commonStyles.cardTitle}>{group.name}</Text>
-              <Text style={commonStyles.cardCopy}>Open a course to compare public, friends, and group leaderboards by format.</Text>
               <View style={commonStyles.compactSection}>
                 {groupCourses.map((course) => {
                   const leaderboard = buildCourseLeaderboard(course, rounds, [], { format: 'scramble2', scope: 'public', currentUserId: profile.uid, friendIds: profile.friendIds });

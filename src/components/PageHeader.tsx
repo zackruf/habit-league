@@ -12,7 +12,7 @@ export function PageHeader({
 }: {
   eyebrow: string;
   title: string;
-  subtitle: string;
+  subtitle?: string;
   trailing?: ReactNode;
 }) {
   const { theme } = useThemePreferences();
@@ -22,7 +22,7 @@ export function PageHeader({
       <View style={styles.copyBlock}>
         <Text style={[styles.eyebrow, { color: theme.colors.primary }]}>{eyebrow}</Text>
         <Text style={[styles.title, { color: theme.colors.text }]}>{title}</Text>
-        <Text style={[styles.subtitle, { color: theme.colors.muted }]}>{subtitle}</Text>
+        {subtitle ? <Text style={[styles.subtitle, { color: theme.colors.muted }]}>{subtitle}</Text> : null}
       </View>
       {trailing}
     </View>

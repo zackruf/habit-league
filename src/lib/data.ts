@@ -199,10 +199,12 @@ export async function loadUserBundle(uid: string): Promise<AppBundle | null> {
       })
     );
     const groupIds = (groups.filter(Boolean) as Group[]).map((group) => group.id);
-    const [courses, rounds] = await Promise.all([
+    const [courses, groupRounds, playerRounds] = await Promise.all([
       loadCoursesForGroups(groupIds),
       loadRoundsForGroups(groupIds),
+      loadRoundsForPlayer(uid),
     ]);
+    const rounds = dedupeRounds([...groupRounds, ...playerRounds]);
 
     return {
       profile,
@@ -780,6 +782,28 @@ export async function logRound(
   return storeRound;
 }
 
+export async function updateRoundVisibility(uid: string, roundId: string, visibility: RoundVisibility) {
+  if (usingFirebaseBackend && firestore) {
+    const roundRef = doc(firestore, 'rounds', roundId);
+    const snapshot = await getDoc(roundRef);
+    const round = normalizeRound(snapshot.data() as Round);
+    if (!round || !round.playerIds.includes(uid)) {
+      return { ok: false, message: 'That round could not be updated.' };
+    }
+    await updateDoc(roundRef, { visibility });
+    return { ok: true, message: visibility === 'public' ? 'Round is public.' : 'Round is private.' };
+  }
+
+  const store = await readDemoStore();
+  const round = normalizeRound(store.rounds[roundId]);
+  if (!round || !round.playerIds.includes(uid)) {
+    return { ok: false, message: 'That round could not be updated.' };
+  }
+  store.rounds[roundId] = { ...round, visibility };
+  await writeDemoStore(store);
+  return { ok: true, message: visibility === 'public' ? 'Round is public.' : 'Round is private.' };
+}
+
 export async function updateGroup(uid: string, groupId: string, input: GroupSettingsInput) {
   if (usingFirebaseBackend && firestore) {
     const groupRef = doc(firestore, 'groups', groupId);
@@ -1265,6 +1289,31 @@ async function loadRoundsForGroups(groupIds: string[]) {
     .map((entry) => normalizeRound(entry.data() as Round))
     .filter((round): round is Round => Boolean(round))
     .sort((left, right) => right.playedOn.localeCompare(left.playedOn) || right.createdAt.localeCompare(left.createdAt));
+}
+
+async function loadRoundsForPlayer(uid: string) {
+  if (!usingFirebaseBackend || !firestore) {
+    return [];
+  }
+
+  try {
+    const snapshot = await getDocs(query(collection(firestore, 'rounds'), where('playerIds', 'array-contains', uid), limit(50)));
+    return snapshot.docs
+      .map((entry) => normalizeRound(entry.data() as Round))
+      .filter((round): round is Round => Boolean(round))
+      .sort((left, right) => right.playedOn.localeCompare(left.playedOn) || right.createdAt.localeCompare(left.createdAt));
+  } catch (error) {
+    if (isFirestorePermissionError(error)) {
+      return [];
+    }
+    throw error;
+  }
+}
+
+function dedupeRounds(rounds: Round[]) {
+  return Array.from(new Map(rounds.map((round) => [round.id, round])).values()).sort(
+    (left, right) => right.playedOn.localeCompare(left.playedOn) || right.createdAt.localeCompare(left.createdAt)
+  );
 }
 
 async function loadRoundsForCourseSource(sourceId: string) {

@@ -73,15 +73,15 @@ export default function CourseDetailScreen() {
       <PageHeader
         eyebrow="Compete at this course"
         title={course.name}
-        subtitle={`${course.location} / Par ${course.par} / ${course.holesCount} holes / ${course.tees.length} tee options`}
+        subtitle={`${course.location} / Par ${course.par}`}
       />
 
       <SurfaceCard>
         <View style={commonStyles.rowBetween}>
           <View style={commonStyles.cardCopyBlock}>
-            <Text style={commonStyles.cardTitle}>Your individual best</Text>
+            <Text style={commonStyles.cardTitle}>Your best</Text>
             <Text style={commonStyles.cardCopy}>
-              {personalBest ? `${personalBest.totalScore} (${formatScoreToPar(personalBest.scoreToPar)}) on ${personalBest.playedOn}` : 'No individual score posted at this course yet.'}
+              {personalBest ? `${personalBest.totalScore} (${formatScoreToPar(personalBest.scoreToPar)})` : 'No score yet.'}
             </Text>
             {personalBest?.improvement ? <Text style={commonStyles.smallMuted}>{personalBest.improvement} shots better than your last best.</Text> : null}
             {latestRound ? <Text style={commonStyles.smallMuted}>Latest score: {latestRound.totalScore} on {latestRound.dateKey}</Text> : null}

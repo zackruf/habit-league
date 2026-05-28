@@ -32,6 +32,7 @@ import {
   toggleHabitCheckIn as toggleHabitCheckInRequest,
   updateLeagueChallengeLifecycle as updateLeagueChallengeLifecycleRequest,
   updateGroup as updateGroupRequest,
+  updateRoundVisibility as updateRoundVisibilityRequest,
   usingFirebaseBackend,
 } from '@/lib/data';
 import { consumeRestoreStreak } from '@/lib/shop';
@@ -126,6 +127,7 @@ type AppContextValue = {
     locationVerified?: boolean;
     distanceFromCourseMeters?: number | null;
   }) => Promise<ActionResult>;
+  updateRoundVisibility: (roundId: string, visibility: RoundVisibility) => Promise<ActionResult>;
   updateGroup: (groupId: string, input: GroupSettingsInput) => Promise<ActionResult>;
   joinGroup: (joinCode: string) => Promise<GroupActionResult>;
   joinPublicGroup: (groupId: string) => Promise<GroupActionResult>;
@@ -511,6 +513,23 @@ export function AppProvider({ children, fallback }: PropsWithChildren<{ fallback
     [refreshUserData, session]
   );
 
+  const updateRoundVisibility = useCallback(
+    async (roundId: string, visibility: RoundVisibility) => {
+      if (!session) {
+        return { ok: false, message: 'No active session.' };
+      }
+
+      setBusy(true);
+      const result = await updateRoundVisibilityRequest(session.uid, roundId, visibility);
+      if (result.ok) {
+        await refreshUserData(session);
+      }
+      setBusy(false);
+      return result;
+    },
+    [refreshUserData, session]
+  );
+
   const updateLeagueChallengeLifecycle = useCallback(
     async (challengeId: string, action: 'archive' | 'complete' | 'reactivate') => {
       if (!session) {
@@ -696,6 +715,7 @@ export function AppProvider({ children, fallback }: PropsWithChildren<{ fallback
       createGroup,
       createCourse,
       logRound,
+      updateRoundVisibility,
       updateGroup,
       joinGroup,
       joinPublicGroup,
@@ -735,6 +755,7 @@ export function AppProvider({ children, fallback }: PropsWithChildren<{ fallback
       createGroup,
       createCourse,
       logRound,
+      updateRoundVisibility,
       updateGroup,
       joinGroup,
       joinPublicGroup,

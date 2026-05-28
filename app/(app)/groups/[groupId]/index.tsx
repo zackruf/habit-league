@@ -73,7 +73,7 @@ export default function GroupScreen() {
         <PageHeader
           eyebrow="Golf group"
           title={details.group.name}
-          subtitle={details.group.description || 'A social space for chat, members, activity, and group-filtered course leaderboards.'}
+          subtitle={details.group.description || 'Chat, members, activity, leaderboards.'}
         />
 
         <View style={commonStyles.segmentedRow}>
@@ -141,7 +141,7 @@ export default function GroupScreen() {
             ) : (
               <SurfaceCard>
                 <Text style={commonStyles.cardTitle}>No courses saved yet</Text>
-                <Text style={commonStyles.cardCopy}>Save the first course so this group can filter leaderboards around familiar tracks.</Text>
+                <Text style={commonStyles.cardCopy}>Save a course.</Text>
               </SurfaceCard>
             )}
           </View>
@@ -194,7 +194,7 @@ export default function GroupScreen() {
 
           <SurfaceCard>
             <Text style={commonStyles.cardTitle}>Legacy tools stay tucked away</Text>
-            <Text style={commonStyles.cardCopy}>Groups are now for chat, member identity, activity, and leaderboard filters. Scoring starts with the course and format.</Text>
+            <Text style={commonStyles.cardCopy}>Chat, members, activity, filters.</Text>
           </SurfaceCard>
         </ScrollView>
       ) : (

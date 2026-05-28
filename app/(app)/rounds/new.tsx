@@ -11,17 +11,11 @@ import { spacing } from '@/constants/theme';
 import { useApp } from '@/context/AppProvider';
 import { useThemePreferences } from '@/context/ThemeProvider';
 import { formatFriendlyDate } from '@/lib/date';
-import {
-  getRequiredPlayerCount,
-  getRoundFormatLabel,
-  isScrambleFormat,
-  SCRAMBLE_FIRST_FORMATS,
-} from '@/lib/golf';
+import { getRequiredPlayerCount, getRoundFormatLabel, isScrambleFormat, SCRAMBLE_FIRST_FORMATS } from '@/lib/golf';
 import { suggestNearestCourse } from '@/lib/location';
 import { createCommonStyles } from '@/styles/commonStyles';
-import { Profile, RoundFormat, RoundHoleScore, RoundVisibility } from '@/types/models';
+import { Profile, RoundFormat, RoundHoleScore, UserSearchResult } from '@/types/models';
 
-const ROUND_VISIBILITY: RoundVisibility[] = ['public', 'friends'];
 const HOLE_OPTIONS: Array<9 | 18> = [18, 9];
 
 type PlayerSlot = {
@@ -29,31 +23,45 @@ type PlayerSlot = {
   name: string;
 };
 
+type PlayerOption = {
+  uid: string;
+  name: string;
+  username: string;
+};
+
 export default function LogRoundScreen() {
-  const { busy, courses, getGroupDetails, groups, logRound, profile } = useApp();
+  const { busy, courses, getGroupDetails, groups, logRound, profile, searchUsers } = useApp();
   const { theme } = useThemePreferences();
   const commonStyles = createCommonStyles(theme.colors);
   const { courseId: routeCourseId, groupId: routeGroupId } = useLocalSearchParams<{ courseId?: string; groupId?: string }>();
   const initialCourseId = routeCourseId && courses.some((course) => course.id === routeCourseId) ? routeCourseId : '';
   const [courseId, setCourseId] = useState(initialCourseId);
   const [format, setFormat] = useState<RoundFormat>('scramble2');
-  const [playedOn, setPlayedOn] = useState(formatFriendlyDate(new Date(), 'key'));
-  const [visibility, setVisibility] = useState<RoundVisibility>('public');
   const [holesPlayed, setHolesPlayed] = useState<9 | 18>(18);
   const [teeBoxId, setTeeBoxId] = useState<string | null>(null);
-  const [scoreMode, setScoreMode] = useState<'total' | 'holes'>('total');
-  const [totalScore, setTotalScore] = useState('');
-  const [notes, setNotes] = useState('');
   const [teamName, setTeamName] = useState('');
-  const [relatedGroupIds, setRelatedGroupIds] = useState<string[]>(routeGroupId ? [routeGroupId] : []);
-  const [knownPlayers, setKnownPlayers] = useState<Profile[]>([]);
+  const [relatedGroupIds] = useState<string[]>(routeGroupId ? [routeGroupId] : []);
+  const [knownPlayers, setKnownPlayers] = useState<PlayerOption[]>([]);
+  const [playerQuery, setPlayerQuery] = useState('');
+  const [searchResults, setSearchResults] = useState<PlayerOption[]>([]);
   const [players, setPlayers] = useState<PlayerSlot[]>([]);
   const [holeScoreInputs, setHoleScoreInputs] = useState<string[]>(Array.from({ length: 18 }, () => ''));
+  const [activeHoleIndex, setActiveHoleIndex] = useState(0);
   const [locationState, setLocationState] = useState<'checking' | 'suggested' | 'manual'>('checking');
   const [distanceFromCourseMeters, setDistanceFromCourseMeters] = useState<number | null>(null);
 
   const selectedCourse = useMemo(() => courses.find((course) => course.id === courseId) ?? null, [courseId, courses]);
+  const selectedTee = useMemo(() => selectedCourse?.tees.find((tee) => tee.id === teeBoxId) ?? selectedCourse?.tees[0] ?? null, [selectedCourse, teeBoxId]);
   const requiredPlayers = getRequiredPlayerCount(format);
+  const activeHole = selectedCourse?.holes[activeHoleIndex] ?? null;
+  const activeHoleScore = holeScoreInputs[activeHoleIndex] ?? '';
+  const activeHoleYards = activeHole && selectedTee ? activeHole.yardagesByTee[selectedTee.id] : null;
+  const completedScores = holeScoreInputs.slice(0, holesPlayed).filter((value) => Number(value) > 0).length;
+  const allHoleScoresFilled = completedScores === holesPlayed;
+  const totalScore = holeScoreInputs.slice(0, holesPlayed).reduce((sum, value) => sum + (Number(value) || 0), 0);
+  const playerIds = players.map((player) => player.id).filter(Boolean) as string[];
+  const playerNames = players.map((player) => player.name.trim()).filter(Boolean);
+  const canPost = Boolean(selectedCourse && allHoleScoresFilled && playerIds.length === requiredPlayers && playerNames.length === requiredPlayers);
 
   useEffect(() => {
     setPlayers((current) => buildPlayerSlots(current, requiredPlayers, profile?.uid ?? null, profile?.name ?? 'You'));
@@ -66,17 +74,25 @@ export default function LogRoundScreen() {
   }, [selectedCourse]);
 
   useEffect(() => {
+    setActiveHoleIndex((current) => Math.min(current, holesPlayed - 1));
+  }, [holesPlayed]);
+
+  useEffect(() => {
     let active = true;
     async function loadKnownPlayers() {
       const details = await Promise.all(groups.map((group) => getGroupDetails(group.id)));
       if (!active) {
         return;
       }
-      const byId = new Map<string, Profile>();
+      const byId = new Map<string, PlayerOption>();
       details.forEach((detail) => {
-        detail?.members.forEach((member) => byId.set(member.uid, member));
+        detail?.members.forEach((member) => {
+          if (member.uid !== profile?.uid) {
+            byId.set(member.uid, toPlayerOption(member));
+          }
+        });
       });
-      setKnownPlayers(Array.from(byId.values()).filter((member) => member.uid !== profile?.uid));
+      setKnownPlayers(Array.from(byId.values()));
     }
 
     loadKnownPlayers();
@@ -84,6 +100,24 @@ export default function LogRoundScreen() {
       active = false;
     };
   }, [getGroupDetails, groups, profile?.uid]);
+
+  useEffect(() => {
+    let active = true;
+    if (playerQuery.trim().length < 2) {
+      setSearchResults([]);
+      return undefined;
+    }
+
+    searchUsers(playerQuery).then((results) => {
+      if (active) {
+        setSearchResults(results.map(toPlayerSearchOption));
+      }
+    });
+
+    return () => {
+      active = false;
+    };
+  }, [playerQuery, searchUsers]);
 
   useEffect(() => {
     let active = true;
@@ -110,75 +144,61 @@ export default function LogRoundScreen() {
     };
   }, [courses]);
 
-  const allHoleScoresFilled =
-    scoreMode === 'holes' &&
-    holeScoreInputs.slice(0, holesPlayed).every((value) => {
-      const parsed = Number(value);
-      return Number.isFinite(parsed) && parsed > 0;
-    });
-  const computedHoleTotal = holeScoreInputs.slice(0, holesPlayed).reduce((sum, value) => sum + (Number(value) || 0), 0);
-  const finalScore = scoreMode === 'holes' ? computedHoleTotal : Number(totalScore);
-  const playerNames = players.map((player) => player.name.trim()).filter(Boolean);
-  const playerIds = players.map((player) => player.id).filter(Boolean) as string[];
-  const canSubmit = Boolean(courseId && selectedCourse && playerNames.length === requiredPlayers && Number.isFinite(finalScore) && finalScore > 0);
+  async function handlePostRound() {
+    if (!selectedCourse) {
+      return;
+    }
 
-  async function handleLogRound() {
     const result = await logRound({
       groupId: relatedGroupIds[0] ?? null,
       relatedGroupIds,
       courseId,
       format,
-      playedOn,
+      playedOn: formatFriendlyDate(new Date(), 'key'),
       teeBoxId,
       holesPlayed,
-      totalScore: finalScore,
-      holeScores:
-        scoreMode === 'holes'
-          ? holeScoreInputs.slice(0, holesPlayed).map(
-              (value, index) =>
-                ({
-                  holeNumber: index + 1,
-                  score: Number(value),
-                }) satisfies RoundHoleScore
-            )
-          : [],
+      totalScore,
+      holeScores: holeScoreInputs.slice(0, holesPlayed).map(
+        (value, index) =>
+          ({
+            holeNumber: index + 1,
+            score: Number(value),
+          }) satisfies RoundHoleScore
+      ),
       playerIds,
       playerNames,
       teamName: isScrambleFormat(format) ? teamName.trim() || playerNames.join(' and ') : '',
-      visibility,
-      notes,
-      locationVerified: locationState === 'suggested' && selectedCourse?.id === courseId,
-      distanceFromCourseMeters: locationState === 'suggested' && selectedCourse?.id === courseId ? distanceFromCourseMeters : null,
+      visibility: 'public',
+      locationVerified: locationState === 'suggested' && selectedCourse.id === courseId,
+      distanceFromCourseMeters: locationState === 'suggested' && selectedCourse.id === courseId ? distanceFromCourseMeters : null,
     });
 
     if (result.ok) {
-      router.replace(courseId ? `/(app)/courses/${courseId}` : '/(app)/(tabs)/courses');
+      router.replace(`/(app)/courses/${courseId}`);
     }
   }
 
-  function selectKnownPlayer(slotIndex: number, member: Profile) {
-    setPlayers((current) => current.map((slot, index) => (index === slotIndex ? { id: member.uid, name: member.name } : slot)));
+  function selectPlayer(slotIndex: number, player: PlayerOption) {
+    setPlayers((current) => current.map((slot, index) => (index === slotIndex ? { id: player.uid, name: player.name } : slot)));
   }
 
-  function updateManualName(slotIndex: number, name: string) {
-    setPlayers((current) => current.map((slot, index) => (index === slotIndex ? { id: index === 0 ? slot.id : null, name } : slot)));
+  function updateScore(value: string) {
+    setHoleScoreInputs((current) => {
+      const next = [...current];
+      next[activeHoleIndex] = value.replace(/[^0-9]/g, '');
+      return next;
+    });
   }
 
-  function toggleGroup(groupId: string) {
-    setRelatedGroupIds((current) => (current.includes(groupId) ? current.filter((entry) => entry !== groupId) : [...current, groupId]));
-  }
+  const playerOptions = mergePlayerOptions(knownPlayers, searchResults).filter((option) => !playerIds.includes(option.uid));
 
   return (
     <AppScreen scrollable contentContainerStyle={commonStyles.pageStack}>
-      <PageHeader
-        eyebrow="Scramble score"
-        title="Log a scramble round"
-        subtitle="Pick a course, choose your format, add the players, and compete at this course."
-      />
+      <PageHeader eyebrow="Round" title="Log scramble" />
 
       <SurfaceCard>
         <Text style={commonStyles.cardTitle}>Course</Text>
-        {locationState === 'suggested' ? <Text style={commonStyles.smallMuted}>Nearest course suggested</Text> : null}
+        {locationState === 'suggested' ? <Text style={commonStyles.smallMuted}>Nearest</Text> : null}
         <View style={commonStyles.compactSection}>
           {courses.map((course) => {
             const selected = course.id === courseId;
@@ -199,7 +219,7 @@ export default function LogRoundScreen() {
               >
                 <Text style={commonStyles.settingTitle}>{course.name}</Text>
                 <Text style={commonStyles.smallMuted}>
-                  {course.location} / Par {course.par} / {course.holesCount} holes
+                  {course.location} / Par {course.par}
                 </Text>
               </Pressable>
             );
@@ -208,7 +228,7 @@ export default function LogRoundScreen() {
       </SurfaceCard>
 
       <SurfaceCard>
-        <Text style={commonStyles.cardTitle}>Pick your format</Text>
+        <Text style={commonStyles.cardTitle}>Format</Text>
         <View style={commonStyles.segmentedRow}>
           {SCRAMBLE_FIRST_FORMATS.map((option) => {
             const active = format === option;
@@ -219,26 +239,12 @@ export default function LogRoundScreen() {
             );
           })}
         </View>
-
         <View style={commonStyles.segmentedRow}>
           {HOLE_OPTIONS.map((option) => {
             const active = holesPlayed === option;
             return (
               <Pressable key={option} onPress={() => setHolesPlayed(option)} style={[commonStyles.segmentedButton, active ? commonStyles.segmentedButtonActive : null]}>
-                <Text style={[commonStyles.segmentedLabel, active ? commonStyles.segmentedLabelActive : null]}>{option} holes</Text>
-              </Pressable>
-            );
-          })}
-        </View>
-
-        <View style={commonStyles.segmentedRow}>
-          {ROUND_VISIBILITY.map((mode) => {
-            const active = visibility === mode;
-            return (
-              <Pressable key={mode} onPress={() => setVisibility(mode)} style={[commonStyles.segmentedButton, active ? commonStyles.segmentedButtonActive : null]}>
-                <Text style={[commonStyles.segmentedLabel, active ? commonStyles.segmentedLabelActive : null]}>
-                  {mode === 'public' ? 'Public leaderboard' : 'Friends leaderboard'}
-                </Text>
+                <Text style={[commonStyles.segmentedLabel, active ? commonStyles.segmentedLabelActive : null]}>{option}</Text>
               </Pressable>
             );
           })}
@@ -247,33 +253,19 @@ export default function LogRoundScreen() {
 
       <SurfaceCard>
         <Text style={commonStyles.cardTitle}>Players</Text>
-        {isScrambleFormat(format) ? <TextField label="Team name" value={teamName} onChangeText={setTeamName} placeholder="Cart Path Only" /> : null}
+        {isScrambleFormat(format) ? <TextField label="Team" value={teamName} onChangeText={setTeamName} placeholder="Cart Path Only" /> : null}
+        <TextField label="Find players" value={playerQuery} onChangeText={setPlayerQuery} placeholder="Name or username" />
         <View style={commonStyles.compactSection}>
           {players.map((slot, index) => (
             <View key={index} style={styles.playerSlot}>
-              <TextField
-                label={index === 0 ? 'Player 1' : `Player ${index + 1}`}
-                value={slot.name}
-                onChangeText={(value) => updateManualName(index, value)}
-                placeholder={index === 0 ? profile?.name ?? 'You' : 'Teammate name'}
-              />
-              {index > 0 && knownPlayers.length ? (
+              <Text style={commonStyles.settingTitle}>{index + 1}. {slot.name || 'Select player'}</Text>
+              {index > 0 ? (
                 <View style={commonStyles.chipRow}>
-                  {knownPlayers.map((member) => {
-                    const active = slot.id === member.uid;
-                    return (
-                      <Pressable
-                        key={member.uid}
-                        onPress={() => selectKnownPlayer(index, member)}
-                        style={[
-                          commonStyles.subtleChip,
-                          active ? { backgroundColor: theme.colors.badgeBackground, borderColor: theme.colors.primary } : null,
-                        ]}
-                      >
-                        <Text style={[commonStyles.subtleChipText, active ? { color: theme.colors.primary } : null]}>{member.name}</Text>
-                      </Pressable>
-                    );
-                  })}
+                  {playerOptions.map((option) => (
+                    <Pressable key={option.uid} onPress={() => selectPlayer(index, option)} style={commonStyles.subtleChip}>
+                      <Text style={commonStyles.subtleChipText}>{option.name}</Text>
+                    </Pressable>
+                  ))}
                 </View>
               ) : null}
             </View>
@@ -282,115 +274,48 @@ export default function LogRoundScreen() {
       </SurfaceCard>
 
       <SurfaceCard>
-        <Text style={commonStyles.cardTitle}>Scorecard</Text>
-        <TextField label="Date" value={playedOn} onChangeText={setPlayedOn} placeholder="YYYY-MM-DD" />
-
-        {selectedCourse?.tees.length ? (
-          <View style={commonStyles.compactSection}>
-            <Text style={commonStyles.settingTitle}>Tee box</Text>
-            <View style={commonStyles.chipRow}>
-              {selectedCourse.tees.map((tee) => {
-                const active = tee.id === teeBoxId;
-                return (
-                  <Pressable
-                    key={tee.id}
-                    onPress={() => setTeeBoxId(tee.id)}
-                    style={[
-                      commonStyles.subtleChip,
-                      active ? { backgroundColor: theme.colors.badgeBackground, borderColor: theme.colors.primary } : null,
-                    ]}
-                  >
-                    <Text style={[commonStyles.subtleChipText, active ? { color: theme.colors.primary } : null]}>{tee.name}</Text>
-                  </Pressable>
-                );
-              })}
-            </View>
+        <View style={commonStyles.rowBetween}>
+          <View>
+            <Text style={commonStyles.cardTitle}>Hole {activeHoleIndex + 1}</Text>
+            <Text style={commonStyles.cardCopy}>
+              Par {activeHole?.par ?? '-'} / {activeHoleYards ? `${activeHoleYards} yds` : selectedTee?.name ?? 'Tee'}
+            </Text>
           </View>
-        ) : null}
-
-        {format === 'individual' ? (
-          <View style={commonStyles.segmentedRow}>
-            {[
-              { key: 'total' as const, label: 'Total score' },
-              { key: 'holes' as const, label: 'Hole by hole' },
-            ].map((option) => {
-              const active = scoreMode === option.key;
-              return (
-                <Pressable key={option.key} onPress={() => setScoreMode(option.key)} style={[commonStyles.segmentedButton, active ? commonStyles.segmentedButtonActive : null]}>
-                  <Text style={[commonStyles.segmentedLabel, active ? commonStyles.segmentedLabelActive : null]}>{option.label}</Text>
-                </Pressable>
-              );
-            })}
-          </View>
-        ) : null}
-
-        {scoreMode === 'total' || format !== 'individual' ? (
-          <TextField label="Total score" value={totalScore} onChangeText={setTotalScore} keyboardType="number-pad" placeholder={isScrambleFormat(format) ? '68' : '84'} />
-        ) : (
-          <View style={commonStyles.compactSection}>
-            <Text style={commonStyles.settingTitle}>Hole-by-hole scores</Text>
-            <View style={styles.holeGrid}>
-              {Array.from({ length: holesPlayed }, (_, index) => (
-                <View key={index} style={styles.holeCell}>
-                  <Text style={commonStyles.smallMuted}>Hole {index + 1}</Text>
-                  <TextInput
-                    keyboardType="number-pad"
-                    placeholderTextColor={theme.colors.muted}
-                    style={[
-                      styles.holeInput,
-                      {
-                        borderColor: theme.colors.border,
-                        backgroundColor: theme.colors.surfaceAlt,
-                        color: theme.colors.text,
-                      },
-                    ]}
-                    value={holeScoreInputs[index]}
-                    onChangeText={(value) =>
-                      setHoleScoreInputs((current) => {
-                        const next = [...current];
-                        next[index] = value;
-                        return next;
-                      })
-                    }
-                  />
-                </View>
-              ))}
-            </View>
-            <Text style={commonStyles.smallMuted}>{allHoleScoresFilled ? `Computed total: ${computedHoleTotal}` : 'Fill every hole to compute the total score.'}</Text>
-          </View>
-        )}
-
-        <TextField label="Notes" value={notes} onChangeText={setNotes} placeholder="Windy front nine, birdied 17." multiline />
-      </SurfaceCard>
-
-      <SurfaceCard>
-        <Text style={commonStyles.cardTitle}>Group filters</Text>
-        <Text style={commonStyles.cardCopy}>Optional: show this round when a group filters leaderboards or activity.</Text>
-        <View style={commonStyles.chipRow}>
-          {groups.map((group) => {
-            const active = relatedGroupIds.includes(group.id);
-            return (
-              <Pressable
-                key={group.id}
-                onPress={() => toggleGroup(group.id)}
-                style={[
-                  commonStyles.subtleChip,
-                  active ? { backgroundColor: theme.colors.badgeBackground, borderColor: theme.colors.primary } : null,
-                ]}
-              >
-                <Text style={[commonStyles.subtleChipText, active ? { color: theme.colors.primary } : null]}>{group.name}</Text>
-              </Pressable>
-            );
-          })}
+          <Text style={commonStyles.statValue}>{completedScores}/{holesPlayed}</Text>
         </View>
-        <Text style={commonStyles.smallMuted}>
-          {selectedCourse ? `This score will compete at ${selectedCourse.name}.` : 'Pick a course to continue.'}
-        </Text>
-        <PrimaryButton
-          label={busy ? 'Logging round...' : 'Post score'}
-          onPress={handleLogRound}
-          disabled={busy || !canSubmit || (scoreMode === 'holes' && format === 'individual' && !allHoleScoresFilled)}
+
+        <View style={[styles.holeMap, { backgroundColor: theme.colors.surfaceAlt, borderColor: theme.colors.border }]}>
+          <View style={[styles.green, { backgroundColor: theme.colors.primary }]} />
+          <View style={[styles.fairway, { backgroundColor: theme.colors.badgeBackground }]} />
+          <View style={[styles.teeMarker, { backgroundColor: theme.colors.accent }]} />
+        </View>
+
+        <TextInput
+          keyboardType="number-pad"
+          onChangeText={updateScore}
+          placeholder="Score"
+          placeholderTextColor={theme.colors.muted}
+          style={[styles.scoreInput, { borderColor: theme.colors.border, backgroundColor: theme.colors.surfaceAlt, color: theme.colors.text }]}
+          value={activeHoleScore}
         />
+
+        <View style={commonStyles.actionRowTight}>
+          <PrimaryButton
+            label="Back"
+            onPress={() => setActiveHoleIndex((current) => Math.max(0, current - 1))}
+            disabled={activeHoleIndex === 0}
+            variant="secondary"
+          />
+          {activeHoleIndex < holesPlayed - 1 ? (
+            <PrimaryButton
+              label="Next"
+              onPress={() => setActiveHoleIndex((current) => Math.min(holesPlayed - 1, current + 1))}
+              disabled={!Number(activeHoleScore)}
+            />
+          ) : (
+            <PrimaryButton label={busy ? 'Posting...' : 'Post'} onPress={handlePostRound} disabled={busy || !canPost} />
+          )}
+        </View>
       </SurfaceCard>
     </AppScreen>
   );
@@ -401,8 +326,28 @@ function buildPlayerSlots(current: PlayerSlot[], count: number, currentUserId: s
     if (index === 0) {
       return { id: currentUserId, name: current[0]?.name || currentUserName };
     }
-    return current[index] ?? { id: null, name: '' };
+    return current[index]?.id ? current[index] : { id: null, name: '' };
   });
+}
+
+function toPlayerOption(profile: Profile): PlayerOption {
+  return {
+    uid: profile.uid,
+    name: profile.name,
+    username: profile.username,
+  };
+}
+
+function toPlayerSearchOption(result: UserSearchResult): PlayerOption {
+  return {
+    uid: result.uid,
+    name: result.name,
+    username: result.username,
+  };
+}
+
+function mergePlayerOptions(first: PlayerOption[], second: PlayerOption[]) {
+  return Array.from(new Map([...first, ...second].map((player) => [player.uid, player])).values());
 }
 
 const styles = StyleSheet.create({
@@ -415,21 +360,45 @@ const styles = StyleSheet.create({
   playerSlot: {
     gap: spacing.xs,
   },
-  holeGrid: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: spacing.sm,
-  },
-  holeCell: {
-    width: '30%',
-    gap: spacing.xs,
-  },
-  holeInput: {
-    minHeight: 48,
+  holeMap: {
     borderRadius: 8,
     borderWidth: 1,
+    height: 220,
+    overflow: 'hidden',
+    position: 'relative',
+  },
+  green: {
+    borderRadius: 999,
+    height: 44,
+    position: 'absolute',
+    right: 28,
+    top: 24,
+    width: 70,
+  },
+  fairway: {
+    borderRadius: 80,
+    height: 180,
+    left: 72,
+    position: 'absolute',
+    top: 20,
+    transform: [{ rotate: '18deg' }],
+    width: 76,
+  },
+  teeMarker: {
+    borderRadius: 12,
+    bottom: 22,
+    height: 24,
+    left: 34,
+    position: 'absolute',
+    width: 42,
+  },
+  scoreInput: {
+    borderRadius: 8,
+    borderWidth: 1,
+    fontSize: 24,
+    fontWeight: '700',
+    minHeight: 58,
     paddingHorizontal: spacing.md,
-    fontSize: 15,
-    fontWeight: '600',
+    textAlign: 'center',
   },
 });
