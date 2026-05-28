@@ -1,5 +1,3 @@
-import * as Location from 'expo-location';
-
 import { Course } from '@/types/models';
 
 export type CourseSuggestion = {
@@ -13,25 +11,30 @@ export async function suggestNearestCourse(courses: Course[]): Promise<CourseSug
     return null;
   }
 
-  const permission = await Location.requestForegroundPermissionsAsync();
-  if (permission.status !== 'granted') {
+  try {
+    const Location = await import('expo-location');
+    const permission = await Location.requestForegroundPermissionsAsync();
+    if (permission.status !== 'granted') {
+      return null;
+    }
+
+    const current = await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.Balanced });
+    const nearest = candidates
+      .map((course) => ({
+        course,
+        distanceFromCourseMeters: getDistanceMeters(
+          current.coords.latitude,
+          current.coords.longitude,
+          course.latitude ?? 0,
+          course.longitude ?? 0
+        ),
+      }))
+      .sort((left, right) => left.distanceFromCourseMeters - right.distanceFromCourseMeters)[0];
+
+    return nearest ?? null;
+  } catch {
     return null;
   }
-
-  const current = await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.Balanced });
-  const nearest = candidates
-    .map((course) => ({
-      course,
-      distanceFromCourseMeters: getDistanceMeters(
-        current.coords.latitude,
-        current.coords.longitude,
-        course.latitude ?? 0,
-        course.longitude ?? 0
-      ),
-    }))
-    .sort((left, right) => left.distanceFromCourseMeters - right.distanceFromCourseMeters)[0];
-
-  return nearest ?? null;
 }
 
 function getDistanceMeters(startLatitude: number, startLongitude: number, endLatitude: number, endLongitude: number) {
