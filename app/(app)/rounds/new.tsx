@@ -30,7 +30,7 @@ type PlayerOption = {
 };
 
 export default function LogRoundScreen() {
-  const { busy, courses, getGroupDetails, groups, logRound, profile, searchUsers } = useApp();
+  const { busy, courses, getGroupDetails, groups, logRound, profile, rounds, searchUsers } = useApp();
   const { theme } = useThemePreferences();
   const commonStyles = createCommonStyles(theme.colors);
   const { courseId: routeCourseId, groupId: routeGroupId } = useLocalSearchParams<{ courseId?: string; groupId?: string }>();
@@ -47,6 +47,7 @@ export default function LogRoundScreen() {
   const [players, setPlayers] = useState<PlayerSlot[]>([]);
   const [holeScoreInputs, setHoleScoreInputs] = useState<string[]>(Array.from({ length: 18 }, () => ''));
   const [activeHoleIndex, setActiveHoleIndex] = useState(0);
+  const [roundStarted, setRoundStarted] = useState(false);
   const [locationState, setLocationState] = useState<'checking' | 'suggested' | 'manual'>('checking');
   const [distanceFromCourseMeters, setDistanceFromCourseMeters] = useState<number | null>(null);
 
@@ -61,7 +62,27 @@ export default function LogRoundScreen() {
   const totalScore = holeScoreInputs.slice(0, holesPlayed).reduce((sum, value) => sum + (Number(value) || 0), 0);
   const playerIds = players.map((player) => player.id).filter(Boolean) as string[];
   const playerNames = players.map((player) => player.name.trim()).filter(Boolean);
+  const invitedPlayers = players.slice(1).filter((player) => player.id);
   const canPost = Boolean(selectedCourse && allHoleScoresFilled && playerIds.length === requiredPlayers && playerNames.length === requiredPlayers);
+  const canStart = Boolean(selectedCourse && selectedTee && playerIds.length === requiredPlayers && playerNames.length === requiredPlayers);
+  const recentPlayers = useMemo(() => {
+    if (!profile) {
+      return [];
+    }
+    const byId = new Map<string, PlayerOption>();
+    rounds.forEach((round) => {
+      round.playerIds.forEach((playerId, index) => {
+        if (playerId !== profile.uid) {
+          byId.set(playerId, {
+            uid: playerId,
+            name: round.playerNames[index] || 'Player',
+            username: '',
+          });
+        }
+      });
+    });
+    return Array.from(byId.values()).slice(0, 8);
+  }, [profile, rounds]);
 
   useEffect(() => {
     setPlayers((current) => buildPlayerSlots(current, requiredPlayers, profile?.uid ?? null, profile?.name ?? 'You'));
@@ -182,6 +203,20 @@ export default function LogRoundScreen() {
     setPlayers((current) => current.map((slot, index) => (index === slotIndex ? { id: player.uid, name: player.name } : slot)));
   }
 
+  function invitePlayer(player: PlayerOption) {
+    setPlayers((current) => {
+      const emptyIndex = current.findIndex((slot, index) => index > 0 && !slot.id);
+      if (emptyIndex === -1 || current.some((slot) => slot.id === player.uid)) {
+        return current;
+      }
+      return current.map((slot, index) => (index === emptyIndex ? { id: player.uid, name: player.name } : slot));
+    });
+  }
+
+  function removePlayer(uid: string) {
+    setPlayers((current) => current.map((slot, index) => (index > 0 && slot.id === uid ? { id: null, name: '' } : slot)));
+  }
+
   function updateScore(value: string) {
     setHoleScoreInputs((current) => {
       const next = [...current];
@@ -191,6 +226,69 @@ export default function LogRoundScreen() {
   }
 
   const playerOptions = mergePlayerOptions(knownPlayers, searchResults).filter((option) => !playerIds.includes(option.uid));
+  const recentPlayerOptions = recentPlayers.filter((option) => !playerIds.includes(option.uid));
+
+  if (roundStarted) {
+    return (
+      <AppScreen contentContainerStyle={[commonStyles.pageStack, styles.playScreen]}>
+        <View style={commonStyles.rowBetween}>
+          <View>
+            <Text style={commonStyles.smallMuted}>{selectedCourse?.name}</Text>
+            <Text style={commonStyles.cardTitle}>Hole {activeHoleIndex + 1}</Text>
+          </View>
+          <Text style={commonStyles.statValue}>{completedScores}/{holesPlayed}</Text>
+        </View>
+
+        <View style={styles.holeInfoRow}>
+          <SurfaceCard style={styles.holeInfoCard}>
+            <Text style={commonStyles.smallMuted}>Par</Text>
+            <Text style={commonStyles.statValue}>{activeHole?.par ?? '-'}</Text>
+          </SurfaceCard>
+          <SurfaceCard style={styles.holeInfoCard}>
+            <Text style={commonStyles.smallMuted}>Yards</Text>
+            <Text style={commonStyles.statValue}>{activeHoleYards ?? '--'}</Text>
+          </SurfaceCard>
+          <SurfaceCard style={styles.holeInfoCard}>
+            <Text style={commonStyles.smallMuted}>Tee</Text>
+            <Text style={commonStyles.settingTitle}>{selectedTee?.name ?? '--'}</Text>
+          </SurfaceCard>
+        </View>
+
+        <View style={[styles.fullHoleMap, { backgroundColor: theme.colors.surfaceAlt, borderColor: theme.colors.border }]}>
+          <View style={[styles.green, { backgroundColor: theme.colors.primary }]} />
+          <View style={[styles.fairwayLarge, { backgroundColor: theme.colors.badgeBackground }]} />
+          <View style={[styles.teeMarker, { backgroundColor: theme.colors.accent }]} />
+        </View>
+
+        <TextInput
+          keyboardType="number-pad"
+          onChangeText={updateScore}
+          placeholder="Score"
+          placeholderTextColor={theme.colors.muted}
+          style={[styles.scoreInput, { borderColor: theme.colors.border, backgroundColor: theme.colors.surfaceAlt, color: theme.colors.text }]}
+          value={activeHoleScore}
+        />
+
+        <View style={commonStyles.actionRowTight}>
+          <PrimaryButton
+            label="Back"
+            onPress={() => setActiveHoleIndex((current) => Math.max(0, current - 1))}
+            disabled={activeHoleIndex === 0}
+            variant="secondary"
+          />
+          {activeHoleIndex < holesPlayed - 1 ? (
+            <PrimaryButton
+              label="Next"
+              onPress={() => setActiveHoleIndex((current) => Math.min(holesPlayed - 1, current + 1))}
+              disabled={!Number(activeHoleScore)}
+            />
+          ) : (
+            <PrimaryButton label={busy ? 'Posting...' : 'Post'} onPress={handlePostRound} disabled={busy || !canPost} />
+          )}
+        </View>
+      </AppScreen>
+    );
+  }
 
   return (
     <AppScreen scrollable contentContainerStyle={commonStyles.pageStack}>
@@ -255,6 +353,27 @@ export default function LogRoundScreen() {
         <Text style={commonStyles.cardTitle}>Players</Text>
         {isScrambleFormat(format) ? <TextField label="Team" value={teamName} onChangeText={setTeamName} placeholder="Cart Path Only" /> : null}
         <TextField label="Find players" value={playerQuery} onChangeText={setPlayerQuery} placeholder="Name or username" />
+        {invitedPlayers.length ? (
+          <View style={commonStyles.chipRow}>
+            {invitedPlayers.map((player) => (
+              <Pressable key={player.id} onPress={() => player.id && removePlayer(player.id)} style={[commonStyles.subtleChip, { borderColor: theme.colors.primary }]}>
+                <Text style={[commonStyles.subtleChipText, { color: theme.colors.primary }]}>{player.name}</Text>
+              </Pressable>
+            ))}
+          </View>
+        ) : null}
+        {recentPlayerOptions.length ? (
+          <View style={commonStyles.compactSection}>
+            <Text style={commonStyles.settingTitle}>Recently played</Text>
+            <View style={commonStyles.chipRow}>
+              {recentPlayerOptions.map((option) => (
+                <Pressable key={option.uid} onPress={() => invitePlayer(option)} style={commonStyles.subtleChip}>
+                  <Text style={commonStyles.subtleChipText}>Invite {option.name}</Text>
+                </Pressable>
+              ))}
+            </View>
+          </View>
+        ) : null}
         <View style={commonStyles.compactSection}>
           {players.map((slot, index) => (
             <View key={index} style={styles.playerSlot}>
@@ -263,7 +382,7 @@ export default function LogRoundScreen() {
                 <View style={commonStyles.chipRow}>
                   {playerOptions.map((option) => (
                     <Pressable key={option.uid} onPress={() => selectPlayer(index, option)} style={commonStyles.subtleChip}>
-                      <Text style={commonStyles.subtleChipText}>{option.name}</Text>
+                      <Text style={commonStyles.subtleChipText}>Invite {option.name}</Text>
                     </Pressable>
                   ))}
                 </View>
@@ -276,46 +395,12 @@ export default function LogRoundScreen() {
       <SurfaceCard>
         <View style={commonStyles.rowBetween}>
           <View>
-            <Text style={commonStyles.cardTitle}>Hole {activeHoleIndex + 1}</Text>
-            <Text style={commonStyles.cardCopy}>
-              Par {activeHole?.par ?? '-'} / {activeHoleYards ? `${activeHoleYards} yds` : selectedTee?.name ?? 'Tee'}
-            </Text>
+            <Text style={commonStyles.cardTitle}>Ready</Text>
+            <Text style={commonStyles.cardCopy}>{selectedCourse?.name ?? 'Select course'} / {getRoundFormatLabel(format)}</Text>
           </View>
-          <Text style={commonStyles.statValue}>{completedScores}/{holesPlayed}</Text>
+          <Text style={commonStyles.statValue}>{playerIds.length}/{requiredPlayers}</Text>
         </View>
-
-        <View style={[styles.holeMap, { backgroundColor: theme.colors.surfaceAlt, borderColor: theme.colors.border }]}>
-          <View style={[styles.green, { backgroundColor: theme.colors.primary }]} />
-          <View style={[styles.fairway, { backgroundColor: theme.colors.badgeBackground }]} />
-          <View style={[styles.teeMarker, { backgroundColor: theme.colors.accent }]} />
-        </View>
-
-        <TextInput
-          keyboardType="number-pad"
-          onChangeText={updateScore}
-          placeholder="Score"
-          placeholderTextColor={theme.colors.muted}
-          style={[styles.scoreInput, { borderColor: theme.colors.border, backgroundColor: theme.colors.surfaceAlt, color: theme.colors.text }]}
-          value={activeHoleScore}
-        />
-
-        <View style={commonStyles.actionRowTight}>
-          <PrimaryButton
-            label="Back"
-            onPress={() => setActiveHoleIndex((current) => Math.max(0, current - 1))}
-            disabled={activeHoleIndex === 0}
-            variant="secondary"
-          />
-          {activeHoleIndex < holesPlayed - 1 ? (
-            <PrimaryButton
-              label="Next"
-              onPress={() => setActiveHoleIndex((current) => Math.min(holesPlayed - 1, current + 1))}
-              disabled={!Number(activeHoleScore)}
-            />
-          ) : (
-            <PrimaryButton label={busy ? 'Posting...' : 'Post'} onPress={handlePostRound} disabled={busy || !canPost} />
-          )}
-        </View>
+        <PrimaryButton label="Start" onPress={() => setRoundStarted(true)} disabled={!canStart} />
       </SurfaceCard>
     </AppScreen>
   );
@@ -351,6 +436,9 @@ function mergePlayerOptions(first: PlayerOption[], second: PlayerOption[]) {
 }
 
 const styles = StyleSheet.create({
+  playScreen: {
+    flex: 1,
+  },
   optionCard: {
     borderRadius: 8,
     borderWidth: 1,
@@ -359,6 +447,14 @@ const styles = StyleSheet.create({
   },
   playerSlot: {
     gap: spacing.xs,
+  },
+  holeInfoRow: {
+    flexDirection: 'row',
+    gap: spacing.sm,
+  },
+  holeInfoCard: {
+    flex: 1,
+    minHeight: 74,
   },
   holeMap: {
     borderRadius: 8,
@@ -383,6 +479,23 @@ const styles = StyleSheet.create({
     top: 20,
     transform: [{ rotate: '18deg' }],
     width: 76,
+  },
+  fullHoleMap: {
+    borderRadius: 8,
+    borderWidth: 1,
+    flex: 1,
+    minHeight: 320,
+    overflow: 'hidden',
+    position: 'relative',
+  },
+  fairwayLarge: {
+    borderRadius: 120,
+    height: '82%',
+    left: '34%',
+    position: 'absolute',
+    top: '9%',
+    transform: [{ rotate: '18deg' }],
+    width: '24%',
   },
   teeMarker: {
     borderRadius: 12,
