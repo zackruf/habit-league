@@ -18,6 +18,7 @@ import {
   loadIncomingFriendRequests as loadIncomingFriendRequestsRequest,
   logRound as logRoundRequest,
   recordActivity as recordActivityRequest,
+  respondToRoundInvite as respondToRoundInviteRequest,
   searchCourseCatalog as searchCourseCatalogRequest,
   sendFriendRequest as sendFriendRequestRequest,
   loadUserBundle,
@@ -29,10 +30,13 @@ import {
   signIn as signInRequest,
   signOut as signOutRequest,
   signUp as signUpRequest,
+  startActiveRound as startActiveRoundRequest,
   toggleHabitCheckIn as toggleHabitCheckInRequest,
+  updateActiveRound as updateActiveRoundRequest,
   updateLeagueChallengeLifecycle as updateLeagueChallengeLifecycleRequest,
   updateGroup as updateGroupRequest,
   updateRoundVisibility as updateRoundVisibilityRequest,
+  completeActiveRound as completeActiveRoundRequest,
   usingFirebaseBackend,
 } from '@/lib/data';
 import { consumeRestoreStreak } from '@/lib/shop';
@@ -40,6 +44,7 @@ import {
   ActivityInput,
   ActivityItem,
   ActivityShoutoutType,
+  ActiveRound,
   AppBundle,
   Course,
   CourseHole,
@@ -52,6 +57,8 @@ import {
   Round,
   RoundFormat,
   RoundHoleScore,
+  RoundInvite,
+  RoundInviteStatus,
   RoundVisibility,
   SessionUser,
   TeeBox,
@@ -83,6 +90,8 @@ type AppContextValue = {
   groups: AppBundle['groups'];
   courses: Course[];
   rounds: Round[];
+  activeRounds: ActiveRound[];
+  roundInvites: RoundInvite[];
   searchCourses: (searchTerm: string) => Promise<CourseSearchResult[]>;
   signIn: (email: string, password: string) => Promise<ActionResult>;
   signUp: (name: string, email: string, password: string) => Promise<ActionResult>;
@@ -127,6 +136,23 @@ type AppContextValue = {
     locationVerified?: boolean;
     distanceFromCourseMeters?: number | null;
   }) => Promise<ActionResult>;
+  startActiveRound: (input: {
+    groupId?: string | null;
+    relatedGroupIds?: string[];
+    courseId: string;
+    format: RoundFormat;
+    teeBoxId?: string | null;
+    holesPlayed: 9 | 18;
+    playerIds: string[];
+    playerNames: string[];
+    teamName?: string;
+    visibility: RoundVisibility;
+    locationVerified?: boolean;
+    distanceFromCourseMeters?: number | null;
+  }) => Promise<ActionResult & { activeRound?: ActiveRound }>;
+  updateActiveRound: (input: { activeRoundId: string; holeScores?: RoundHoleScore[]; activeHoleIndex?: number }) => Promise<ActionResult>;
+  completeActiveRound: (activeRoundId: string) => Promise<ActionResult>;
+  respondToRoundInvite: (inviteId: string, status: Extract<RoundInviteStatus, 'accepted' | 'declined'>) => Promise<ActionResult>;
   updateRoundVisibility: (roundId: string, visibility: RoundVisibility) => Promise<ActionResult>;
   updateGroup: (groupId: string, input: GroupSettingsInput) => Promise<ActionResult>;
   joinGroup: (joinCode: string) => Promise<GroupActionResult>;
@@ -157,6 +183,8 @@ export function AppProvider({ children, fallback }: PropsWithChildren<{ fallback
   const [groups, setGroups] = useState<AppBundle['groups']>([]);
   const [courses, setCourses] = useState<Course[]>([]);
   const [rounds, setRounds] = useState<Round[]>([]);
+  const [activeRounds, setActiveRounds] = useState<ActiveRound[]>([]);
+  const [roundInvites, setRoundInvites] = useState<RoundInvite[]>([]);
 
   const hydrateBundle = useCallback((bundle: AppBundle | null) => {
     setProfile(bundle?.profile ?? null);
@@ -164,6 +192,8 @@ export function AppProvider({ children, fallback }: PropsWithChildren<{ fallback
     setGroups(bundle?.groups ?? []);
     setCourses(bundle?.courses ?? []);
     setRounds(bundle?.rounds ?? []);
+    setActiveRounds(bundle?.activeRounds ?? []);
+    setRoundInvites(bundle?.roundInvites ?? []);
   }, []);
 
   const getBootstrapErrorMessage = useCallback((error: unknown) => {
@@ -513,6 +543,90 @@ export function AppProvider({ children, fallback }: PropsWithChildren<{ fallback
     [refreshUserData, session]
   );
 
+  const startActiveRound = useCallback(
+    async (input: {
+      groupId?: string | null;
+      relatedGroupIds?: string[];
+      courseId: string;
+      format: RoundFormat;
+      teeBoxId?: string | null;
+      holesPlayed: 9 | 18;
+      playerIds: string[];
+      playerNames: string[];
+      teamName?: string;
+      visibility: RoundVisibility;
+      locationVerified?: boolean;
+      distanceFromCourseMeters?: number | null;
+    }) => {
+      if (!session) {
+        return { ok: false, message: 'No active session.' };
+      }
+      if (!input.courseId.trim()) {
+        return { ok: false, message: 'Choose a course first.' };
+      }
+      if (!input.playerIds.length || input.playerIds.length !== input.playerNames.length) {
+        return { ok: false, message: 'Invite the players first.' };
+      }
+
+      setBusy(true);
+      const result = await startActiveRoundRequest(session.uid, input);
+      if (!result) {
+        setBusy(false);
+        return { ok: false, message: 'That course could not be found.' };
+      }
+      await refreshUserData(session);
+      setBusy(false);
+      return { ok: true, message: 'Round started.', activeRound: result.activeRound };
+    },
+    [refreshUserData, session]
+  );
+
+  const updateActiveRound = useCallback(
+    async (input: { activeRoundId: string; holeScores?: RoundHoleScore[]; activeHoleIndex?: number }) => {
+      if (!session) {
+        return { ok: false, message: 'No active session.' };
+      }
+      return updateActiveRoundRequest(session.uid, input);
+    },
+    [session]
+  );
+
+  const completeActiveRound = useCallback(
+    async (activeRoundId: string) => {
+      if (!session) {
+        return { ok: false, message: 'No active session.' };
+      }
+
+      setBusy(true);
+      const result = await completeActiveRoundRequest(session.uid, activeRoundId);
+      if (!result) {
+        setBusy(false);
+        return { ok: false, message: 'That round could not be posted.' };
+      }
+      await refreshUserData(session);
+      setBusy(false);
+      return { ok: true, message: 'Round posted.' };
+    },
+    [refreshUserData, session]
+  );
+
+  const respondToRoundInvite = useCallback(
+    async (inviteId: string, status: Extract<RoundInviteStatus, 'accepted' | 'declined'>) => {
+      if (!session) {
+        return { ok: false, message: 'No active session.' };
+      }
+
+      setBusy(true);
+      const result = await respondToRoundInviteRequest(session.uid, inviteId, status);
+      if (result.ok) {
+        await refreshUserData(session);
+      }
+      setBusy(false);
+      return result;
+    },
+    [refreshUserData, session]
+  );
+
   const updateRoundVisibility = useCallback(
     async (roundId: string, visibility: RoundVisibility) => {
       if (!session) {
@@ -703,6 +817,8 @@ export function AppProvider({ children, fallback }: PropsWithChildren<{ fallback
       groups,
       courses,
       rounds,
+      activeRounds,
+      roundInvites,
       searchCourses,
       signIn,
       signUp,
@@ -715,6 +831,10 @@ export function AppProvider({ children, fallback }: PropsWithChildren<{ fallback
       createGroup,
       createCourse,
       logRound,
+      startActiveRound,
+      updateActiveRound,
+      completeActiveRound,
+      respondToRoundInvite,
       updateRoundVisibility,
       updateGroup,
       joinGroup,
@@ -743,6 +863,8 @@ export function AppProvider({ children, fallback }: PropsWithChildren<{ fallback
       groups,
       courses,
       rounds,
+      activeRounds,
+      roundInvites,
       searchCourses,
       signIn,
       signUp,
@@ -755,6 +877,10 @@ export function AppProvider({ children, fallback }: PropsWithChildren<{ fallback
       createGroup,
       createCourse,
       logRound,
+      startActiveRound,
+      updateActiveRound,
+      completeActiveRound,
+      respondToRoundInvite,
       updateRoundVisibility,
       updateGroup,
       joinGroup,

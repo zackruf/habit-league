@@ -27,6 +27,7 @@ import {
   ActivityItem,
   ActivityShoutoutType,
   ActivityShoutouts,
+  ActiveRound,
   AppBundle,
   Course,
   DemoStore,
@@ -41,6 +42,8 @@ import {
   LeaderboardEntry,
   Profile,
   RoundFormat,
+  RoundInvite,
+  RoundInviteStatus,
   RoundVisibility,
   Round,
   RoundHoleScore,
@@ -61,6 +64,8 @@ const blankStore: DemoStore = {
   habits: {},
   courses: {},
   rounds: {},
+  activeRounds: {},
+  roundInvites: {},
   groups: {},
   groupMessages: {},
   activities: [],
@@ -83,6 +88,27 @@ export type LogRoundInput = {
   notes?: string;
   locationVerified?: boolean;
   distanceFromCourseMeters?: number | null;
+};
+
+export type StartActiveRoundInput = {
+  groupId?: string | null;
+  relatedGroupIds?: string[];
+  courseId: string;
+  format: RoundFormat;
+  teeBoxId?: string | null;
+  holesPlayed: 9 | 18;
+  playerIds: string[];
+  playerNames: string[];
+  teamName?: string;
+  visibility: RoundVisibility;
+  locationVerified?: boolean;
+  distanceFromCourseMeters?: number | null;
+};
+
+export type UpdateActiveRoundInput = {
+  activeRoundId: string;
+  holeScores?: RoundHoleScore[];
+  activeHoleIndex?: number;
 };
 
 export async function restoreSession(): Promise<SessionUser | null> {
@@ -199,12 +225,15 @@ export async function loadUserBundle(uid: string): Promise<AppBundle | null> {
       })
     );
     const groupIds = (groups.filter(Boolean) as Group[]).map((group) => group.id);
-    const [courses, groupRounds, playerRounds] = await Promise.all([
+    const [courses, groupRounds, playerRounds, loadedActiveRounds, roundInvites] = await Promise.all([
       loadCoursesForGroups(groupIds),
       loadRoundsForGroups(groupIds),
       loadRoundsForPlayer(uid),
+      loadActiveRoundsForUser(uid),
+      loadRoundInvitesForUser(uid),
     ]);
     const rounds = dedupeRounds([...groupRounds, ...playerRounds]);
+    const activeRounds = filterVisibleActiveRounds(uid, loadedActiveRounds, roundInvites);
 
     return {
       profile,
@@ -212,6 +241,8 @@ export async function loadUserBundle(uid: string): Promise<AppBundle | null> {
       groups: groups.filter(Boolean) as Group[],
       courses,
       rounds,
+      activeRounds,
+      roundInvites,
     };
   }
 
@@ -249,6 +280,17 @@ export async function loadUserBundle(uid: string): Promise<AppBundle | null> {
       );
     })
     .sort((left, right) => right.playedOn.localeCompare(left.playedOn) || right.createdAt.localeCompare(left.createdAt));
+  const loadedActiveRounds = Object.values(store.activeRounds ?? {})
+    .map((round) => normalizeActiveRound(round))
+    .filter((round): round is ActiveRound => Boolean(round))
+    .filter((round) => round.status === 'active' && round.playerIds.includes(uid))
+    .sort((left, right) => right.updatedAt.localeCompare(left.updatedAt));
+  const roundInvites = Object.values(store.roundInvites ?? {})
+    .map((invite) => normalizeRoundInvite(invite))
+    .filter((invite): invite is RoundInvite => Boolean(invite))
+    .filter((invite) => invite.inviteeId === uid || invite.inviterId === uid)
+    .sort((left, right) => right.createdAt.localeCompare(left.createdAt));
+  const activeRounds = filterVisibleActiveRounds(uid, loadedActiveRounds, roundInvites);
 
   return {
     profile,
@@ -256,6 +298,8 @@ export async function loadUserBundle(uid: string): Promise<AppBundle | null> {
     groups,
     courses,
     rounds,
+    activeRounds,
+    roundInvites,
   };
 }
 
@@ -780,6 +824,141 @@ export async function logRound(
   await writeDemoStore(store);
   await recordRoundActivities(storeRound, course, existingRounds, profile);
   return storeRound;
+}
+
+export async function startActiveRound(uid: string, input: StartActiveRoundInput) {
+  const profile = await loadProfileById(uid);
+  const course = await loadCourseById(input.courseId);
+  if (!profile || !course) {
+    return null;
+  }
+
+  const activeRound = buildActiveRound(uid, profile, course, input);
+  const invites = buildRoundInvites(activeRound, profile);
+
+  const db = firestore;
+  if (usingFirebaseBackend && db) {
+    await setDoc(doc(db, 'activeRounds', activeRound.id), activeRound);
+    await Promise.all(invites.map((invite) => setDoc(doc(db, 'roundInvites', invite.id), invite)));
+    return { activeRound, invites };
+  }
+
+  const store = await readDemoStore();
+  store.activeRounds[activeRound.id] = activeRound;
+  invites.forEach((invite) => {
+    store.roundInvites[invite.id] = invite;
+  });
+  await writeDemoStore(store);
+  return { activeRound, invites };
+}
+
+export async function updateActiveRound(uid: string, input: UpdateActiveRoundInput) {
+  const activeRound = await loadActiveRoundById(input.activeRoundId);
+  if (!activeRound || !activeRound.playerIds.includes(uid) || activeRound.status !== 'active') {
+    return { ok: false, message: 'That round could not be updated.' };
+  }
+
+  const patch: Partial<ActiveRound> = {
+    updatedAt: new Date().toISOString(),
+  };
+  if (input.holeScores) {
+    patch.holeScores = normalizeHoleScores(input.holeScores, activeRound.holesPlayed);
+  }
+  if (typeof input.activeHoleIndex === 'number') {
+    patch.activeHoleIndex = Math.max(0, Math.min(activeRound.holesPlayed - 1, input.activeHoleIndex));
+  }
+
+  const db = firestore;
+  if (usingFirebaseBackend && db) {
+    await updateDoc(doc(db, 'activeRounds', activeRound.id), patch);
+    return { ok: true, message: 'Round saved.' };
+  }
+
+  const store = await readDemoStore();
+  store.activeRounds[activeRound.id] = { ...activeRound, ...patch };
+  await writeDemoStore(store);
+  return { ok: true, message: 'Round saved.' };
+}
+
+export async function completeActiveRound(uid: string, activeRoundId: string) {
+  const activeRound = await loadActiveRoundById(activeRoundId);
+  if (!activeRound || !activeRound.playerIds.includes(uid) || activeRound.status !== 'active') {
+    return null;
+  }
+
+  const totalScore = activeRound.holeScores.reduce((sum, hole) => sum + hole.score, 0);
+  const invitesBeforeComplete = await loadRoundInvitesForActiveRound(activeRound.id);
+  const acceptedIds = new Set([
+    activeRound.createdBy,
+    ...invitesBeforeComplete.filter((invite) => invite.status !== 'declined').map((invite) => invite.inviteeId),
+  ]);
+  const finalPlayerIds = activeRound.playerIds.filter((playerId) => acceptedIds.has(playerId));
+  const finalPlayerNames = finalPlayerIds.map((playerId) => activeRound.playerNames[activeRound.playerIds.indexOf(playerId)] || 'Player');
+  const round = await logRound(uid, {
+    groupId: activeRound.groupId,
+    relatedGroupIds: activeRound.relatedGroupIds,
+    courseId: activeRound.courseId,
+    format: activeRound.format,
+    playedOn: activeRound.dateKey,
+    teeBoxId: activeRound.teeBoxId,
+    holesPlayed: activeRound.holesPlayed,
+    totalScore,
+    holeScores: activeRound.holeScores,
+    playerIds: finalPlayerIds,
+    playerNames: finalPlayerNames,
+    teamName: activeRound.teamName,
+    visibility: activeRound.visibility,
+    locationVerified: activeRound.locationVerified,
+    distanceFromCourseMeters: activeRound.distanceFromCourseMeters,
+  });
+  if (!round) {
+    return null;
+  }
+
+  const completedPatch: Partial<ActiveRound> = {
+    status: 'completed',
+    completedRoundId: round.id,
+    updatedAt: new Date().toISOString(),
+  };
+
+  const db = firestore;
+  if (usingFirebaseBackend && db) {
+    await updateDoc(doc(db, 'activeRounds', activeRound.id), completedPatch);
+    await Promise.all(invitesBeforeComplete.map((invite) => updateDoc(doc(db, 'roundInvites', invite.id), { roundId: round.id })));
+    return round;
+  }
+
+  const store = await readDemoStore();
+  store.activeRounds[activeRound.id] = { ...activeRound, ...completedPatch };
+  Object.values(store.roundInvites)
+    .filter((invite) => invite.activeRoundId === activeRound.id)
+    .forEach((invite) => {
+      store.roundInvites[invite.id] = { ...invite, roundId: round.id };
+    });
+  await writeDemoStore(store);
+  return round;
+}
+
+export async function respondToRoundInvite(uid: string, inviteId: string, status: Extract<RoundInviteStatus, 'accepted' | 'declined'>) {
+  const invite = await loadRoundInviteById(inviteId);
+  if (!invite || invite.inviteeId !== uid || invite.status !== 'pending') {
+    return { ok: false, message: 'That invite could not be updated.' };
+  }
+
+  const patch: Partial<RoundInvite> = {
+    status,
+    respondedAt: new Date().toISOString(),
+  };
+
+  if (usingFirebaseBackend && firestore) {
+    await updateDoc(doc(firestore, 'roundInvites', invite.id), patch);
+    return { ok: true, message: status === 'accepted' ? 'Invite accepted.' : 'Invite declined.' };
+  }
+
+  const store = await readDemoStore();
+  store.roundInvites[invite.id] = { ...invite, ...patch };
+  await writeDemoStore(store);
+  return { ok: true, message: status === 'accepted' ? 'Invite accepted.' : 'Invite declined.' };
 }
 
 export async function updateRoundVisibility(uid: string, roundId: string, visibility: RoundVisibility) {
@@ -1310,10 +1489,107 @@ async function loadRoundsForPlayer(uid: string) {
   }
 }
 
+async function loadActiveRoundsForUser(uid: string) {
+  if (!usingFirebaseBackend || !firestore) {
+    return [];
+  }
+
+  try {
+    const snapshot = await getDocs(query(collection(firestore, 'activeRounds'), where('playerIds', 'array-contains', uid), where('status', '==', 'active'), limit(10)));
+    return snapshot.docs
+      .map((entry) => normalizeActiveRound(entry.data() as ActiveRound))
+      .filter((round): round is ActiveRound => Boolean(round))
+      .sort((left, right) => right.updatedAt.localeCompare(left.updatedAt));
+  } catch (error) {
+    if (isFirestorePermissionError(error)) {
+      return [];
+    }
+    throw error;
+  }
+}
+
+async function loadRoundInvitesForUser(uid: string) {
+  if (!usingFirebaseBackend || !firestore) {
+    return [];
+  }
+
+  try {
+    const [incomingSnapshot, outgoingSnapshot] = await Promise.all([
+      getDocs(query(collection(firestore, 'roundInvites'), where('inviteeId', '==', uid), limit(25))),
+      getDocs(query(collection(firestore, 'roundInvites'), where('inviterId', '==', uid), limit(25))),
+    ]);
+    return Array.from(new Map([...incomingSnapshot.docs, ...outgoingSnapshot.docs].map((entry) => [entry.id, entry])).values())
+      .map((entry) => normalizeRoundInvite(entry.data() as RoundInvite))
+      .filter((invite): invite is RoundInvite => Boolean(invite))
+      .sort((left, right) => right.createdAt.localeCompare(left.createdAt));
+  } catch (error) {
+    if (isFirestorePermissionError(error)) {
+      return [];
+    }
+    throw error;
+  }
+}
+
+async function loadRoundInvitesForActiveRound(activeRoundId: string) {
+  if (!usingFirebaseBackend || !firestore) {
+    return [];
+  }
+  const snapshot = await getDocs(query(collection(firestore, 'roundInvites'), where('activeRoundId', '==', activeRoundId), limit(25)));
+  return snapshot.docs
+    .map((entry) => normalizeRoundInvite(entry.data() as RoundInvite))
+    .filter((invite): invite is RoundInvite => Boolean(invite));
+}
+
+async function loadProfileById(uid: string) {
+  if (usingFirebaseBackend && firestore) {
+    const snapshot = await getDoc(doc(firestore, 'profiles', uid));
+    return normalizeProfile(snapshot.data() as Profile);
+  }
+  const store = await readDemoStore();
+  return normalizeProfile(store.profiles[uid]);
+}
+
+async function loadCourseById(courseId: string) {
+  if (usingFirebaseBackend && firestore) {
+    const snapshot = await getDoc(doc(firestore, 'courses', courseId));
+    return normalizeCourse(snapshot.data() as Course);
+  }
+  const store = await readDemoStore();
+  return normalizeCourse(store.courses[courseId]);
+}
+
+async function loadActiveRoundById(activeRoundId: string) {
+  if (usingFirebaseBackend && firestore) {
+    const snapshot = await getDoc(doc(firestore, 'activeRounds', activeRoundId));
+    return normalizeActiveRound(snapshot.data() as ActiveRound);
+  }
+  const store = await readDemoStore();
+  return normalizeActiveRound(store.activeRounds[activeRoundId]);
+}
+
+async function loadRoundInviteById(inviteId: string) {
+  if (usingFirebaseBackend && firestore) {
+    const snapshot = await getDoc(doc(firestore, 'roundInvites', inviteId));
+    return normalizeRoundInvite(snapshot.data() as RoundInvite);
+  }
+  const store = await readDemoStore();
+  return normalizeRoundInvite(store.roundInvites[inviteId]);
+}
+
 function dedupeRounds(rounds: Round[]) {
   return Array.from(new Map(rounds.map((round) => [round.id, round])).values()).sort(
     (left, right) => right.playedOn.localeCompare(left.playedOn) || right.createdAt.localeCompare(left.createdAt)
   );
+}
+
+function filterVisibleActiveRounds(uid: string, activeRounds: ActiveRound[], invites: RoundInvite[]) {
+  const acceptedActiveRoundIds = new Set(
+    invites
+      .filter((invite) => invite.inviteeId === uid && invite.status === 'accepted')
+      .map((invite) => invite.activeRoundId)
+  );
+
+  return activeRounds.filter((round) => round.createdBy === uid || acceptedActiveRoundIds.has(round.id));
 }
 
 async function loadRoundsForCourseSource(sourceId: string) {
@@ -1430,6 +1706,65 @@ function buildRound(
   };
 }
 
+function buildActiveRound(uid: string, profile: Profile, course: Course, input: StartActiveRoundInput): ActiveRound {
+  const selectedTee = course.tees.find((tee) => tee.id === input.teeBoxId) ?? course.tees[0] ?? null;
+  const format = normalizeRoundFormat(input.format);
+  const playerIds = [...new Set(input.playerIds.filter(Boolean))];
+  const playerNames = input.playerNames.map((name) => name.trim()).filter(Boolean);
+  const relatedGroupIds = [...new Set([...(input.relatedGroupIds ?? []), input.groupId ?? course.groupId].filter(Boolean) as string[])];
+  const timestamp = new Date().toISOString();
+
+  return {
+    id: createId('active-round'),
+    createdBy: uid,
+    groupId: input.groupId ?? null,
+    relatedGroupIds,
+    courseId: input.courseId,
+    courseSourceId: course.sourceId,
+    courseSourceProvider: course.sourceProvider,
+    courseName: course.name,
+    playerIds,
+    playerNames: playerNames.length ? playerNames : [profile.name],
+    format,
+    teeBoxId: selectedTee?.id ?? input.teeBoxId ?? null,
+    teeBoxName: selectedTee?.name ?? 'Default tees',
+    holesPlayed: input.holesPlayed,
+    holeScores: [],
+    activeHoleIndex: 0,
+    teamName: isScrambleFormat(format) ? input.teamName?.trim() || playerNames.join(' and ') || 'Scramble team' : '',
+    dateKey: getCurrentDateKey(),
+    visibility: input.visibility,
+    locationVerified: Boolean(input.locationVerified),
+    distanceFromCourseMeters: typeof input.distanceFromCourseMeters === 'number' ? input.distanceFromCourseMeters : null,
+    status: 'active',
+    createdAt: timestamp,
+    updatedAt: timestamp,
+    completedRoundId: null,
+  };
+}
+
+function buildRoundInvites(activeRound: ActiveRound, inviter: Profile): RoundInvite[] {
+  return activeRound.playerIds
+    .map((playerId, index) => ({ playerId, playerName: activeRound.playerNames[index] || 'Player' }))
+    .filter((player) => player.playerId !== inviter.uid)
+    .map((player) => ({
+      id: createId('round-invite'),
+      activeRoundId: activeRound.id,
+      roundId: null,
+      inviterId: inviter.uid,
+      inviterName: inviter.name,
+      inviteeId: player.playerId,
+      inviteeName: player.playerName,
+      courseId: activeRound.courseId,
+      courseName: activeRound.courseName,
+      format: activeRound.format,
+      teamName: activeRound.teamName,
+      status: 'pending',
+      createdAt: activeRound.createdAt,
+      respondedAt: null,
+    }));
+}
+
 function normalizeCourse(course?: Course | null) {
   if (!course?.id || !course.groupId || !course.name) {
     return null;
@@ -1497,6 +1832,62 @@ function normalizeRound(round?: Round | null): Round | null {
     visibility: round.visibility === 'public' ? 'public' : 'friends',
     locationVerified: Boolean(round.locationVerified),
     distanceFromCourseMeters: typeof round.distanceFromCourseMeters === 'number' ? round.distanceFromCourseMeters : null,
+  };
+}
+
+function normalizeActiveRound(round?: ActiveRound | null): ActiveRound | null {
+  if (!round?.id || !round.courseId || !round.createdBy) {
+    return null;
+  }
+  const holesPlayed: 9 | 18 = round.holesPlayed === 9 ? 9 : 18;
+  const playerIds = [...new Set((round.playerIds ?? [round.createdBy]).filter(Boolean))];
+  const playerNames = (round.playerNames?.length ? round.playerNames : ['Player']).filter(Boolean);
+
+  return {
+    ...round,
+    groupId: round.groupId ?? null,
+    relatedGroupIds: round.relatedGroupIds ?? [],
+    courseSourceId: round.courseSourceId ?? round.courseId,
+    courseSourceProvider: round.courseSourceProvider ?? 'manual',
+    courseName: round.courseName ?? 'Golf course',
+    playerIds,
+    playerNames,
+    format: normalizeRoundFormat(round.format),
+    teeBoxId: round.teeBoxId ?? null,
+    teeBoxName: round.teeBoxName ?? 'Default tees',
+    holesPlayed,
+    holeScores: normalizeHoleScores(round.holeScores, holesPlayed),
+    activeHoleIndex: Math.max(0, Math.min(holesPlayed - 1, Number(round.activeHoleIndex) || 0)),
+    teamName: round.teamName ?? '',
+    dateKey: round.dateKey ?? getCurrentDateKey(),
+    visibility: round.visibility === 'friends' ? 'friends' : 'public',
+    locationVerified: Boolean(round.locationVerified),
+    distanceFromCourseMeters: typeof round.distanceFromCourseMeters === 'number' ? round.distanceFromCourseMeters : null,
+    status: round.status === 'completed' || round.status === 'abandoned' ? round.status : 'active',
+    createdAt: round.createdAt ?? new Date().toISOString(),
+    updatedAt: round.updatedAt ?? round.createdAt ?? new Date().toISOString(),
+    completedRoundId: round.completedRoundId ?? null,
+  };
+}
+
+function normalizeRoundInvite(invite?: RoundInvite | null): RoundInvite | null {
+  if (!invite?.id || !invite.activeRoundId || !invite.inviterId || !invite.inviteeId) {
+    return null;
+  }
+  const status: RoundInviteStatus = invite.status === 'accepted' || invite.status === 'declined' ? invite.status : 'pending';
+
+  return {
+    ...invite,
+    roundId: invite.roundId ?? null,
+    inviteeName: invite.inviteeName || 'Player',
+    inviterName: invite.inviterName || 'Player',
+    courseId: invite.courseId ?? '',
+    courseName: invite.courseName || 'Golf course',
+    format: normalizeRoundFormat(invite.format),
+    teamName: invite.teamName ?? '',
+    status,
+    createdAt: invite.createdAt ?? new Date().toISOString(),
+    respondedAt: invite.respondedAt ?? null,
   };
 }
 
@@ -2219,6 +2610,8 @@ async function readDemoStore(): Promise<DemoStore> {
       habits: { ...seeded.habits, ...(parsed.habits || {}) },
       courses: { ...seeded.courses, ...(parsed.courses || {}) },
       rounds: { ...seeded.rounds, ...(parsed.rounds || {}) },
+      activeRounds: { ...seeded.activeRounds, ...(parsed.activeRounds || {}) },
+      roundInvites: { ...seeded.roundInvites, ...(parsed.roundInvites || {}) },
       groups: { ...seeded.groups, ...(parsed.groups || {}) },
       groupMessages: { ...seeded.groupMessages, ...(parsed.groupMessages || {}) },
       activities: [...(parsed.activities || []), ...seeded.activities.filter((seededActivity) => !(parsed.activities || []).some((entry) => entry.id === seededActivity.id))],
@@ -2756,6 +3149,8 @@ function seedDemoStore(): DemoStore {
         distanceFromCourseMeters: null,
       }),
     },
+    activeRounds: {},
+    roundInvites: {},
     groups: {
       [groupId]: {
         id: groupId,

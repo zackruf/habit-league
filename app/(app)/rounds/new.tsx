@@ -10,11 +10,10 @@ import { TextField } from '@/components/TextField';
 import { spacing } from '@/constants/theme';
 import { useApp } from '@/context/AppProvider';
 import { useThemePreferences } from '@/context/ThemeProvider';
-import { formatFriendlyDate } from '@/lib/date';
 import { getRequiredPlayerCount, getRoundFormatLabel, isScrambleFormat, SCRAMBLE_FIRST_FORMATS } from '@/lib/golf';
 import { suggestNearestCourse } from '@/lib/location';
 import { createCommonStyles } from '@/styles/commonStyles';
-import { Profile, RoundFormat, RoundHoleScore, UserSearchResult } from '@/types/models';
+import { ActiveRound, Profile, RoundFormat, RoundHoleScore, UserSearchResult } from '@/types/models';
 
 const HOLE_OPTIONS: Array<9 | 18> = [18, 9];
 
@@ -30,7 +29,7 @@ type PlayerOption = {
 };
 
 export default function LogRoundScreen() {
-  const { busy, courses, getGroupDetails, groups, logRound, profile, rounds, searchUsers } = useApp();
+  const { activeRounds, busy, completeActiveRound, courses, getGroupDetails, groups, profile, rounds, searchUsers, startActiveRound, updateActiveRound } = useApp();
   const { theme } = useThemePreferences();
   const commonStyles = createCommonStyles(theme.colors);
   const { courseId: routeCourseId, groupId: routeGroupId } = useLocalSearchParams<{ courseId?: string; groupId?: string }>();
@@ -48,6 +47,8 @@ export default function LogRoundScreen() {
   const [holeScoreInputs, setHoleScoreInputs] = useState<string[]>(Array.from({ length: 18 }, () => ''));
   const [activeHoleIndex, setActiveHoleIndex] = useState(0);
   const [roundStarted, setRoundStarted] = useState(false);
+  const [activeRoundId, setActiveRoundId] = useState<string | null>(null);
+  const [hydratedActiveRoundId, setHydratedActiveRoundId] = useState<string | null>(null);
   const [locationState, setLocationState] = useState<'checking' | 'suggested' | 'manual'>('checking');
   const [distanceFromCourseMeters, setDistanceFromCourseMeters] = useState<number | null>(null);
 
@@ -83,6 +84,10 @@ export default function LogRoundScreen() {
     });
     return Array.from(byId.values()).slice(0, 8);
   }, [profile, rounds]);
+  const resumableRound = useMemo(
+    () => activeRounds.find((round) => round.status === 'active' && round.playerIds.includes(profile?.uid ?? '')) ?? null,
+    [activeRounds, profile?.uid]
+  );
 
   useEffect(() => {
     setPlayers((current) => buildPlayerSlots(current, requiredPlayers, profile?.uid ?? null, profile?.name ?? 'You'));
@@ -97,6 +102,16 @@ export default function LogRoundScreen() {
   useEffect(() => {
     setActiveHoleIndex((current) => Math.min(current, holesPlayed - 1));
   }, [holesPlayed]);
+
+  useEffect(() => {
+    if (!resumableRound || hydratedActiveRoundId === resumableRound.id) {
+      return;
+    }
+
+    hydrateActiveRound(resumableRound);
+    setHydratedActiveRoundId(resumableRound.id);
+    setRoundStarted(true);
+  }, [hydratedActiveRoundId, resumableRound]);
 
   useEffect(() => {
     let active = true;
@@ -165,27 +180,18 @@ export default function LogRoundScreen() {
     };
   }, [courses]);
 
-  async function handlePostRound() {
+  async function handleStartRound() {
     if (!selectedCourse) {
       return;
     }
 
-    const result = await logRound({
+    const result = await startActiveRound({
       groupId: relatedGroupIds[0] ?? null,
       relatedGroupIds,
       courseId,
       format,
-      playedOn: formatFriendlyDate(new Date(), 'key'),
       teeBoxId,
       holesPlayed,
-      totalScore,
-      holeScores: holeScoreInputs.slice(0, holesPlayed).map(
-        (value, index) =>
-          ({
-            holeNumber: index + 1,
-            score: Number(value),
-          }) satisfies RoundHoleScore
-      ),
       playerIds,
       playerNames,
       teamName: isScrambleFormat(format) ? teamName.trim() || playerNames.join(' and ') : '',
@@ -194,9 +200,41 @@ export default function LogRoundScreen() {
       distanceFromCourseMeters: locationState === 'suggested' && selectedCourse.id === courseId ? distanceFromCourseMeters : null,
     });
 
+    if (result.ok && result.activeRound) {
+      setActiveRoundId(result.activeRound.id);
+      setHydratedActiveRoundId(result.activeRound.id);
+      setActiveHoleIndex(0);
+      setRoundStarted(true);
+    }
+  }
+
+  async function handlePostRound() {
+    if (!activeRoundId) {
+      return;
+    }
+
+    const result = await completeActiveRound(activeRoundId);
     if (result.ok) {
       router.replace(`/(app)/courses/${courseId}`);
     }
+  }
+
+  function hydrateActiveRound(round: ActiveRound) {
+    setActiveRoundId(round.id);
+    setCourseId(round.courseId);
+    setFormat(round.format);
+    setHolesPlayed(round.holesPlayed);
+    setTeeBoxId(round.teeBoxId);
+    setTeamName(round.teamName);
+    setActiveHoleIndex(round.activeHoleIndex);
+    setPlayers(round.playerIds.map((id, index) => ({ id, name: round.playerNames[index] || 'Player' })));
+    setHoleScoreInputs(() => {
+      const next = Array.from({ length: 18 }, () => '');
+      round.holeScores.forEach((holeScore) => {
+        next[holeScore.holeNumber - 1] = `${holeScore.score}`;
+      });
+      return next;
+    });
   }
 
   function selectPlayer(slotIndex: number, player: PlayerOption) {
@@ -218,11 +256,31 @@ export default function LogRoundScreen() {
   }
 
   function updateScore(value: string) {
+    const sanitized = value.replace(/[^0-9]/g, '');
     setHoleScoreInputs((current) => {
       const next = [...current];
-      next[activeHoleIndex] = value.replace(/[^0-9]/g, '');
+      next[activeHoleIndex] = sanitized;
+      if (activeRoundId) {
+        updateActiveRound({
+          activeRoundId,
+          holeScores: buildHoleScores(next, holesPlayed),
+          activeHoleIndex,
+        });
+      }
       return next;
     });
+  }
+
+  function goToHole(index: number) {
+    const nextIndex = Math.max(0, Math.min(holesPlayed - 1, index));
+    setActiveHoleIndex(nextIndex);
+    if (activeRoundId) {
+      updateActiveRound({
+        activeRoundId,
+        holeScores: buildHoleScores(holeScoreInputs, holesPlayed),
+        activeHoleIndex: nextIndex,
+      });
+    }
   }
 
   const playerOptions = mergePlayerOptions(knownPlayers, searchResults).filter((option) => !playerIds.includes(option.uid));
@@ -272,14 +330,14 @@ export default function LogRoundScreen() {
         <View style={commonStyles.actionRowTight}>
           <PrimaryButton
             label="Back"
-            onPress={() => setActiveHoleIndex((current) => Math.max(0, current - 1))}
+            onPress={() => goToHole(activeHoleIndex - 1)}
             disabled={activeHoleIndex === 0}
             variant="secondary"
           />
           {activeHoleIndex < holesPlayed - 1 ? (
             <PrimaryButton
               label="Next"
-              onPress={() => setActiveHoleIndex((current) => Math.min(holesPlayed - 1, current + 1))}
+              onPress={() => goToHole(activeHoleIndex + 1)}
               disabled={!Number(activeHoleScore)}
             />
           ) : (
@@ -400,7 +458,7 @@ export default function LogRoundScreen() {
           </View>
           <Text style={commonStyles.statValue}>{playerIds.length}/{requiredPlayers}</Text>
         </View>
-        <PrimaryButton label="Start" onPress={() => setRoundStarted(true)} disabled={!canStart} />
+        <PrimaryButton label="Start" onPress={handleStartRound} disabled={busy || !canStart} />
       </SurfaceCard>
     </AppScreen>
   );
@@ -433,6 +491,16 @@ function toPlayerSearchOption(result: UserSearchResult): PlayerOption {
 
 function mergePlayerOptions(first: PlayerOption[], second: PlayerOption[]) {
   return Array.from(new Map([...first, ...second].map((player) => [player.uid, player])).values());
+}
+
+function buildHoleScores(values: string[], holesPlayed: 9 | 18): RoundHoleScore[] {
+  return values
+    .slice(0, holesPlayed)
+    .map((value, index) => ({
+      holeNumber: index + 1,
+      score: Number(value),
+    }))
+    .filter((entry) => Number.isFinite(entry.score) && entry.score > 0);
 }
 
 const styles = StyleSheet.create({

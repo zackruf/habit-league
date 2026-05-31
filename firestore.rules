@@ -163,6 +163,38 @@ service cloud.firestore {
         );
     }
 
+    match /activeRounds/{activeRoundId} {
+      allow read: if isSignedIn()
+        && (
+          request.auth.uid in resource.data.playerIds
+          || resource.data.createdBy == request.auth.uid
+          || hasRelatedGroupAccess(resource.data)
+        );
+      allow create: if isSignedIn()
+        && request.resource.data.createdBy == request.auth.uid
+        && request.auth.uid in request.resource.data.playerIds;
+      allow update: if isSignedIn()
+        && (
+          request.auth.uid in resource.data.playerIds
+          || resource.data.createdBy == request.auth.uid
+        );
+    }
+
+    match /roundInvites/{inviteId} {
+      allow read: if isSignedIn()
+        && (
+          resource.data.inviterId == request.auth.uid
+          || resource.data.inviteeId == request.auth.uid
+        );
+      allow create: if isSignedIn()
+        && request.resource.data.inviterId == request.auth.uid;
+      allow update: if isSignedIn()
+        && (
+          resource.data.inviterId == request.auth.uid
+          || resource.data.inviteeId == request.auth.uid
+        );
+    }
+
     match /habits/{habitId} {
       allow read: if isSignedIn()
         && (

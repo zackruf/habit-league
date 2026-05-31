@@ -8,6 +8,8 @@ Rivl is moving to a golf-first data model built around:
 - golf groups
 - saved courses
 - logged rounds
+- active rounds
+- round invites
 - activity feed
 - social connections
 
@@ -22,6 +24,8 @@ The client currently expects Firestore rules to allow authenticated access patte
 - reading discoverable groups
 - reading and writing saved courses
 - reading and writing rounds by course, visibility, friends, and optional group metadata
+- reading and writing active rounds for live scorecards
+- reading and updating round invites for invited players
 - reading group chat messages
 - reading and updating activity feed items and shoutouts
 
@@ -150,6 +154,68 @@ Notes:
 - `visibility` separates public and friends-scoped leaderboards
 - public leaderboards can aggregate across saved course records by `courseSourceId`
 - `locationVerified` and `distanceFromCourseMeters` are honor-system trust signals, not strict anti-cheat controls
+
+## Activity Feed
+
+## Active Rounds
+
+Collection:
+
+- `activeRounds`
+
+Purpose:
+
+- stores an in-progress scorecard after the user taps Start
+- lets players resume a round if the app closes mid-course
+- saves hole scores and the current hole before final posting
+
+Primary fields:
+
+- `id`
+- `createdBy`
+- `courseId`
+- `courseName`
+- `playerIds`
+- `playerNames`
+- `format`
+- `teeBoxId`
+- `holesPlayed`
+- `holeScores`
+- `activeHoleIndex`
+- `teamName`
+- `status`
+- `completedRoundId`
+- `createdAt`
+- `updatedAt`
+
+## Round Invites
+
+Collection:
+
+- `roundInvites`
+
+Purpose:
+
+- supports app-user invites into scramble rounds
+- lets invitees accept or decline from the app
+- links invites back to the active round and final posted round
+
+Primary fields:
+
+- `id`
+- `activeRoundId`
+- `roundId`
+- `inviterId`
+- `inviterName`
+- `inviteeId`
+- `inviteeName`
+- `courseId`
+- `courseName`
+- `format`
+- `teamName`
+- `status`
+- `createdAt`
+- `respondedAt`
 
 ## Activity Feed
 

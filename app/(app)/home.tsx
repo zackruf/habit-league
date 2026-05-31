@@ -17,7 +17,7 @@ import { createCommonStyles } from '@/styles/commonStyles';
 import { GroupDetails } from '@/types/models';
 
 export default function HomeScreen() {
-  const { courses, getGroupDetails, groups, profile, rounds } = useApp();
+  const { courses, getGroupDetails, groups, profile, respondToRoundInvite, roundInvites, rounds } = useApp();
   const { theme } = useThemePreferences();
   const commonStyles = createCommonStyles(theme.colors);
   const [groupDetails, setGroupDetails] = useState<GroupDetails[]>([]);
@@ -62,6 +62,7 @@ export default function HomeScreen() {
     .slice(0, 4);
 
   const totalPublicRounds = rounds.filter((round) => round.visibility === 'public').length;
+  const incomingInvites = roundInvites.filter((invite) => invite.inviteeId === profile.uid && invite.status === 'pending').slice(0, 3);
   const starterLine = useMemo(() => {
     if (!groupDetails.length) {
       return 'Join a golf group, add a course, and post the first number that everyone can chase.';
@@ -98,6 +99,28 @@ export default function HomeScreen() {
         <PrimaryButton label="Join golf group" onPress={() => router.push('/(app)/groups/join')} variant="secondary" />
         <PrimaryButton label="Create golf group" onPress={() => router.push('/(app)/groups/new')} variant="secondary" />
       </View>
+
+      {incomingInvites.length ? (
+        <>
+          <SectionHeader title="Round invites" />
+          <View style={commonStyles.compactSection}>
+            {incomingInvites.map((invite) => (
+              <SurfaceCard key={invite.id}>
+                <View style={commonStyles.rowBetween}>
+                  <View style={commonStyles.cardCopyBlock}>
+                    <Text style={commonStyles.cardTitle}>{invite.courseName}</Text>
+                    <Text style={commonStyles.cardCopy}>{invite.inviterName} / {invite.teamName || 'Scramble'}</Text>
+                  </View>
+                </View>
+                <View style={commonStyles.actionRowTight}>
+                  <PrimaryButton label="Accept" onPress={() => respondToRoundInvite(invite.id, 'accepted')} />
+                  <PrimaryButton label="Decline" onPress={() => respondToRoundInvite(invite.id, 'declined')} variant="secondary" />
+                </View>
+              </SurfaceCard>
+            ))}
+          </View>
+        </>
+      ) : null}
 
       <SectionHeader title="Recent rounds" />
       <View style={commonStyles.compactSection}>

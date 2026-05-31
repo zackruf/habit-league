@@ -108,6 +108,54 @@ export type Round = {
   createdAt: string;
 };
 
+export type ActiveRoundStatus = 'active' | 'completed' | 'abandoned';
+export type RoundInviteStatus = 'pending' | 'accepted' | 'declined';
+
+export type ActiveRound = {
+  id: string;
+  createdBy: string;
+  groupId: string | null;
+  relatedGroupIds: string[];
+  courseId: string;
+  courseSourceId: string;
+  courseSourceProvider: CourseProviderId;
+  courseName: string;
+  playerIds: string[];
+  playerNames: string[];
+  format: RoundFormat;
+  teeBoxId: string | null;
+  teeBoxName: string;
+  holesPlayed: 9 | 18;
+  holeScores: RoundHoleScore[];
+  activeHoleIndex: number;
+  teamName: string;
+  dateKey: string;
+  visibility: RoundVisibility;
+  locationVerified: boolean;
+  distanceFromCourseMeters: number | null;
+  status: ActiveRoundStatus;
+  createdAt: string;
+  updatedAt: string;
+  completedRoundId: string | null;
+};
+
+export type RoundInvite = {
+  id: string;
+  activeRoundId: string;
+  roundId: string | null;
+  inviterId: string;
+  inviterName: string;
+  inviteeId: string;
+  inviteeName: string;
+  courseId: string;
+  courseName: string;
+  format: RoundFormat;
+  teamName: string;
+  status: RoundInviteStatus;
+  createdAt: string;
+  respondedAt: string | null;
+};
+
 export type Habit = {
   id: string;
   userId: string;
@@ -260,6 +308,8 @@ export type AppBundle = {
   groups: Group[];
   courses: Course[];
   rounds: Round[];
+  activeRounds: ActiveRound[];
+  roundInvites: RoundInvite[];
 };
 
 export type LeaderboardEntry = {
@@ -331,6 +381,8 @@ export type DemoStore = {
   habits: Record<string, Habit>;
   courses: Record<string, Course>;
   rounds: Record<string, Round>;
+  activeRounds: Record<string, ActiveRound>;
+  roundInvites: Record<string, RoundInvite>;
   groups: Record<string, Group>;
   groupMessages: Record<string, GroupMessage[]>;
   activities: ActivityItem[];
