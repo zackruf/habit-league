@@ -29,6 +29,7 @@ export default function CoursesTabScreen() {
       courses: courses.filter((course) => course.groupId === group.id),
     }))
     .filter((entry) => entry.courses.length > 0);
+  const publicCourses = courses.filter((course) => !course.groupId);
 
   const recentRounds = rounds
     .filter((round) => round.playerIds.includes(profile.uid))
@@ -88,6 +89,45 @@ export default function CoursesTabScreen() {
 
       <SectionHeader title="Courses" />
       <View style={commonStyles.compactSection}>
+        {publicCourses.length ? (
+          <SurfaceCard style={commonStyles.sectionCard}>
+            <Text style={commonStyles.cardTitle}>Public courses</Text>
+            <View style={commonStyles.compactSection}>
+              {publicCourses.map((course) => {
+                const leaderboard = buildCourseLeaderboard(course, rounds, [], { format: 'scramble2', scope: 'public', currentUserId: profile.uid, friendIds: profile.friendIds });
+                const bestScore = getPersonalBest(course, profile.uid, rounds);
+                const latestRound = getLatestRoundForCourse(course, profile.uid, rounds);
+                const leader = leaderboard[0];
+
+                return (
+                  <PressableCard
+                    key={course.id}
+                    accessibilityHint="Opens the course leaderboard"
+                    accessibilityLabel={`Open ${course.name}`}
+                    onPress={() => router.push(`/(app)/courses/${course.id}`)}
+                    style={commonStyles.listCard}
+                  >
+                    <View style={commonStyles.listRow}>
+                      <View style={commonStyles.listRowMeta}>
+                        <Text style={commonStyles.listRowTitle}>{course.name}</Text>
+                        <Text style={commonStyles.listRowSubtitle}>
+                          {course.location} / Par {course.par} / {course.tees.length} tee options
+                        </Text>
+                      </View>
+                      <Text style={commonStyles.listValue}>{bestScore?.totalScore ?? '--'}</Text>
+                    </View>
+                    <Text style={commonStyles.cardCopy}>
+                      {leader ? `2-Man leader: ${leader.name} / ${leader.totalScore} (${leader.indicatorLabel})` : 'Be the first to post a 2-Man Scramble score here.'}
+                    </Text>
+                    <Text style={commonStyles.smallMuted}>
+                      {latestRound ? `Your latest: ${getRoundDisplayName(latestRound)} / ${latestRound.totalScore} on ${formatFriendlyDate(new Date(latestRound.dateKey))}` : 'No round logged yet.'}
+                    </Text>
+                  </PressableCard>
+                );
+              })}
+            </View>
+          </SurfaceCard>
+        ) : null}
         {groupedCourses.length ? (
           groupedCourses.map(({ group, courses: groupCourses }) => (
             <SurfaceCard key={group.id} style={commonStyles.sectionCard}>
@@ -128,12 +168,12 @@ export default function CoursesTabScreen() {
               </View>
             </SurfaceCard>
           ))
-        ) : (
+        ) : !publicCourses.length ? (
           <SurfaceCard>
             <Text style={commonStyles.cardTitle}>No courses yet</Text>
             <Text style={commonStyles.cardCopy}>Courses will appear here once you save the first course and start posting scores.</Text>
           </SurfaceCard>
-        )}
+        ) : null}
       </View>
     </AppScreen>
   );

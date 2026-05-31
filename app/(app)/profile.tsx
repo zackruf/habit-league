@@ -102,14 +102,14 @@ export default function ProfileScreen() {
           <View style={commonStyles.profileMeta}>
             <Text style={commonStyles.cardTitle}>{currentProfile.name}</Text>
             <Text style={commonStyles.usernameText}>@{currentProfile.username}</Text>
-            <Text style={commonStyles.cardCopy}>{currentProfile.bio || 'Add a short bio so your league knows who you are.'}</Text>
+            <Text style={commonStyles.cardCopy}>{currentProfile.bio || 'Add a short bio so your group knows who you are.'}</Text>
           </View>
         </View>
 
         <TextField label="Display name" value={name} onChangeText={setName} />
         <TextField label="Username" value={username} onChangeText={setUsername} autoCapitalize="none" />
         <TextField label="Short bio" value={bio} onChangeText={setBio} multiline />
-        <TextField label="Weekly goal" value={goal} onChangeText={setGoal} keyboardType="number-pad" />
+        <TextField label="Weekly rounds target" value={goal} onChangeText={setGoal} keyboardType="number-pad" />
         <PrimaryButton label={busy ? 'Saving...' : 'Save profile'} onPress={handleSave} disabled={busy} />
       </SurfaceCard>
 

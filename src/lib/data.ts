@@ -226,7 +226,7 @@ export async function loadUserBundle(uid: string): Promise<AppBundle | null> {
     );
     const groupIds = (groups.filter(Boolean) as Group[]).map((group) => group.id);
     const [courses, groupRounds, playerRounds, loadedActiveRounds, roundInvites] = await Promise.all([
-      loadCoursesForGroups(groupIds),
+      loadCoursesForGroups(groupIds, true),
       loadRoundsForGroups(groupIds),
       loadRoundsForPlayer(uid),
       loadActiveRoundsForUser(uid),
@@ -595,10 +595,10 @@ export async function updateLeagueChallengeLifecycle(
     const groupSnapshot = await getDoc(doc(db, 'groups', challenge.groupId));
     const group = normalizeGroup(groupSnapshot.data() as Group);
     if (!group) {
-      return { ok: false, message: 'That league could not be found.' };
+      return { ok: false, message: 'That group could not be found.' };
     }
     if (!canManageChallenge(uid, group, challenge)) {
-      return { ok: false, message: 'Only the league owner or challenge creator can do that.' };
+      return { ok: false, message: 'Only the group owner or tracker creator can do that.' };
     }
 
     const participationSnapshot = await getDocs(query(collection(db, 'habits'), where('challengeId', '==', challenge.id)));
@@ -623,10 +623,10 @@ export async function updateLeagueChallengeLifecycle(
   }
   const group = normalizeGroup(store.groups[challenge.groupId]);
   if (!group) {
-    return { ok: false, message: 'That league could not be found.' };
+    return { ok: false, message: 'That group could not be found.' };
   }
   if (!canManageChallenge(uid, group, challenge)) {
-    return { ok: false, message: 'Only the league owner or challenge creator can do that.' };
+    return { ok: false, message: 'Only the group owner or tracker creator can do that.' };
   }
 
   const participations = Object.values(store.habits)
@@ -753,7 +753,7 @@ export async function searchCourseCatalog(searchTerm: string): Promise<CourseSea
 export async function createCourse(
   uid: string,
   input: {
-    groupId: string;
+    groupId?: string | null;
     sourceId?: string;
     sourceProvider?: Course['sourceProvider'];
     name: string;
@@ -1258,15 +1258,15 @@ export async function joinPublicGroup(uid: string, groupId: string) {
     const groupRef = doc(firestore, 'groups', groupId);
     const snapshot = await getDoc(groupRef);
     if (!snapshot.exists()) {
-      return { ok: false, message: 'That public league could not be found.' };
+      return { ok: false, message: 'That public group could not be found.' };
     }
 
     const group = normalizeGroup(snapshot.data() as Group);
     if (!group || group.visibility !== 'public' || !group.discoverable) {
-      return { ok: false, message: 'That league is not open for public joining.' };
+      return { ok: false, message: 'That group is not open for public joining.' };
     }
     if (group.memberLimit && group.memberIds.length >= group.memberLimit && !group.memberIds.includes(uid)) {
-      return { ok: false, message: 'This league is full right now.' };
+      return { ok: false, message: 'This group is full right now.' };
     }
 
     const profileSnapshot = await getDoc(doc(firestore, 'profiles', uid));
@@ -1281,16 +1281,16 @@ export async function joinPublicGroup(uid: string, groupId: string) {
       groupId: group.id,
       groupName: group.name,
     });
-    return { ok: true, message: 'Joined public league.', groupId: group.id };
+    return { ok: true, message: 'Joined public group.', groupId: group.id };
   }
 
   const store = await readDemoStore();
   const group = normalizeGroup(store.groups[groupId]);
   if (!group || group.visibility !== 'public' || !group.discoverable) {
-    return { ok: false, message: 'That league is not open for public joining.' };
+    return { ok: false, message: 'That group is not open for public joining.' };
   }
   if (group.memberLimit && group.memberIds.length >= group.memberLimit && !group.memberIds.includes(uid)) {
-    return { ok: false, message: 'This league is full right now.' };
+    return { ok: false, message: 'This group is full right now.' };
   }
 
   store.groups[group.id] = { ...group, memberIds: [...new Set([...group.memberIds, uid])] };
@@ -1307,7 +1307,7 @@ export async function joinPublicGroup(uid: string, groupId: string) {
     ...(store.activities ?? []),
   ].slice(0, 80);
   await writeDemoStore(store);
-  return { ok: true, message: 'Joined public league.', groupId: group.id };
+  return { ok: true, message: 'Joined public group.', groupId: group.id };
 }
 
 export async function getGroupDetails(groupId: string): Promise<GroupDetails | null> {
@@ -1442,17 +1442,21 @@ function buildFriendRequestProfile(profile: Profile): FriendRequestProfile {
   };
 }
 
-async function loadCoursesForGroups(groupIds: string[]) {
-  if (!usingFirebaseBackend || !firestore || !groupIds.length) {
+async function loadCoursesForGroups(groupIds: string[], includeStandalone = false) {
+  if (!usingFirebaseBackend || !firestore) {
     return [];
   }
 
   const db = firestore;
-  const snapshots = await Promise.all(groupIds.map((groupId) => getDocs(query(collection(db, 'courses'), where('groupId', '==', groupId)))));
+  const snapshots = await Promise.all([
+    ...(includeStandalone ? [getDocs(query(collection(db, 'courses'), where('groupId', '==', ''), limit(50)))] : []),
+    ...groupIds.map((groupId) => getDocs(query(collection(db, 'courses'), where('groupId', '==', groupId), limit(50)))),
+  ]);
   return snapshots
     .flatMap((snapshot) => snapshot.docs)
     .map((entry) => normalizeCourse(entry.data() as Course))
     .filter((course): course is Course => Boolean(course))
+    .filter((course, index, allCourses) => allCourses.findIndex((entry) => entry.id === course.id) === index)
     .sort((left, right) => left.name.localeCompare(right.name));
 }
 
@@ -1495,10 +1499,11 @@ async function loadActiveRoundsForUser(uid: string) {
   }
 
   try {
-    const snapshot = await getDocs(query(collection(firestore, 'activeRounds'), where('playerIds', 'array-contains', uid), where('status', '==', 'active'), limit(10)));
+    const snapshot = await getDocs(query(collection(firestore, 'activeRounds'), where('playerIds', 'array-contains', uid), limit(25)));
     return snapshot.docs
       .map((entry) => normalizeActiveRound(entry.data() as ActiveRound))
       .filter((round): round is ActiveRound => Boolean(round))
+      .filter((round) => round.status === 'active')
       .sort((left, right) => right.updatedAt.localeCompare(left.updatedAt));
   } catch (error) {
     if (isFirestorePermissionError(error)) {
@@ -1614,7 +1619,7 @@ async function loadRoundsForCourseSource(sourceId: string) {
 function buildCourse(
   uid: string,
   input: {
-    groupId: string;
+    groupId?: string | null;
     sourceId?: string;
     sourceProvider?: Course['sourceProvider'];
     name: string;
@@ -1634,7 +1639,7 @@ function buildCourse(
   const holes = normalizeCourseHoles(input.holes, tees, input.holesCount ?? 18, input.par);
   return {
     id: createId('course'),
-    groupId: input.groupId,
+    groupId: input.groupId?.trim() ?? '',
     sourceId: input.sourceId?.trim() || createId('course-source'),
     sourceProvider: input.sourceProvider ?? 'manual',
     name: input.name.trim(),
@@ -1766,12 +1771,13 @@ function buildRoundInvites(activeRound: ActiveRound, inviter: Profile): RoundInv
 }
 
 function normalizeCourse(course?: Course | null) {
-  if (!course?.id || !course.groupId || !course.name) {
+  if (!course?.id || !course.name) {
     return null;
   }
 
   return {
     ...course,
+    groupId: course.groupId ?? '',
     location: course.location ?? '',
     sourceId: course.sourceId ?? course.id,
     sourceProvider: course.sourceProvider ?? 'manual',
@@ -2400,7 +2406,7 @@ function buildActivitySummary(input: ActivityInput) {
   const actor = input.actorName || 'Someone';
 
   if (input.type === 'check_in') {
-    return `${actor} checked in ${input.habitTitle || 'a challenge'}${input.groupName ? ` in ${input.groupName}` : ''}`;
+    return `${actor} updated ${input.habitTitle || 'a legacy tracker'}${input.groupName ? ` in ${input.groupName}` : ''}`;
   }
 
   if (input.type === 'rank_movement') {
@@ -2409,7 +2415,7 @@ function buildActivitySummary(input: ActivityInput) {
   }
 
   if (input.type === 'league_join') {
-    return `${actor} joined ${input.groupName || 'a league'}`;
+    return `${actor} joined ${input.groupName || 'a group'}`;
   }
 
   if (input.type === 'connection') {
@@ -2417,7 +2423,7 @@ function buildActivitySummary(input: ActivityInput) {
   }
 
   if (input.type === 'challenge_update') {
-    return `${actor} updated ${input.habitTitle || 'a league challenge'}${input.groupName ? ` in ${input.groupName}` : ''}`;
+    return `${actor} updated ${input.habitTitle || 'a legacy tracker'}${input.groupName ? ` in ${input.groupName}` : ''}`;
   }
 
   if (input.type === 'round_logged') {

@@ -48,20 +48,19 @@ export default function JoinGroupScreen() {
 
   return (
     <AppScreen scrollable>
-      <Text style={commonStyles.eyebrow}>Join league</Text>
-      <Text style={commonStyles.pageTitle}>Get into competition</Text>
-      <Text style={commonStyles.pageCopy}>Use a friend code, or join an open starter league right now.</Text>
+      <Text style={commonStyles.eyebrow}>Join group</Text>
+      <Text style={commonStyles.pageTitle}>Find your crew</Text>
+      <Text style={commonStyles.pageCopy}>Use an invite code or join an open starter group.</Text>
 
       <SurfaceCard>
         <Text style={commonStyles.cardTitle}>Invite code</Text>
         <TextField label="Join code" value={joinCode} onChangeText={setJoinCode} autoCapitalize="characters" placeholder="ABC123" />
         {error ? <Text style={commonStyles.errorText}>{error}</Text> : null}
-        <PrimaryButton label={busy ? 'Joining...' : 'Join league'} onPress={handleJoin} disabled={busy} />
+        <PrimaryButton label={busy ? 'Joining...' : 'Join group'} onPress={handleJoin} disabled={busy} />
       </SurfaceCard>
 
       <SurfaceCard>
-        <Text style={commonStyles.cardTitle}>Open starter leagues</Text>
-        <Text style={commonStyles.cardCopy}>Designed for users who do not have friends ready to invite yet.</Text>
+        <Text style={commonStyles.cardTitle}>Open starter groups</Text>
         {publicGroups.length ? (
           publicGroups.map((group) => (
             <Pressable
@@ -90,7 +89,7 @@ export default function JoinGroupScreen() {
             </Pressable>
           ))
         ) : (
-          <Text style={commonStyles.cardCopy}>No public leagues are open right now. Create one and mark it public to help future users.</Text>
+          <Text style={commonStyles.cardCopy}>No public groups are open right now. Create one and mark it public to help future users.</Text>
         )}
       </SurfaceCard>
     </AppScreen>

@@ -67,7 +67,7 @@ import {
 import { CourseSearchResult } from '@/lib/courseProviders';
 
 const FIREBASE_ACCESS_ERROR_MESSAGE =
-  'Firebase Auth succeeded, but Rivl could not read or create your Firestore profile. Update Firestore rules for profiles, groups, habits, challenges, and activities, then try again.';
+  'Firebase Auth succeeded, but Rivl could not read or create app data. Update Firestore rules for profiles, groups, courses, rounds, active rounds, round invites, and activities, then try again.';
 
 type ActionResult = {
   ok: boolean;
@@ -103,7 +103,7 @@ type AppContextValue = {
   restoreHabitStreak: (habitId: string) => Promise<ActionResult>;
   createGroup: (input: GroupSettingsInput) => Promise<GroupActionResult>;
   createCourse: (input: {
-    groupId: string;
+    groupId?: string | null;
     sourceId?: string;
     sourceProvider?: Course['sourceProvider'];
     name: string;
@@ -323,21 +323,21 @@ export function AppProvider({ children, fallback }: PropsWithChildren<{ fallback
       }
 
       if (!input.groupId.trim()) {
-        return { ok: false, message: 'Choose a league before adding a challenge.' };
+        return { ok: false, message: 'Choose a group before adding a legacy tracker.' };
       }
       if (!input.title.trim()) {
-        return { ok: false, message: 'Please enter a challenge name.' };
+        return { ok: false, message: 'Please enter a tracker name.' };
       }
 
       setBusy(true);
       const challengeId = await createHabitRequest(session.uid, input);
       if (!challengeId) {
         setBusy(false);
-        return { ok: false, message: 'That league could not be found.' };
+        return { ok: false, message: 'That group could not be found.' };
       }
       await refreshUserData(session);
       setBusy(false);
-      return { ok: true, message: 'League challenge added.' };
+      return { ok: true, message: 'Legacy tracker added.' };
     },
     [refreshUserData, session]
   );
@@ -457,7 +457,7 @@ export function AppProvider({ children, fallback }: PropsWithChildren<{ fallback
 
   const createCourse = useCallback(
     async (input: {
-      groupId: string;
+      groupId?: string | null;
       sourceId?: string;
       sourceProvider?: Course['sourceProvider'];
       name: string;
@@ -474,9 +474,6 @@ export function AppProvider({ children, fallback }: PropsWithChildren<{ fallback
     }) => {
       if (!session) {
         return { ok: false, message: 'No active session.' };
-      }
-      if (!input.groupId.trim()) {
-        return { ok: false, message: 'Choose a golf group first.' };
       }
       if (!input.name.trim()) {
         return { ok: false, message: 'Please enter a course name.' };

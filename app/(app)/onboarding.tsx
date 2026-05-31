@@ -9,18 +9,16 @@ import { TextField } from '@/components/TextField';
 import { spacing } from '@/constants/theme';
 import { useApp } from '@/context/AppProvider';
 import { useThemePreferences } from '@/context/ThemeProvider';
-import { getDefaultHabitTemplate, HABIT_TEMPLATES } from '@/lib/habitTemplates';
 import { createCommonStyles } from '@/styles/commonStyles';
 import { Group } from '@/types/models';
 
 export default function OnboardingScreen() {
-  const { busy, createHabit, joinPublicGroup, listPublicGroups, profile, saveProfile } = useApp();
+  const { busy, joinPublicGroup, listPublicGroups, profile, saveProfile } = useApp();
   const { theme } = useThemePreferences();
   const commonStyles = createCommonStyles(theme.colors);
   const [name, setName] = useState(profile?.name ?? '');
   const [bio, setBio] = useState(profile?.bio ?? '');
   const [goal, setGoal] = useState(String(profile?.weeklyGoal ?? 5));
-  const [selectedTemplateId, setSelectedTemplateId] = useState(getDefaultHabitTemplate().id);
   const [publicGroups, setPublicGroups] = useState<Group[]>([]);
   const [selectedGroupId, setSelectedGroupId] = useState<string | null>(null);
   const [error, setError] = useState('');
@@ -28,7 +26,6 @@ export default function OnboardingScreen() {
   useEffect(() => {
     listPublicGroups().then((nextGroups) => {
       setPublicGroups(nextGroups);
-      setSelectedGroupId(nextGroups[0]?.id ?? null);
     });
   }, [listPublicGroups]);
 
@@ -54,38 +51,28 @@ export default function OnboardingScreen() {
 
   async function handleSave() {
     setError('');
-    const selectedTemplate = HABIT_TEMPLATES.find((template) => template.id === selectedTemplateId) ?? getDefaultHabitTemplate();
     const basicsSaved = await saveBasics();
     if (!basicsSaved) {
       return;
     }
-    if (!selectedGroupId) {
-      setError('Choose a starter league or create your own.');
-      return;
+
+    if (selectedGroupId) {
+      const joinResult = await joinPublicGroup(selectedGroupId);
+      if (!joinResult.ok) {
+        setError(joinResult.message);
+        return;
+      }
+
+      if (joinResult.groupId) {
+        router.replace(`/(app)/groups/${joinResult.groupId}`);
+        return;
+      }
     }
 
-    const joinResult = await joinPublicGroup(selectedGroupId);
-    if (!joinResult.ok || !joinResult.groupId) {
-      setError(joinResult.message);
-      return;
-    }
-
-    const habitResult = await createHabit({
-      groupId: joinResult.groupId,
-      title: selectedTemplate.title,
-      emoji: selectedTemplate.emoji,
-      category: selectedTemplate.category,
-    });
-
-    if (!habitResult.ok) {
-      setError(habitResult.message);
-      return;
-    }
-
-    router.replace(`/(app)/groups/${joinResult.groupId}`);
+    router.replace('/(app)/(tabs)/courses');
   }
 
-  async function handleCreateLeague() {
+  async function handleCreateGroup() {
     setError('');
     const basicsSaved = await saveBasics();
     if (basicsSaved) {
@@ -104,49 +91,18 @@ export default function OnboardingScreen() {
   return (
     <AppScreen scrollable>
       <Text style={commonStyles.eyebrow}>Onboarding</Text>
-      <Text style={commonStyles.pageTitle}>Get into your first golf group</Text>
-      <Text style={commonStyles.pageCopy}>Pick a golf format, then join or create a group so your first Rivl round lands inside real competition.</Text>
+      <Text style={commonStyles.pageTitle}>Set up Rivl</Text>
+      <Text style={commonStyles.pageCopy}>Add your profile, then head to courses or join a starter group.</Text>
 
       <SurfaceCard>
         <Text style={commonStyles.cardTitle}>How others will see you</Text>
         <TextField label="Display name" value={name} onChangeText={setName} />
         <TextField label="Short bio" value={bio} onChangeText={setBio} multiline />
-        <TextField label="Weekly rounds goal" value={goal} onChangeText={setGoal} keyboardType="number-pad" />
+        <TextField label="Weekly rounds target" value={goal} onChangeText={setGoal} keyboardType="number-pad" />
       </SurfaceCard>
 
       <SurfaceCard>
-        <Text style={commonStyles.cardTitle}>Choose your first golf format</Text>
-        <Text style={commonStyles.cardCopy}>These templates help new groups start with a clear golf competition format instead of a blank page.</Text>
-        <View style={styles.templateGrid}>
-          {HABIT_TEMPLATES.slice(0, 4).map((template) => {
-            const selected = template.id === selectedTemplateId;
-
-            return (
-              <Pressable
-                key={template.id}
-                accessibilityRole="button"
-                accessibilityState={{ selected }}
-                onPress={() => setSelectedTemplateId(template.id)}
-                style={[
-                  styles.choiceCard,
-                  {
-                    backgroundColor: selected ? theme.colors.surfaceRaised : theme.colors.surfaceAlt,
-                    borderColor: selected ? theme.colors.primary : theme.colors.border,
-                  },
-                ]}
-              >
-                <Text style={[styles.choiceEmoji, { color: theme.colors.primary }]}>{template.emoji}</Text>
-                <Text style={commonStyles.settingTitle}>{template.title}</Text>
-                <Text style={commonStyles.smallMuted}>{template.category}</Text>
-              </Pressable>
-            );
-          })}
-        </View>
-      </SurfaceCard>
-
-      <SurfaceCard>
-        <Text style={commonStyles.cardTitle}>Join a public starter group</Text>
-        <Text style={commonStyles.cardCopy}>No invite needed. Start with a live golf group now, or branch into your own setup below.</Text>
+        <Text style={commonStyles.cardTitle}>Starter group</Text>
         {publicGroups.length ? (
           publicGroups.slice(0, 3).map((group) => {
             const selected = group.id === selectedGroupId;
@@ -156,9 +112,9 @@ export default function OnboardingScreen() {
                 key={group.id}
                 accessibilityRole="button"
                 accessibilityState={{ selected }}
-                onPress={() => setSelectedGroupId(group.id)}
+                onPress={() => setSelectedGroupId((current) => (current === group.id ? null : group.id))}
                 style={[
-                  styles.leagueChoice,
+                  styles.groupChoice,
                   {
                     backgroundColor: selected ? theme.colors.surfaceRaised : theme.colors.surfaceAlt,
                     borderColor: selected ? theme.colors.primary : theme.colors.border,
@@ -177,15 +133,15 @@ export default function OnboardingScreen() {
             );
           })
         ) : (
-          <Text style={commonStyles.cardCopy}>No public golf groups are open yet. You can create or join one from Groups after setup.</Text>
+          <Text style={commonStyles.cardCopy}>No public groups are open yet. You can create or join one later.</Text>
         )}
         {error ? <Text style={commonStyles.errorText}>{error}</Text> : null}
         <View style={commonStyles.actionRowTight}>
-          <PrimaryButton label={busy ? 'Saving...' : 'Join group and continue'} onPress={handleSave} disabled={busy} />
+          <PrimaryButton label={busy ? 'Saving...' : 'Continue'} onPress={handleSave} disabled={busy} />
         </View>
         <View style={commonStyles.actionRowTight}>
           <PrimaryButton label="Use invite code" onPress={handleUseInviteCode} variant="secondary" disabled={busy} />
-          <PrimaryButton label="Create a group" onPress={handleCreateLeague} variant="secondary" disabled={busy} />
+          <PrimaryButton label="Create a group" onPress={handleCreateGroup} variant="secondary" disabled={busy} />
         </View>
       </SurfaceCard>
     </AppScreen>
@@ -193,24 +149,7 @@ export default function OnboardingScreen() {
 }
 
 const styles = StyleSheet.create({
-  templateGrid: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: spacing.sm,
-  },
-  choiceCard: {
-    width: '48%',
-    minHeight: 118,
-    borderRadius: 18,
-    borderWidth: 1,
-    padding: spacing.md,
-    gap: spacing.xs,
-  },
-  choiceEmoji: {
-    fontSize: 18,
-    fontWeight: '900',
-  },
-  leagueChoice: {
+  groupChoice: {
     minHeight: 72,
     borderRadius: 18,
     borderWidth: 1,

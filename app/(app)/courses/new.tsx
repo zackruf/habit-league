@@ -17,7 +17,7 @@ export default function CreateCourseScreen() {
   const { busy, createCourse, groups, searchCourses } = useApp();
   const { theme } = useThemePreferences();
   const commonStyles = createCommonStyles(theme.colors);
-  const [groupId, setGroupId] = useState(groups[0]?.id ?? '');
+  const [groupId, setGroupId] = useState('');
   const [searchTerm, setSearchTerm] = useState('');
   const [searchResults, setSearchResults] = useState<CourseSearchResult[]>([]);
   const [selectedCourse, setSelectedCourse] = useState<CourseSearchResult | null>(null);
@@ -81,12 +81,24 @@ export default function CreateCourseScreen() {
       <PageHeader
         eyebrow="Course setup"
         title="Add a real golf course"
-        subtitle="Search the catalog first, confirm the scorecard, then save that course to a golf group so rounds and leaderboards stay anchored to the same place."
       />
 
       <SurfaceCard>
-        <Text style={commonStyles.cardTitle}>Pick the golf group</Text>
+        <Text style={commonStyles.cardTitle}>Save to</Text>
         <View style={styles.optionStack}>
+          <Pressable
+            onPress={() => setGroupId('')}
+            style={[
+              styles.optionCard,
+              {
+                backgroundColor: !groupId ? theme.colors.surfaceRaised : theme.colors.surfaceAlt,
+                borderColor: !groupId ? theme.colors.primary : theme.colors.border,
+              },
+            ]}
+          >
+            <Text style={commonStyles.settingTitle}>Public course</Text>
+            <Text style={commonStyles.smallMuted}>Available for course leaderboards.</Text>
+          </Pressable>
           {groups.map((group) => {
             const selected = group.id === groupId;
             return (
@@ -188,9 +200,9 @@ export default function CreateCourseScreen() {
         </View>
         <TextField label="Par" value={par} onChangeText={setPar} keyboardType="number-pad" placeholder="72" />
         <Text style={commonStyles.smallMuted}>
-          {selectedGroup ? `This course will be saved into ${selectedGroup.name}.` : 'Choose a group above to continue.'}
+          {selectedGroup ? `This course will be linked to ${selectedGroup.name}.` : 'This course will be available without a group.'}
         </Text>
-        <PrimaryButton label={busy ? 'Saving course...' : 'Save course to group'} onPress={handleCreate} disabled={busy || !groupId || !name.trim()} />
+        <PrimaryButton label={busy ? 'Saving course...' : 'Save course'} onPress={handleCreate} disabled={busy || !name.trim()} />
       </SurfaceCard>
     </AppScreen>
   );

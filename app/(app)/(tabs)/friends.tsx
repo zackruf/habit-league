@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Text, View } from 'react-native';
 
 import { ActivityFeed } from '@/components/ActivityFeed';
@@ -12,15 +12,7 @@ import { TextField } from '@/components/TextField';
 import { useApp } from '@/context/AppProvider';
 import { useThemePreferences } from '@/context/ThemeProvider';
 import { createCommonStyles } from '@/styles/commonStyles';
-import { ActivityItem, ActivityShoutoutType, FriendRequestProfile, GroupDetails, UserSearchResult } from '@/types/models';
-
-type FriendStanding = {
-  userId: string;
-  name: string;
-  weeklyCheckIns: number;
-  completedHabits: number;
-  sharedGroups: string[];
-};
+import { ActivityItem, ActivityShoutoutType, FriendRequestProfile, UserSearchResult } from '@/types/models';
 
 export default function FriendsTabScreen() {
   const {
@@ -29,7 +21,6 @@ export default function FriendsTabScreen() {
     busy,
     declineFriendRequest,
     getActivityFeed,
-    getGroupDetails,
     getIncomingFriendRequests,
     groups,
     profile,
@@ -42,7 +33,6 @@ export default function FriendsTabScreen() {
   const [results, setResults] = useState<UserSearchResult[]>([]);
   const [feedback, setFeedback] = useState('');
   const [connectingId, setConnectingId] = useState<string | null>(null);
-  const [groupDetails, setGroupDetails] = useState<GroupDetails[]>([]);
   const [activities, setActivities] = useState<ActivityItem[]>([]);
   const [incomingRequests, setIncomingRequests] = useState<FriendRequestProfile[]>([]);
 
@@ -54,17 +44,12 @@ export default function FriendsTabScreen() {
         return;
       }
 
-      const [details, people, requests] = await Promise.all([
-        Promise.all(groups.map((group) => getGroupDetails(group.id))),
-        searchUsers(query),
-        getIncomingFriendRequests(),
-      ]);
+      const [people, requests] = await Promise.all([searchUsers(query), getIncomingFriendRequests()]);
 
       if (!active) {
         return;
       }
 
-      setGroupDetails(details.filter(Boolean) as GroupDetails[]);
       setResults(people);
       setIncomingRequests(requests);
     }
@@ -74,7 +59,7 @@ export default function FriendsTabScreen() {
     return () => {
       active = false;
     };
-  }, [getGroupDetails, getIncomingFriendRequests, groups, profile, query, searchUsers]);
+  }, [getIncomingFriendRequests, profile, query, searchUsers]);
 
   useEffect(() => {
     let active = true;
@@ -93,34 +78,6 @@ export default function FriendsTabScreen() {
     };
   }, [getActivityFeed, profile?.friendIds, groups]);
 
-  const standings = useMemo(() => {
-    const map = new Map<string, FriendStanding>();
-
-    groupDetails.forEach((details) => {
-      details.leaderboard.forEach((entry) => {
-        const current = map.get(entry.userId);
-        if (current) {
-          current.weeklyCheckIns = Math.max(current.weeklyCheckIns, entry.weeklyCheckIns);
-          current.completedHabits = Math.max(current.completedHabits, entry.completedHabits);
-          if (!current.sharedGroups.includes(details.group.name)) {
-            current.sharedGroups.push(details.group.name);
-          }
-          return;
-        }
-
-        map.set(entry.userId, {
-          userId: entry.userId,
-          name: entry.name,
-          weeklyCheckIns: entry.weeklyCheckIns,
-          completedHabits: entry.completedHabits,
-          sharedGroups: [details.group.name],
-        });
-      });
-    });
-
-    return Array.from(map.values()).sort((left, right) => right.weeklyCheckIns - left.weeklyCheckIns);
-  }, [groupDetails]);
-
   if (!profile) {
     return <LoadingScreen message="Loading your friends..." />;
   }
@@ -128,7 +85,6 @@ export default function FriendsTabScreen() {
   const connectedIds = new Set(profile.friendIds);
   const connectedPeople = results.filter((person) => connectedIds.has(person.uid));
   const discoveryResults = results.filter((person) => !connectedIds.has(person.uid));
-  const profileId = profile.uid;
 
   async function refreshSocialLists() {
     const [nextResults, nextRequests, nextFeed] = await Promise.all([searchUsers(query), getIncomingFriendRequests(), getActivityFeed()]);
@@ -248,7 +204,7 @@ export default function FriendsTabScreen() {
             <Text style={commonStyles.cardCopy}>
               {query.trim()
                 ? 'Try searching by display name or username.'
-                : 'Join a public league or invite people to make discovery more useful.'}
+                : 'Join a public group or invite people to make discovery more useful.'}
             </Text>
           </SurfaceCard>
         )}
@@ -264,30 +220,6 @@ export default function FriendsTabScreen() {
           <SurfaceCard>
             <Text style={commonStyles.cardTitle}>No connections yet</Text>
             <Text style={commonStyles.cardCopy}>Add people from discovery to start building a social graph for future invites and shoutouts.</Text>
-          </SurfaceCard>
-        )}
-      </View>
-
-      <SectionHeader title="Leaderboard with friends" />
-      <View style={commonStyles.compactSection}>
-        {standings.length ? (
-          standings.map((entry, index) => (
-            <SurfaceCard key={entry.userId} style={[commonStyles.listCard, entry.userId === profileId ? commonStyles.currentUserCard : undefined]}>
-              <View style={commonStyles.listRow}>
-                <View style={commonStyles.listRowMeta}>
-                  <Text style={commonStyles.listRowTitle}>
-                    {index + 1}. {entry.name}
-                  </Text>
-                  <Text style={commonStyles.listRowSubtitle}>{entry.sharedGroups.join(', ')}</Text>
-                </View>
-                <Text style={commonStyles.listValue}>{entry.weeklyCheckIns}</Text>
-              </View>
-            </SurfaceCard>
-          ))
-        ) : (
-          <SurfaceCard>
-            <Text style={commonStyles.cardTitle}>No leaderboard yet</Text>
-            <Text style={commonStyles.cardCopy}>Join a group and your shared people will appear here automatically.</Text>
           </SurfaceCard>
         )}
       </View>
@@ -356,7 +288,7 @@ function PersonCard({
 }) {
   const { theme } = useThemePreferences();
   const commonStyles = createCommonStyles(theme.colors);
-  const sharedLabel = person.sharedGroupNames.length ? person.sharedGroupNames.join(', ') : 'No shared league yet';
+  const sharedLabel = person.sharedGroupNames.length ? person.sharedGroupNames.join(', ') : 'No shared group yet';
 
   return (
     <SurfaceCard style={commonStyles.listCard}>

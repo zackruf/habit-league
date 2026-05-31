@@ -57,8 +57,8 @@ export default function CreateHabitScreen() {
           <Text style={commonStyles.cardTitle}>No golf groups yet</Text>
           <Text style={commonStyles.cardCopy}>Create or join a golf group first, then use this older tracker flow only if you still need it.</Text>
           <View style={commonStyles.actionRowTight}>
-            <PrimaryButton label="Create league" onPress={() => router.push('/(app)/groups/new')} />
-            <PrimaryButton label="Join league" onPress={() => router.push('/(app)/groups/join')} variant="secondary" />
+            <PrimaryButton label="Create group" onPress={() => router.push('/(app)/groups/new')} />
+            <PrimaryButton label="Join group" onPress={() => router.push('/(app)/groups/join')} variant="secondary" />
           </View>
         </SurfaceCard>
       </AppScreen>

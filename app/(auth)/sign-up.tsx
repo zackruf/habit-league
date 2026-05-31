@@ -57,7 +57,7 @@ export default function SignUpScreen() {
         <View style={authStyles.previewCard}>
           <View style={authStyles.previewHeader}>
             <View>
-              <Text style={authStyles.previewTitle}>Your first league</Text>
+              <Text style={authStyles.previewTitle}>Your first group</Text>
               <Text style={authStyles.previewMeta}>Pick a course. Log a round. Climb.</Text>
             </View>
             <View style={authStyles.rankBadge}>

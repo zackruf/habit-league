@@ -213,6 +213,11 @@ export default function LogRoundScreen() {
       return;
     }
 
+    await updateActiveRound({
+      activeRoundId,
+      holeScores: buildHoleScores(holeScoreInputs, holesPlayed),
+      activeHoleIndex,
+    });
     const result = await completeActiveRound(activeRoundId);
     if (result.ok) {
       router.replace(`/(app)/courses/${courseId}`);
