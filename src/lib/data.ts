@@ -1923,6 +1923,10 @@ function normalizeCourseHoles(
       par: Number(hole.par) || 4,
       handicapIndex: typeof hole.handicapIndex === 'number' ? hole.handicapIndex : null,
       yardagesByTee: hole.yardagesByTee ?? {},
+      dogleg: normalizeDogleg(hole.dogleg),
+      notes: hole.notes?.trim() ?? '',
+      mapImageUrl: hole.mapImageUrl?.trim() || null,
+      aerialImageUrl: hole.aerialImageUrl?.trim() || null,
     }));
   }
 
@@ -1932,6 +1936,10 @@ function normalizeCourseHoles(
     number: index + 1,
     par: index % 5 === 0 ? basePar + 1 : index % 4 === 0 ? Math.max(3, basePar - 1) : basePar,
     handicapIndex: ((index * 3) % targetCount) + 1,
+    dogleg: 'straight',
+    notes: '',
+    mapImageUrl: null,
+    aerialImageUrl: null,
     yardagesByTee: Object.fromEntries(
       tees.map((tee) => [
         tee.id,
@@ -1939,6 +1947,10 @@ function normalizeCourseHoles(
       ])
     ),
   }));
+}
+
+function normalizeDogleg(value?: string | null) {
+  return value === 'left' || value === 'right' || value === 'straight' ? value : null;
 }
 
 function normalizeHoleScores(holeScores?: RoundHoleScore[] | null, holesPlayed = 18): RoundHoleScore[] {

@@ -14,6 +14,14 @@ service cloud.firestore {
       return get(/databases/$(database)/documents/groups/$(groupId));
     }
 
+    function profileDoc() {
+      return get(/databases/$(database)/documents/profiles/$(request.auth.uid));
+    }
+
+    function profileGroupIds() {
+      return profileDoc().data.groupIds;
+    }
+
     function groupExists(groupId) {
       return exists(/databases/$(database)/documents/groups/$(groupId));
     }
@@ -37,6 +45,69 @@ service cloud.firestore {
 
     function isPublicRecord(data) {
       return data.visibility == 'public';
+    }
+
+    function isValidRoundFormat(data) {
+      return data.format in ['individual', 'scramble2', 'scramble3', 'scramble4'];
+    }
+
+    function isValidVisibility(data) {
+      return data.visibility in ['public', 'friends'];
+    }
+
+    function hasValidPlayerIds(data) {
+      return data.playerIds is list
+        && request.auth.uid in data.playerIds
+        && (
+          (data.format == 'individual' && data.playerIds.size() == 1)
+          || (data.format == 'scramble2' && data.playerIds.size() == 2)
+          || (data.format == 'scramble3' && data.playerIds.size() == 3)
+          || (data.format == 'scramble4' && data.playerIds.size() == 4)
+        );
+    }
+
+    function hasValidPlayerNames(data) {
+      return data.playerNames is list
+        && data.playerNames.size() == data.playerIds.size();
+    }
+
+    function hasValidRelatedGroups(data) {
+      return !(data.relatedGroupIds is list)
+        || data.relatedGroupIds.size() == 0
+        || data.relatedGroupIds.hasOnly(profileGroupIds());
+    }
+
+    function isValidRoundCreate(data) {
+      return isValidRoundFormat(data)
+        && isValidVisibility(data)
+        && hasValidPlayerIds(data)
+        && hasValidPlayerNames(data)
+        && data.createdBy == request.auth.uid
+        && data.userId == request.auth.uid
+        && data.courseId is string
+        && data.holesPlayed in [9, 18]
+        && data.totalScore is number
+        && hasValidRelatedGroups(data)
+        && (
+          !hasGroupId(data)
+          || isGroupMember(data.groupId)
+        );
+    }
+
+    function isValidActiveRoundCreate(data) {
+      return isValidRoundFormat(data)
+        && isValidVisibility(data)
+        && hasValidPlayerIds(data)
+        && hasValidPlayerNames(data)
+        && data.createdBy == request.auth.uid
+        && data.courseId is string
+        && data.holesPlayed in [9, 18]
+        && data.status == 'active'
+        && hasValidRelatedGroups(data)
+        && (
+          !hasGroupId(data)
+          || isGroupMember(data.groupId)
+        );
     }
 
     function isRoundParticipant(data) {
@@ -145,22 +216,11 @@ service cloud.firestore {
           || hasRelatedGroupAccess(resource.data)
         );
       allow create: if isSignedIn()
-        && (
-          request.resource.data.createdBy == request.auth.uid
-          || request.resource.data.userId == request.auth.uid
-        )
-        && (
-          !hasGroupId(request.resource.data)
-          || isGroupMember(request.resource.data.groupId)
-        );
+        && isValidRoundCreate(request.resource.data);
       allow update: if isSignedIn()
-        && (
-          isRoundParticipant(resource.data)
-          || (
-            hasGroupId(resource.data)
-            && isGroupOwner(resource.data.groupId)
-          )
-        );
+        && isRoundParticipant(resource.data)
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['visibility'])
+        && isValidVisibility(request.resource.data);
     }
 
     match /activeRounds/{activeRoundId} {
@@ -171,13 +231,19 @@ service cloud.firestore {
           || hasRelatedGroupAccess(resource.data)
         );
       allow create: if isSignedIn()
-        && request.resource.data.createdBy == request.auth.uid
-        && request.auth.uid in request.resource.data.playerIds;
+        && isValidActiveRoundCreate(request.resource.data);
       allow update: if isSignedIn()
         && (
           request.auth.uid in resource.data.playerIds
           || resource.data.createdBy == request.auth.uid
-        );
+        )
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly([
+          'holeScores',
+          'activeHoleIndex',
+          'status',
+          'completedRoundId',
+          'updatedAt'
+        ]);
     }
 
     match /roundInvites/{inviteId} {
@@ -187,11 +253,27 @@ service cloud.firestore {
           || resource.data.inviteeId == request.auth.uid
         );
       allow create: if isSignedIn()
-        && request.resource.data.inviterId == request.auth.uid;
+        && request.resource.data.inviterId == request.auth.uid
+        && request.resource.data.inviteeId is string
+        && request.resource.data.inviteeId != request.auth.uid
+        && request.resource.data.activeRoundId is string
+        && request.resource.data.courseId is string
+        && isValidRoundFormat(request.resource.data)
+        && request.resource.data.status == 'pending'
+        && request.resource.data.roundId == null;
       allow update: if isSignedIn()
         && (
-          resource.data.inviterId == request.auth.uid
-          || resource.data.inviteeId == request.auth.uid
+          (
+            resource.data.inviteeId == request.auth.uid
+            && resource.data.status == 'pending'
+            && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status', 'respondedAt'])
+            && request.resource.data.status in ['accepted', 'declined']
+          )
+          || (
+            resource.data.inviterId == request.auth.uid
+            && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['roundId'])
+            && request.resource.data.roundId is string
+          )
         );
     }
 

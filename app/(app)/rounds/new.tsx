@@ -1,6 +1,6 @@
 import { router, useLocalSearchParams } from 'expo-router';
 import { useEffect, useMemo, useState } from 'react';
-import { Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
+import { ImageBackground, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
 
 import { AppScreen } from '@/components/AppScreen';
 import { PageHeader } from '@/components/PageHeader';
@@ -59,6 +59,9 @@ export default function LogRoundScreen() {
   const activeHole = selectedCourse?.holes[activeHoleIndex] ?? null;
   const activeHoleScore = holeScoreInputs[activeHoleIndex] ?? '';
   const activeHoleYards = activeHole && selectedTee ? activeHole.yardagesByTee[selectedTee.id] : null;
+  const activeHoleImageUri = activeHole?.mapImageUrl ?? activeHole?.aerialImageUrl ?? null;
+  const activeHoleShape = formatDogleg(activeHole?.dogleg ?? null);
+  const activeHoleNote = activeHole?.notes.trim() ?? '';
   const completedScores = holeScoreInputs.slice(0, holesPlayed).filter((value) => Number(value) > 0).length;
   const allHoleScoresFilled = completedScores === holesPlayed;
   const totalScore = holeScoreInputs.slice(0, holesPlayed).reduce((sum, value) => sum + (Number(value) || 0), 0);
@@ -330,11 +333,29 @@ export default function LogRoundScreen() {
           </SurfaceCard>
         </View>
 
-        <View style={[styles.fullHoleMap, { backgroundColor: theme.colors.surfaceAlt, borderColor: theme.colors.border }]}>
-          <View style={[styles.green, { backgroundColor: theme.colors.primary }]} />
-          <View style={[styles.fairwayLarge, { backgroundColor: theme.colors.badgeBackground }]} />
-          <View style={[styles.teeMarker, { backgroundColor: theme.colors.accent }]} />
+        <View style={commonStyles.chipRow}>
+          <View style={commonStyles.subtleChip}>
+            <Text style={commonStyles.subtleChipText}>HCP {activeHole?.handicapIndex ?? '--'}</Text>
+          </View>
+          <View style={commonStyles.subtleChip}>
+            <Text style={commonStyles.subtleChipText}>{activeHoleShape}</Text>
+          </View>
         </View>
+        {activeHoleNote ? <Text style={commonStyles.smallMuted}>{activeHoleNote}</Text> : null}
+
+        {activeHoleImageUri ? (
+          <ImageBackground
+            source={{ uri: activeHoleImageUri }}
+            imageStyle={styles.holeImage}
+            style={[styles.fullHoleMap, { backgroundColor: theme.colors.surfaceAlt, borderColor: theme.colors.border }]}
+          />
+        ) : (
+          <View style={[styles.fullHoleMap, { backgroundColor: theme.colors.surfaceAlt, borderColor: theme.colors.border }]}>
+            <View style={[styles.green, { backgroundColor: theme.colors.primary }]} />
+            <View style={[styles.fairwayLarge, { backgroundColor: theme.colors.badgeBackground }]} />
+            <View style={[styles.teeMarker, { backgroundColor: theme.colors.accent }]} />
+          </View>
+        )}
 
         <TextInput
           keyboardType="number-pad"
@@ -524,6 +545,19 @@ function buildHoleScores(values: string[], holesPlayed: 9 | 18): RoundHoleScore[
     .filter((entry) => Number.isFinite(entry.score) && entry.score > 0);
 }
 
+function formatDogleg(dogleg: 'left' | 'right' | 'straight' | null) {
+  if (dogleg === 'left') {
+    return 'Dogleg left';
+  }
+  if (dogleg === 'right') {
+    return 'Dogleg right';
+  }
+  if (dogleg === 'straight') {
+    return 'Straight';
+  }
+  return 'Shape --';
+}
+
 const styles = StyleSheet.create({
   playScreen: {
     flex: 1,
@@ -576,6 +610,9 @@ const styles = StyleSheet.create({
     minHeight: 320,
     overflow: 'hidden',
     position: 'relative',
+  },
+  holeImage: {
+    borderRadius: 8,
   },
   fairwayLarge: {
     borderRadius: 120,

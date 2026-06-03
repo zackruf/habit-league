@@ -33,6 +33,7 @@ export type LegacyGameMode = 'stroke' | 'scramble';
 export type GameMode = RoundFormat;
 export type RoundVisibility = 'friends' | 'public';
 export type CourseProviderId = 'mock' | 'manual' | 'golfapi' | 'golfcourseapi' | 'igolf' | 'opengolfapi';
+export type HoleDogleg = 'left' | 'right' | 'straight';
 
 export type TeeBox = {
   id: string;
@@ -48,6 +49,10 @@ export type CourseHole = {
   par: number;
   handicapIndex: number | null;
   yardagesByTee: Record<string, number>;
+  dogleg: HoleDogleg | null;
+  notes: string;
+  mapImageUrl: string | null;
+  aerialImageUrl: string | null;
 };
 
 export type RoundHoleScore = {

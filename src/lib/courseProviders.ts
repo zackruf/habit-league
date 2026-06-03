@@ -120,10 +120,15 @@ function buildMockCourse(input: {
   pars: number[];
 }): CourseSearchResult {
   const location = `${input.city}, ${input.state}`;
+  const doglegs = ['straight', 'left', 'right'] as const;
   const holes = input.pars.map((par, index) => ({
     number: index + 1,
     par,
     handicapIndex: ((index * 3) % 18) + 1,
+    dogleg: doglegs[index % doglegs.length],
+    notes: buildHoleNote(par, doglegs[index % doglegs.length], index),
+    mapImageUrl: null,
+    aerialImageUrl: null,
     yardagesByTee: Object.fromEntries(
       input.teeSpecs.map((tee, teeIndex) => {
         const base = Math.round((tee.totalYards ?? 0) / input.pars.length);
@@ -147,4 +152,17 @@ function buildMockCourse(input: {
     tees: input.teeSpecs,
     holes,
   };
+}
+
+function buildHoleNote(par: number, dogleg: 'straight' | 'left' | 'right', index: number) {
+  if (par === 3) {
+    return index % 2 === 0 ? 'Club for the middle and avoid the short-side miss.' : 'Wind can change the number. Favor the safer half of the green.';
+  }
+  if (par === 5) {
+    return dogleg === 'straight' ? 'Scoring hole. Keep the tee shot in play and decide on the second shot from the fairway.' : `Dogleg ${dogleg}. Best scramble angle comes from the outside half of the bend.`;
+  }
+  if (dogleg === 'straight') {
+    return 'Position tee shots for a clean approach. Missing short leaves the easiest recovery.';
+  }
+  return `Dogleg ${dogleg}. Favor the corner without bringing the inside trouble into play.`;
 }

@@ -82,6 +82,7 @@ export default function CourseDetailScreen() {
   });
   const personalBest = getPersonalBest(course, profile.uid, rounds);
   const latestRound = getLatestRoundForCourse(course, profile.uid, rounds);
+  const previewTee = course.tees[0] ?? null;
 
   return (
     <AppScreen scrollable contentContainerStyle={commonStyles.pageStack}>
@@ -185,6 +186,36 @@ export default function CourseDetailScreen() {
           Front-nine par: {course.holes.slice(0, 9).reduce((sum, hole) => sum + hole.par, 0)} / Full course par: {course.par}
         </Text>
       </SurfaceCard>
+
+      <SectionHeader title="Hole guide" />
+      <View style={commonStyles.compactSection}>
+        {course.holes.slice(0, course.holesCount).map((hole) => (
+          <SurfaceCard key={hole.number}>
+            <View style={commonStyles.listRow}>
+              <View style={commonStyles.listRowMeta}>
+                <Text style={commonStyles.listRowTitle}>Hole {hole.number}</Text>
+                <Text style={commonStyles.listRowSubtitle}>
+                  Par {hole.par} / {previewTee ? `${hole.yardagesByTee[previewTee.id] ?? '--'} yds` : '-- yds'} / HCP {hole.handicapIndex ?? '--'}
+                </Text>
+                <Text style={commonStyles.smallMuted}>{formatDogleg(hole.dogleg)}{hole.notes ? ` / ${hole.notes}` : ''}</Text>
+              </View>
+            </View>
+          </SurfaceCard>
+        ))}
+      </View>
     </AppScreen>
   );
+}
+
+function formatDogleg(dogleg: 'left' | 'right' | 'straight' | null) {
+  if (dogleg === 'left') {
+    return 'Dogleg left';
+  }
+  if (dogleg === 'right') {
+    return 'Dogleg right';
+  }
+  if (dogleg === 'straight') {
+    return 'Straight';
+  }
+  return 'Shape --';
 }
