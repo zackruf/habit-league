@@ -78,6 +78,10 @@ type GroupActionResult = ActionResult & {
   groupId?: string;
 };
 
+type RoundActionResult = ActionResult & {
+  round?: Round;
+};
+
 type AppContextValue = {
   authReady: boolean;
   busy: boolean;
@@ -151,7 +155,7 @@ type AppContextValue = {
     distanceFromCourseMeters?: number | null;
   }) => Promise<ActionResult & { activeRound?: ActiveRound }>;
   updateActiveRound: (input: { activeRoundId: string; holeScores?: RoundHoleScore[]; activeHoleIndex?: number }) => Promise<ActionResult>;
-  completeActiveRound: (activeRoundId: string) => Promise<ActionResult>;
+  completeActiveRound: (activeRoundId: string) => Promise<RoundActionResult>;
   respondToRoundInvite: (inviteId: string, status: Extract<RoundInviteStatus, 'accepted' | 'declined'>) => Promise<ActionResult>;
   updateRoundVisibility: (roundId: string, visibility: RoundVisibility) => Promise<ActionResult>;
   updateGroup: (groupId: string, input: GroupSettingsInput) => Promise<ActionResult>;
@@ -624,7 +628,7 @@ export function AppProvider({ children, fallback }: PropsWithChildren<{ fallback
         }
         await refreshUserData(session);
         setBusy(false);
-        return { ok: true, message: 'Round posted.' };
+        return { ok: true, message: 'Round posted.', round: result };
       } catch (error) {
         setBusy(false);
         return { ok: false, message: getActionErrorMessage(error, 'That round could not be posted.') };

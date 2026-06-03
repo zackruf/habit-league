@@ -13,6 +13,7 @@ export default function AppLayout() {
       <Stack.Screen name="groups/[groupId]/index" />
       <Stack.Screen name="groups/[groupId]/leaderboard" />
       <Stack.Screen name="rounds/new" />
+      <Stack.Screen name="rounds/[roundId]" />
       <Stack.Screen name="home" />
       <Stack.Screen name="profile" />
     </Stack>

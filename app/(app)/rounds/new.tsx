@@ -229,8 +229,8 @@ export default function LogRoundScreen() {
       return;
     }
     const result = await completeActiveRound(activeRoundId);
-    if (result.ok) {
-      router.replace(`/(app)/courses/${courseId}`);
+    if (result.ok && result.round) {
+      router.replace(`/(app)/rounds/${result.round.id}`);
       return;
     }
 

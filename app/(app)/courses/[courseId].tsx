@@ -17,23 +17,38 @@ import {
   getPersonalBest,
   getRoundFormatLabel,
   getRoundTrustLabel,
+  normalizeRoundFormat,
   SCRAMBLE_FIRST_FORMATS,
 } from '@/lib/golf';
 import { createCommonStyles } from '@/styles/commonStyles';
 import { GroupDetails, RoundFormat } from '@/types/models';
 
 export default function CourseDetailScreen() {
-  const { courseId } = useLocalSearchParams<{ courseId: string }>();
+  const { courseId, format: routeFormat, scope: routeScope } = useLocalSearchParams<{
+    courseId: string;
+    format?: string;
+    scope?: 'public' | 'friends' | 'group';
+  }>();
   const { courses, getGroupDetails, groups, profile, rounds } = useApp();
   const { theme } = useThemePreferences();
   const commonStyles = createCommonStyles(theme.colors);
   const [details, setDetails] = useState<GroupDetails | null>(null);
-  const [scope, setScope] = useState<'public' | 'friends' | 'group'>('public');
-  const [format, setFormat] = useState<RoundFormat>('scramble2');
+  const [scope, setScope] = useState<'public' | 'friends' | 'group'>(routeScope ?? 'public');
+  const [format, setFormat] = useState<RoundFormat>(normalizeRoundFormat(routeFormat));
   const [selectedGroupId, setSelectedGroupId] = useState(groups[0]?.id ?? '');
 
   const course = useMemo(() => courses.find((entry) => entry.id === courseId) ?? null, [courseId, courses]);
   const selectedGroup = groups.find((group) => group.id === selectedGroupId) ?? groups[0] ?? null;
+
+  useEffect(() => {
+    setFormat(normalizeRoundFormat(routeFormat));
+  }, [routeFormat]);
+
+  useEffect(() => {
+    if (routeScope === 'public' || routeScope === 'friends' || routeScope === 'group') {
+      setScope(routeScope);
+    }
+  }, [routeScope]);
 
   useEffect(() => {
     let active = true;
