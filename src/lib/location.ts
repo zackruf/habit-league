@@ -1,5 +1,7 @@
 import { Course } from '@/types/models';
 
+type ExpoLocationModule = typeof import('expo-location');
+
 export type CourseSuggestion = {
   course: Course;
   distanceFromCourseMeters: number;
@@ -12,7 +14,11 @@ export async function suggestNearestCourse(courses: Course[]): Promise<CourseSug
   }
 
   try {
-    const Location = await import('expo-location');
+    const Location = await loadExpoLocation();
+    if (!Location) {
+      return null;
+    }
+
     const permission = await Location.requestForegroundPermissionsAsync();
     if (permission.status !== 'granted') {
       return null;
@@ -32,6 +38,19 @@ export async function suggestNearestCourse(courses: Course[]): Promise<CourseSug
       .sort((left, right) => left.distanceFromCourseMeters - right.distanceFromCourseMeters)[0];
 
     return nearest ?? null;
+  } catch {
+    return null;
+  }
+}
+
+async function loadExpoLocation(): Promise<ExpoLocationModule | null> {
+  try {
+    const { requireOptionalNativeModule } = await import('expo-modules-core');
+    if (!requireOptionalNativeModule('ExpoLocation')) {
+      return null;
+    }
+
+    return await import('expo-location');
   } catch {
     return null;
   }

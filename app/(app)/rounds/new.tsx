@@ -51,6 +51,7 @@ export default function LogRoundScreen() {
   const [hydratedActiveRoundId, setHydratedActiveRoundId] = useState<string | null>(null);
   const [locationState, setLocationState] = useState<'checking' | 'suggested' | 'manual'>('checking');
   const [distanceFromCourseMeters, setDistanceFromCourseMeters] = useState<number | null>(null);
+  const [error, setError] = useState('');
 
   const selectedCourse = useMemo(() => courses.find((course) => course.id === courseId) ?? null, [courseId, courses]);
   const selectedTee = useMemo(() => selectedCourse?.tees.find((tee) => tee.id === teeBoxId) ?? selectedCourse?.tees[0] ?? null, [selectedCourse, teeBoxId]);
@@ -185,6 +186,7 @@ export default function LogRoundScreen() {
       return;
     }
 
+    setError('');
     const result = await startActiveRound({
       groupId: relatedGroupIds[0] ?? null,
       relatedGroupIds,
@@ -205,7 +207,10 @@ export default function LogRoundScreen() {
       setHydratedActiveRoundId(result.activeRound.id);
       setActiveHoleIndex(0);
       setRoundStarted(true);
+      return;
     }
+
+    setError(result.message);
   }
 
   async function handlePostRound() {
@@ -213,15 +218,23 @@ export default function LogRoundScreen() {
       return;
     }
 
-    await updateActiveRound({
+    setError('');
+    const saveResult = await updateActiveRound({
       activeRoundId,
       holeScores: buildHoleScores(holeScoreInputs, holesPlayed),
       activeHoleIndex,
     });
+    if (!saveResult.ok) {
+      setError(saveResult.message);
+      return;
+    }
     const result = await completeActiveRound(activeRoundId);
     if (result.ok) {
       router.replace(`/(app)/courses/${courseId}`);
+      return;
     }
+
+    setError(result.message);
   }
 
   function hydrateActiveRound(round: ActiveRound) {
@@ -331,6 +344,8 @@ export default function LogRoundScreen() {
           style={[styles.scoreInput, { borderColor: theme.colors.border, backgroundColor: theme.colors.surfaceAlt, color: theme.colors.text }]}
           value={activeHoleScore}
         />
+
+        {error ? <Text style={commonStyles.errorText}>{error}</Text> : null}
 
         <View style={commonStyles.actionRowTight}>
           <PrimaryButton
@@ -463,6 +478,7 @@ export default function LogRoundScreen() {
           </View>
           <Text style={commonStyles.statValue}>{playerIds.length}/{requiredPlayers}</Text>
         </View>
+        {error ? <Text style={commonStyles.errorText}>{error}</Text> : null}
         <PrimaryButton label="Start" onPress={handleStartRound} disabled={busy || !canStart} />
       </SurfaceCard>
     </AppScreen>

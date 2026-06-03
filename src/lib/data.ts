@@ -887,7 +887,7 @@ export async function completeActiveRound(uid: string, activeRoundId: string) {
   }
 
   const totalScore = activeRound.holeScores.reduce((sum, hole) => sum + hole.score, 0);
-  const invitesBeforeComplete = await loadRoundInvitesForActiveRound(activeRound.id);
+  const invitesBeforeComplete = (await loadRoundInvitesForUser(uid)).filter((invite) => invite.activeRoundId === activeRound.id);
   const acceptedIds = new Set([
     activeRound.createdBy,
     ...invitesBeforeComplete.filter((invite) => invite.status !== 'declined').map((invite) => invite.inviteeId),
@@ -1533,16 +1533,6 @@ async function loadRoundInvitesForUser(uid: string) {
     }
     throw error;
   }
-}
-
-async function loadRoundInvitesForActiveRound(activeRoundId: string) {
-  if (!usingFirebaseBackend || !firestore) {
-    return [];
-  }
-  const snapshot = await getDocs(query(collection(firestore, 'roundInvites'), where('activeRoundId', '==', activeRoundId), limit(25)));
-  return snapshot.docs
-    .map((entry) => normalizeRoundInvite(entry.data() as RoundInvite))
-    .filter((invite): invite is RoundInvite => Boolean(invite));
 }
 
 async function loadProfileById(uid: string) {

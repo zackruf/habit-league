@@ -208,6 +208,18 @@ export function AppProvider({ children, fallback }: PropsWithChildren<{ fallback
     return 'Something went wrong while loading your account. Please try again.';
   }, []);
 
+  const getActionErrorMessage = useCallback((error: unknown, fallback: string) => {
+    if (error instanceof Error && error.message.includes('Missing or insufficient permissions')) {
+      return 'Rivl could not save that yet because Firestore permissions blocked it.';
+    }
+
+    if (error instanceof Error && error.message) {
+      return error.message;
+    }
+
+    return fallback;
+  }, []);
+
   const completeAuthenticatedSession = useCallback(
     async (user: SessionUser, name = '') => {
       try {
@@ -566,16 +578,21 @@ export function AppProvider({ children, fallback }: PropsWithChildren<{ fallback
       }
 
       setBusy(true);
-      const result = await startActiveRoundRequest(session.uid, input);
-      if (!result) {
+      try {
+        const result = await startActiveRoundRequest(session.uid, input);
+        if (!result) {
+          setBusy(false);
+          return { ok: false, message: 'That course could not be found.' };
+        }
+        await refreshUserData(session);
         setBusy(false);
-        return { ok: false, message: 'That course could not be found.' };
+        return { ok: true, message: 'Round started.', activeRound: result.activeRound };
+      } catch (error) {
+        setBusy(false);
+        return { ok: false, message: getActionErrorMessage(error, 'That round could not be started.') };
       }
-      await refreshUserData(session);
-      setBusy(false);
-      return { ok: true, message: 'Round started.', activeRound: result.activeRound };
     },
-    [refreshUserData, session]
+    [getActionErrorMessage, refreshUserData, session]
   );
 
   const updateActiveRound = useCallback(
@@ -583,9 +600,13 @@ export function AppProvider({ children, fallback }: PropsWithChildren<{ fallback
       if (!session) {
         return { ok: false, message: 'No active session.' };
       }
-      return updateActiveRoundRequest(session.uid, input);
+      try {
+        return await updateActiveRoundRequest(session.uid, input);
+      } catch (error) {
+        return { ok: false, message: getActionErrorMessage(error, 'That round could not be saved.') };
+      }
     },
-    [session]
+    [getActionErrorMessage, session]
   );
 
   const completeActiveRound = useCallback(
@@ -595,16 +616,21 @@ export function AppProvider({ children, fallback }: PropsWithChildren<{ fallback
       }
 
       setBusy(true);
-      const result = await completeActiveRoundRequest(session.uid, activeRoundId);
-      if (!result) {
+      try {
+        const result = await completeActiveRoundRequest(session.uid, activeRoundId);
+        if (!result) {
+          setBusy(false);
+          return { ok: false, message: 'That round could not be posted.' };
+        }
+        await refreshUserData(session);
         setBusy(false);
-        return { ok: false, message: 'That round could not be posted.' };
+        return { ok: true, message: 'Round posted.' };
+      } catch (error) {
+        setBusy(false);
+        return { ok: false, message: getActionErrorMessage(error, 'That round could not be posted.') };
       }
-      await refreshUserData(session);
-      setBusy(false);
-      return { ok: true, message: 'Round posted.' };
     },
-    [refreshUserData, session]
+    [getActionErrorMessage, refreshUserData, session]
   );
 
   const respondToRoundInvite = useCallback(
