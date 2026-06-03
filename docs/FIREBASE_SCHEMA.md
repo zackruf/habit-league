@@ -6,7 +6,7 @@ Rivl is moving to a golf-first data model built around:
 
 - profiles
 - golf groups
-- saved courses
+- database course catalog
 - logged rounds
 - active rounds
 - round invites
@@ -22,7 +22,7 @@ The client currently expects Firestore rules to allow authenticated access patte
 - profile bootstrap on sign-in
 - loading a signed-in user profile and group memberships
 - reading discoverable groups
-- reading and writing saved courses
+- reading database course records
 - reading and writing rounds by course, visibility, friends, and optional group metadata
 - reading and writing active rounds for live scorecards
 - reading and updating round invites for invited players
@@ -104,9 +104,10 @@ Primary fields:
 
 Notes:
 
-- a course is saved into a specific group
-- `sourceId` and `sourceProvider` let Rivl connect one saved course back to a provider-backed course record later
-- tee and hole data are stored with the saved course so score logging does not depend on a live API call
+- course records are read-only to the client; add and update them through trusted database/admin tooling
+- `groupId` may exist for older records, but new course catalog records should generally be global
+- `sourceId` and `sourceProvider` let Rivl connect a course back to a provider-backed record later
+- tee and hole data are stored with the course so score logging does not depend on a live API call
 
 ## Rounds
 
@@ -152,7 +153,7 @@ Notes:
 - `format` supports `individual`, `scramble2`, `scramble3`, and `scramble4`
 - `groupId` is not required for new round logging; `relatedGroupIds` controls group-filter visibility
 - `visibility` separates public and friends-scoped leaderboards
-- public leaderboards can aggregate across saved course records by `courseSourceId`
+- public leaderboards can aggregate across catalog records by `courseSourceId`
 - `locationVerified` and `distanceFromCourseMeters` are honor-system trust signals, not strict anti-cheat controls
 
 ## Activity Feed

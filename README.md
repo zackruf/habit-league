@@ -61,7 +61,7 @@ Rivl is not positioned as an individual habit tracker with optional social featu
 Rivl is now focused on:
 
 - scramble-first course competition
-- course search and saved course records
+- database-backed course catalog
 - logged rounds and scorecards
 - public, friends, and group-filtered course leaderboards
 - groups as chat, social identity, and filtering spaces

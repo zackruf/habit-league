@@ -4,7 +4,6 @@ import { createContext, PropsWithChildren, ReactNode, useCallback, useContext, u
 import {
   addActivityShoutout as addActivityShoutoutRequest,
   acceptFriendRequest as acceptFriendRequestRequest,
-  createCourse as createCourseRequest,
   createGroup as createGroupRequest,
   createLeagueChallenge as createHabitRequest,
   declineFriendRequest as declineFriendRequestRequest,
@@ -19,7 +18,6 @@ import {
   logRound as logRoundRequest,
   recordActivity as recordActivityRequest,
   respondToRoundInvite as respondToRoundInviteRequest,
-  searchCourseCatalog as searchCourseCatalogRequest,
   sendFriendRequest as sendFriendRequestRequest,
   loadUserBundle,
   restoreSession,
@@ -47,7 +45,6 @@ import {
   ActiveRound,
   AppBundle,
   Course,
-  CourseHole,
   FriendRequestProfile,
   GroupDetails,
   GroupMessage,
@@ -61,10 +58,8 @@ import {
   RoundInviteStatus,
   RoundVisibility,
   SessionUser,
-  TeeBox,
   UserSearchResult,
 } from '@/types/models';
-import { CourseSearchResult } from '@/lib/courseProviders';
 
 const FIREBASE_ACCESS_ERROR_MESSAGE =
   'Firebase Auth succeeded, but Rivl could not read or create app data. Update Firestore rules for profiles, groups, courses, rounds, active rounds, round invites, and activities, then try again.';
@@ -96,7 +91,6 @@ type AppContextValue = {
   rounds: Round[];
   activeRounds: ActiveRound[];
   roundInvites: RoundInvite[];
-  searchCourses: (searchTerm: string) => Promise<CourseSearchResult[]>;
   signIn: (email: string, password: string) => Promise<ActionResult>;
   signUp: (name: string, email: string, password: string) => Promise<ActionResult>;
   signOut: () => Promise<void>;
@@ -106,22 +100,6 @@ type AppContextValue = {
   toggleHabitCheckIn: (habitId: string) => Promise<void>;
   restoreHabitStreak: (habitId: string) => Promise<ActionResult>;
   createGroup: (input: GroupSettingsInput) => Promise<GroupActionResult>;
-  createCourse: (input: {
-    groupId?: string | null;
-    sourceId?: string;
-    sourceProvider?: Course['sourceProvider'];
-    name: string;
-    location: string;
-    city?: string;
-    state?: string;
-    country?: string;
-    latitude?: number | null;
-    longitude?: number | null;
-    holesCount?: number;
-    par: number;
-    tees?: TeeBox[];
-    holes?: CourseHole[];
-  }) => Promise<ActionResult>;
   logRound: (input: {
     groupId?: string | null;
     relatedGroupIds?: string[];
@@ -315,8 +293,6 @@ export function AppProvider({ children, fallback }: PropsWithChildren<{ fallback
     hydrateBundle(null);
   }, [hydrateBundle]);
 
-  const searchCourses = useCallback(async (searchTerm: string) => searchCourseCatalogRequest(searchTerm), []);
-
   const saveProfile = useCallback(
     async (patch: Partial<Profile>) => {
       if (!session) {
@@ -467,46 +443,6 @@ export function AppProvider({ children, fallback }: PropsWithChildren<{ fallback
       }
       setBusy(false);
       return result;
-    },
-    [refreshUserData, session]
-  );
-
-  const createCourse = useCallback(
-    async (input: {
-      groupId?: string | null;
-      sourceId?: string;
-      sourceProvider?: Course['sourceProvider'];
-      name: string;
-      location: string;
-      city?: string;
-      state?: string;
-      country?: string;
-      latitude?: number | null;
-      longitude?: number | null;
-      holesCount?: number;
-      par: number;
-      tees?: TeeBox[];
-      holes?: CourseHole[];
-    }) => {
-      if (!session) {
-        return { ok: false, message: 'No active session.' };
-      }
-      if (!input.name.trim()) {
-        return { ok: false, message: 'Please enter a course name.' };
-      }
-
-      setBusy(true);
-      await createCourseRequest(session.uid, {
-        ...input,
-        name: input.name.trim(),
-        location: input.location.trim(),
-        city: input.city?.trim(),
-        state: input.state?.trim(),
-        country: input.country?.trim(),
-      });
-      await refreshUserData(session);
-      setBusy(false);
-      return { ok: true, message: 'Course added.' };
     },
     [refreshUserData, session]
   );
@@ -846,7 +782,6 @@ export function AppProvider({ children, fallback }: PropsWithChildren<{ fallback
       rounds,
       activeRounds,
       roundInvites,
-      searchCourses,
       signIn,
       signUp,
       signOut,
@@ -856,7 +791,6 @@ export function AppProvider({ children, fallback }: PropsWithChildren<{ fallback
       toggleHabitCheckIn,
       restoreHabitStreak,
       createGroup,
-      createCourse,
       logRound,
       startActiveRound,
       updateActiveRound,
@@ -892,7 +826,6 @@ export function AppProvider({ children, fallback }: PropsWithChildren<{ fallback
       rounds,
       activeRounds,
       roundInvites,
-      searchCourses,
       signIn,
       signUp,
       signOut,
@@ -902,7 +835,6 @@ export function AppProvider({ children, fallback }: PropsWithChildren<{ fallback
       toggleHabitCheckIn,
       restoreHabitStreak,
       createGroup,
-      createCourse,
       logRound,
       startActiveRound,
       updateActiveRound,

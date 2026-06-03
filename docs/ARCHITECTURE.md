@@ -25,7 +25,7 @@ Main routing areas:
 - `app/(app)/groups/[groupId]/`
   - golf-group detail, edit, chat, and related flows
 - `app/(app)/courses/`
-  - course search, saved course detail, and leaderboard flows
+  - database course detail and leaderboard flows
 - `app/(app)/rounds/new.tsx`
   - round logging flow
 
@@ -38,12 +38,11 @@ Located in `src/context/AppProvider.tsx`.
 Responsibilities:
 
 - restore auth session
-- hydrate profile, golf groups, saved courses, public/friend/group-visible rounds, and compatibility data
+- hydrate profile, golf groups, database courses, public/friend/group-visible rounds, and compatibility data
 - expose actions for:
   - sign in / sign up / sign out
   - profile save
   - group creation and joining
-  - course search and course save
   - round logging
   - group chat
   - activity feed access
@@ -63,8 +62,8 @@ It handles:
 - Firestore reads and writes
 - demo mode read/write fallbacks
 - normalization helpers for legacy-safe loading
-- course provider access through a provider abstraction
-- course save and round logging
+- read-only course catalog loading
+- round logging
 - social actions and feed updates
 
 The app uses a normalize-first approach so older or partially missing data can still load safely while the product pivots from challenge tracking to golf scoring.
@@ -73,7 +72,7 @@ The app uses a normalize-first approach so older or partially missing data can s
 
 ### `Course`
 
-`Course` is the saved golf course record. Courses may still be saved from a group context, but rounds compete by course + format rather than requiring group ownership.
+`Course` is a read-only database catalog record for the client. Rounds compete by course + format rather than requiring group ownership.
 
 It stores:
 

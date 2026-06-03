@@ -6,7 +6,7 @@ The current MVP includes:
 
 - authentication and profile basics
 - golf-group creation and joining
-- course search foundation and saved course records
+- database-backed course catalog records
 - individual stroke and scramble round logging
 - course-specific leaderboard foundations
 - golf-group chat

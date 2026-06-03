@@ -17,7 +17,7 @@ import {
 } from 'firebase/firestore';
 
 import { firebaseAuth, firebaseConfigured, firestore } from '@/lib/firebase';
-import { CourseSearchResult, getDefaultCourseProvider, MOCK_COURSES } from '@/lib/courseProviders';
+import { MOCK_COURSES } from '@/lib/courseProviders';
 import { getCurrentDateKey, getCurrentWeekEndKey, getCurrentWeekKeys, getDateKeysBetween, getPreviousWeekKeys } from '@/lib/date';
 import { getRoundDisplayName, getRoundFormatLabel, isScrambleFormat, normalizeRoundFormat } from '@/lib/golf';
 import { getDefaultShopInventory, normalizeShopInventory } from '@/lib/shop';
@@ -226,7 +226,7 @@ export async function loadUserBundle(uid: string): Promise<AppBundle | null> {
     );
     const groupIds = (groups.filter(Boolean) as Group[]).map((group) => group.id);
     const [courses, groupRounds, playerRounds, loadedActiveRounds, roundInvites] = await Promise.all([
-      loadCoursesForGroups(groupIds, true),
+      loadCourseCatalog(),
       loadRoundsForGroups(groupIds),
       loadRoundsForPlayer(uid),
       loadActiveRoundsForUser(uid),
@@ -263,7 +263,7 @@ export async function loadUserBundle(uid: string): Promise<AppBundle | null> {
   const groupIds = groups.map((group) => group.id);
   const courses = Object.values(store.courses)
     .map((course) => normalizeCourse(course))
-    .filter((course): course is Course => course !== null && (!course.groupId || groupIds.includes(course.groupId)))
+    .filter((course): course is Course => course !== null)
     .sort((left, right) => left.name.localeCompare(right.name));
   const rounds = Object.values(store.rounds)
     .map((round) => normalizeRound(round))
@@ -744,42 +744,6 @@ export async function createGroup(uid: string, input: GroupSettingsInput) {
   store.profiles[uid].groupIds = [...new Set([...(store.profiles[uid].groupIds ?? []), group.id])];
   await writeDemoStore(store);
   return group.id;
-}
-
-export async function searchCourseCatalog(searchTerm: string): Promise<CourseSearchResult[]> {
-  return getDefaultCourseProvider().searchCourses(searchTerm);
-}
-
-export async function createCourse(
-  uid: string,
-  input: {
-    groupId?: string | null;
-    sourceId?: string;
-    sourceProvider?: Course['sourceProvider'];
-    name: string;
-    location: string;
-    city?: string;
-    state?: string;
-    country?: string;
-    latitude?: number | null;
-    longitude?: number | null;
-    holesCount?: number;
-    par: number;
-    tees?: TeeBox[];
-    holes?: Course['holes'];
-  }
-) {
-  const course = buildCourse(uid, input);
-
-  if (usingFirebaseBackend && firestore) {
-    await setDoc(doc(firestore, 'courses', course.id), course);
-    return course.id;
-  }
-
-  const store = await readDemoStore();
-  store.courses[course.id] = course;
-  await writeDemoStore(store);
-  return course.id;
 }
 
 export async function logRound(
@@ -1342,7 +1306,7 @@ export async function getGroupDetails(groupId: string): Promise<GroupDetails | n
         .filter((habit): habit is Habit => Boolean(habit));
       const mergedChallenges = mergeLegacyChallenges(challenges, participations, group.id);
       const [courses, rounds] = await Promise.all([
-        loadCoursesForGroups([group.id]),
+        loadCourseCatalog(),
         loadRoundsForGroups([group.id]),
       ]);
 
@@ -1380,7 +1344,7 @@ export async function getGroupDetails(groupId: string): Promise<GroupDetails | n
     .filter((habit): habit is Habit => habit !== null && group.memberIds.includes(habit.userId) && habit.groupId === group.id);
   const courses = Object.values(store.courses)
     .map((course) => normalizeCourse(course))
-    .filter((course): course is Course => course !== null && course.groupId === group.id)
+    .filter((course): course is Course => course !== null)
     .sort((left, right) => left.name.localeCompare(right.name));
   const rounds = Object.values(store.rounds)
     .map((round) => normalizeRound(round))
@@ -1442,18 +1406,13 @@ function buildFriendRequestProfile(profile: Profile): FriendRequestProfile {
   };
 }
 
-async function loadCoursesForGroups(groupIds: string[], includeStandalone = false) {
+async function loadCourseCatalog() {
   if (!usingFirebaseBackend || !firestore) {
     return [];
   }
 
-  const db = firestore;
-  const snapshots = await Promise.all([
-    ...(includeStandalone ? [getDocs(query(collection(db, 'courses'), where('groupId', '==', ''), limit(50)))] : []),
-    ...groupIds.map((groupId) => getDocs(query(collection(db, 'courses'), where('groupId', '==', groupId), limit(50)))),
-  ]);
-  return snapshots
-    .flatMap((snapshot) => snapshot.docs)
+  const snapshot = await getDocs(query(collection(firestore, 'courses'), limit(250)));
+  return snapshot.docs
     .map((entry) => normalizeCourse(entry.data() as Course))
     .filter((course): course is Course => Boolean(course))
     .filter((course, index, allCourses) => allCourses.findIndex((entry) => entry.id === course.id) === index)

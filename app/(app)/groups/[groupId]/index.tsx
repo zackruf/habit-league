@@ -101,8 +101,8 @@ export default function GroupScreen() {
           <GroupSummaryCard group={details.group} memberCount={details.members.length} onEdit={isOwner ? () => router.push(`/(app)/groups/${details.group.id}/edit`) : undefined} />
 
           <View style={commonStyles.actionRowTight}>
-            <PrimaryButton label="Search courses" onPress={() => router.push('/(app)/courses/new')} variant="secondary" />
             <PrimaryButton label="Log scramble" onPress={() => router.push(`/(app)/rounds/new?groupId=${details.group.id}`)} />
+            <PrimaryButton label="View courses" onPress={() => router.push('/(app)/(tabs)/courses')} variant="secondary" />
           </View>
 
           <SectionHeader title="Course scoreboards" />
@@ -140,8 +140,8 @@ export default function GroupScreen() {
               })
             ) : (
               <SurfaceCard>
-                <Text style={commonStyles.cardTitle}>No courses saved yet</Text>
-                <Text style={commonStyles.cardCopy}>Save a course.</Text>
+                <Text style={commonStyles.cardTitle}>No catalog courses yet</Text>
+                <Text style={commonStyles.cardCopy}>Courses appear here when they are added to the database catalog.</Text>
               </SurfaceCard>
             )}
           </View>

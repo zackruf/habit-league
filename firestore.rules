@@ -173,31 +173,8 @@ service cloud.firestore {
     }
 
     match /courses/{courseId} {
-      allow read: if isSignedIn()
-        && (
-          !hasGroupId(resource.data)
-          || (
-            groupExists(resource.data.groupId)
-            && (
-              groupDoc(resource.data.groupId).data.discoverable == true
-              || isGroupMember(resource.data.groupId)
-            )
-          )
-        );
-      allow create: if isSignedIn()
-        && request.resource.data.createdBy == request.auth.uid
-        && (
-          !hasGroupId(request.resource.data)
-          || isGroupMember(request.resource.data.groupId)
-        );
-      allow update: if isSignedIn()
-        && (
-          resource.data.createdBy == request.auth.uid
-          || (
-            hasGroupId(resource.data)
-            && isGroupOwner(resource.data.groupId)
-          )
-        );
+      allow read: if isSignedIn();
+      allow create, update, delete: if false;
     }
 
     match /rounds/{roundId} {

@@ -65,16 +65,16 @@ export default function HomeScreen() {
   const incomingInvites = roundInvites.filter((invite) => invite.inviteeId === profile.uid && invite.status === 'pending').slice(0, 3);
   const starterLine = useMemo(() => {
     if (!groupDetails.length) {
-      return 'Join a golf group, add a course, and post the first number that everyone can chase.';
+      return 'Pick a catalog course and post the first number that everyone can chase.';
     }
 
     const topGroup = groupDetails[0];
     const topCourse = topGroup.courses[0];
     if (!topCourse) {
-      return `${topGroup.group.name} is ready for its first real course. Add one and start the scoreboard.`;
+      return `${topGroup.group.name} is ready. Pick a catalog course and start the scoreboard.`;
     }
 
-    return `${topGroup.group.name} has ${topGroup.rounds.length} logged rounds across ${topGroup.courses.length} saved courses.`;
+    return `${topGroup.group.name} has ${topGroup.rounds.length} logged rounds across ${topGroup.courses.length} catalog courses.`;
   }, [groupDetails]);
 
   return (
@@ -93,7 +93,7 @@ export default function HomeScreen() {
 
       <View style={commonStyles.actionRowTight}>
         <PrimaryButton label="Log scramble" onPress={() => router.push('/(app)/rounds/new')} />
-        <PrimaryButton label="Search courses" onPress={() => router.push('/(app)/courses/new')} variant="secondary" />
+        <PrimaryButton label="View courses" onPress={() => router.push('/(app)/(tabs)/courses')} variant="secondary" />
       </View>
       <View style={commonStyles.actionRowTight}>
         <PrimaryButton label="Join golf group" onPress={() => router.push('/(app)/groups/join')} variant="secondary" />
@@ -180,7 +180,7 @@ export default function HomeScreen() {
         ) : (
           <SurfaceCard>
             <Text style={commonStyles.cardTitle}>No active course scoreboards yet</Text>
-            <Text style={commonStyles.cardCopy}>Save a course to a group first, then the scoreboard cards will show up here.</Text>
+            <Text style={commonStyles.cardCopy}>Catalog courses will show here once the database has course records.</Text>
           </SurfaceCard>
         )}
       </View>
@@ -211,7 +211,7 @@ export default function HomeScreen() {
                 <Text style={commonStyles.cardCopy}>
                   {courseLeader && featuredCourse
                     ? `${featuredCourse.name}: ${courseLeader.name} leads with ${courseLeader.totalScore} (${courseLeader.indicatorLabel})`
-                    : 'Add a course and log rounds to get the standings moving.'}
+                    : 'Log rounds on catalog courses to get the standings moving.'}
                 </Text>
               </PressableCard>
             );

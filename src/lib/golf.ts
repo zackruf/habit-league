@@ -188,7 +188,7 @@ export function getLatestRoundForCourse(course: Course, userId: string, rounds: 
 
 export function getFeaturedCourseLabel(course: Course | undefined, rounds: Round[]) {
   if (!course) {
-    return 'Add a course to start comparing scores';
+    return 'Database courses will appear here';
   }
 
   const roundsPlayed = rounds.filter((round) => round.courseId === course.id || round.courseSourceId === course.sourceId).length;

@@ -85,7 +85,7 @@ Rivl is for posting real golf scores, especially scramble scores, and moving up 
 
 The product should continue moving toward:
 
-- stronger course search and score logging
+- stronger database course coverage and score logging
 - cleaner course-specific leaderboards
 - smoother first score logging without requiring a group
 - better social pressure loops around rounds and personal bests

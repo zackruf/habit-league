@@ -44,8 +44,7 @@ export default function CoursesTabScreen() {
       />
 
       <View style={commonStyles.actionRowTight}>
-        <PrimaryButton label="Search courses" onPress={() => router.push('/(app)/courses/new')} />
-        <PrimaryButton label="Log scramble" onPress={() => router.push('/(app)/rounds/new')} variant="secondary" />
+        <PrimaryButton label="Log scramble" onPress={() => router.push('/(app)/rounds/new')} />
       </View>
 
       <SectionHeader title="Recent rounds" />
@@ -170,8 +169,8 @@ export default function CoursesTabScreen() {
           ))
         ) : !publicCourses.length ? (
           <SurfaceCard>
-            <Text style={commonStyles.cardTitle}>No courses yet</Text>
-            <Text style={commonStyles.cardCopy}>Courses will appear here once you save the first course and start posting scores.</Text>
+            <Text style={commonStyles.cardTitle}>No catalog courses yet</Text>
+            <Text style={commonStyles.cardCopy}>Courses appear here when they are added to the database catalog.</Text>
           </SurfaceCard>
         ) : null}
       </View>
